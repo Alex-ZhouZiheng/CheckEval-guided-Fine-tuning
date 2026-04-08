@@ -16,6 +16,7 @@ import logging
 import time
 import platform
 from collections import Counter
+from pathlib import Path
 
 import pandas as pd
 from tqdm import tqdm
@@ -331,9 +332,26 @@ def main():
         default=0.8,
         help="Min n_answered/expected_n for 'partial' policy (default: 0.8)",
     )
+    parser.add_argument(
+        "--checklists-dir",
+        type=Path,
+        default=None,
+        help="Override checklist bank directory (e.g. checklists/v2). "
+             "Defaults to cfg.CHECKLISTS_DIR.",
+    )
+    parser.add_argument(
+        "--experiment-suffix",
+        type=str,
+        default="",
+        help="Optional suffix appended to the experiment_name, so runs on "
+             "different banks don't overwrite each other (e.g. '_v2').",
+    )
     args = parser.parse_args()
 
-    checklists, definitions = load_checklists()
+    if args.checklists_dir is not None:
+        checklists, definitions = load_checklists(args.checklists_dir)
+    else:
+        checklists, definitions = load_checklists()
     total_q = sum(len(questions) for questions in checklists.values())
     log.info("Loaded %s dimensions, %s total questions", len(checklists), total_q)
     for dim_name, questions in checklists.items():
@@ -418,7 +436,7 @@ def main():
     metrics["top_na_qids_by_domain"] = top_na_by_domain
 
     split_tag = args.subset or args.eval_split
-    experiment_name = f"checkeval_pairwise_naaware_{split_tag}"
+    experiment_name = f"checkeval_pairwise_naaware_{split_tag}{args.experiment_suffix}"
     save_results(results, metrics, experiment_name)
 
     # ── per-question diagnostics ──
