@@ -1,0 +1,95 @@
+{
+  "n_total": 600,
+  "n_valid": 417,
+  "n_tie": 182,
+  "n_unparseable": 1,
+  "parse_rate": 0.695,
+  "accuracy": 0.7673860911270983,
+  "macro_f1": 0.7667368299645339,
+  "classification_report": {
+    "A": {
+      "precision": 0.764102564102564,
+      "recall": 0.745,
+      "f1-score": 0.7544303797468355,
+      "support": 200.0
+    },
+    "B": {
+      "precision": 0.7702702702702703,
+      "recall": 0.7880184331797235,
+      "f1-score": 0.7790432801822323,
+      "support": 217.0
+    },
+    "accuracy": 0.7673860911270983,
+    "macro avg": {
+      "precision": 0.7671864171864171,
+      "recall": 0.7665092165898617,
+      "f1-score": 0.7667368299645339,
+      "support": 417.0
+    },
+    "weighted avg": {
+      "precision": 0.7673121378157349,
+      "recall": 0.7673860911270983,
+      "f1-score": 0.7672385317719701,
+      "support": 417.0
+    }
+  },
+  "pred_distribution": {
+    "B": 222,
+    "A": 195,
+    "Tie": 182,
+    "NaN": 1
+  },
+  "position_bias_A": 0.4676258992805755,
+  "avg_score_a": NaN,
+  "avg_score_b": NaN,
+  "avg_score_gap": NaN,
+  "avg_tie_score_gap": NaN,
+  "avg_questions_answered_a": NaN,
+  "avg_questions_answered_b": NaN,
+  "per_domain": {
+    "code": {
+      "n": 125,
+      "accuracy": 0.832,
+      "macro_f1": 0.8309178743961353
+    },
+    "general": {
+      "n": 241,
+      "accuracy": 0.7261410788381742,
+      "macro_f1": 0.7260231500620091
+    },
+    "stem": {
+      "n": 51,
+      "accuracy": 0.803921568627451,
+      "macro_f1": 0.8001567398119123
+    }
+  },
+  "inference_time_s": 894.3036217689514,
+  "samples_per_second": 0.6709130829786727,
+  "model_id": "/root/autodl-tmp/Thesis/models/Qwen3.5-9B",
+  "backend": "vllm",
+  "tensor_parallel_size": 1,
+  "max_model_len": 16384,
+  "checklist_parse_rate": 0.9983333333333333,
+  "n_checklist_questions": 104,
+  "tie_delta": 0.05,
+  "na_policy": "strict",
+  "scoring_method": "pairwise_naaware",
+  "dropped_dims": [
+    "instruction_following",
+    "stem"
+  ],
+  "remaining_dims": [
+    "clarity_and_communication",
+    "coding_communication_conditional",
+    "correctness_and_completeness",
+    "helpfulness_and_usefulness"
+  ],
+  "avg_pairwise_margin": -0.028537718541892163,
+  "avg_abs_pairwise_margin": 0.2215777058222801,
+  "avg_n_aligned": 76.13689482470785,
+  "pct_a_with_na": 0.8816666666666667,
+  "pct_b_with_na": 0.895,
+  "pct_either_with_na": 0.9616666666666667,
+  "avg_n_na_a": 10.306666666666667,
+  "avg_n_na_b": 9.923333333333334
+}

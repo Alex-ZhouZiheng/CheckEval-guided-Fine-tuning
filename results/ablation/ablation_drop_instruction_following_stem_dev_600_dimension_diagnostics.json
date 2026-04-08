@@ -1,0 +1,30 @@
+{
+  "clarity_and_communication": {
+    "n_samples": 599,
+    "avg_score_a": 0.8231208852848576,
+    "avg_score_b": 0.8666552139094791,
+    "dimension_accuracy": 0.5642737896494157,
+    "avg_na_rate": 0.04779471161613442
+  },
+  "coding_communication_conditional": {
+    "n_samples": 127,
+    "avg_score_a": 0.6015748031496063,
+    "avg_score_b": 0.6538057742782154,
+    "dimension_accuracy": 0.6377952755905512,
+    "avg_na_rate": 0.07362204724409449
+  },
+  "correctness_and_completeness": {
+    "n_samples": 599,
+    "avg_score_a": 0.6653210940252476,
+    "avg_score_b": 0.7139498819947255,
+    "dimension_accuracy": 0.6076794657762938,
+    "avg_na_rate": 0.18036471041479388
+  },
+  "helpfulness_and_usefulness": {
+    "n_samples": 596,
+    "avg_score_a": 0.5072833138632136,
+    "avg_score_b": 0.5250063240796942,
+    "dimension_accuracy": 0.6006711409395973,
+    "avg_na_rate": 0.09504722843649017
+  }
+}

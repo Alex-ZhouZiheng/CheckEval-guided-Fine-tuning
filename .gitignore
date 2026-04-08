@@ -1,0 +1,114 @@
+# ────────────────────────── Python ───────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+.eggs/
+build/
+dist/
+pip-log.txt
+pip-delete-this-directory.txt
+
+# ────────────────────────── Envs ─────────────────────────────
+.venv/
+venv/
+env/
+ENV/
+.vllm/
+.conda/
+.python-version
+
+# ────────────────────────── IDE / OS ─────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ────────────────────────── Jupyter ──────────────────────────
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# ────────────────────────── Secrets ──────────────────────────
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets.json
+credentials.json
+wandb/settings
+
+# ────────────────────────── Logs ─────────────────────────────
+*.log
+logs/
+nohup.out
+
+# ────────────────────────── Models / weights ─────────────────
+# Base models and HF caches — never commit.
+models/
+*.bin
+*.safetensors
+*.pt
+*.pth
+*.ckpt
+*.onnx
+*.gguf
+*.msgpack
+*.h5
+*.tflite
+hf_cache/
+.cache/
+
+# ────────────────────────── Data ─────────────────────────────
+# Raw + processed datasets should live outside git.
+data/
+datasets/
+*.parquet
+*.feather
+*.arrow
+*.tsv
+*.jsonl
+# Large CSVs but keep small config-ish ones if needed:
+*.csv
+!src/**/schema*.csv
+
+# ────────────────────────── Training artefacts ───────────────
+results/checkpoints/
+results/tb_logs/
+results/wandb/
+results/**/merged/
+results/**/final_adapter/
+results/**/*.parquet
+results/**/*_predictions*/
+results/**/*_audit/
+results/**/*_na_debug/
+
+# Keep the metrics JSONs so you have a record of what ran:
+!results/**/*_metrics.json
+
+# ────────────────────────── W&B / TB ─────────────────────────
+wandb/
+src/wandb/
+tb_logs/
+runs/
+lightning_logs/
+mlruns/
+
+# ────────────────────────── Scratch ──────────────────────────
+# One-off experiment scripts you don't want tracked.
+src/a.py
+src/checkna.py
+scratch/
+tmp/
+tmp_*/
+*.tmp
+*.bak
+
+# ---------- CheckListBak--------#
+checklistbak/

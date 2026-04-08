@@ -1,0 +1,70 @@
+{
+  "n_total": 1098,
+  "n_valid": 1098,
+  "n_unparseable": 0,
+  "parse_rate": 1.0,
+  "accuracy": 0.7295081967213115,
+  "macro_f1": 0.4850703546355721,
+  "classification_report": {
+    "A": {
+      "precision": 0.6944444444444444,
+      "recall": 0.8211678832116789,
+      "f1-score": 0.7525083612040134,
+      "support": 548.0
+    },
+    "B": {
+      "precision": 0.7817371937639198,
+      "recall": 0.6381818181818182,
+      "f1-score": 0.7027027027027027,
+      "support": 550.0
+    },
+    "nan": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1-score": 0.0,
+      "support": 0.0
+    },
+    "accuracy": 0.7295081967213115,
+    "macro avg": {
+      "precision": 0.49206054606945476,
+      "recall": 0.48644990046449904,
+      "f1-score": 0.4850703546355721,
+      "support": 1098.0
+    },
+    "weighted avg": {
+      "precision": 0.7381703206973692,
+      "recall": 0.7295081967213115,
+      "f1-score": 0.7275601716086393,
+      "support": 1098.0
+    }
+  },
+  "pred_distribution": {
+    "B": 449,
+    "A": 648,
+    "NaN": 1
+  },
+  "position_bias_A": 0.5901639344262295,
+  "per_domain": {
+    "code": {
+      "n": 287,
+      "accuracy": 0.7386759581881533,
+      "macro_f1": 0.7290851195046129
+    },
+    "general": {
+      "n": 646,
+      "accuracy": 0.7275541795665634,
+      "macro_f1": 0.4848334577084487
+    },
+    "stem": {
+      "n": 165,
+      "accuracy": 0.7212121212121212,
+      "macro_f1": 0.7203801945181256
+    }
+  },
+  "inference_time_s": 851.3269138336182,
+  "samples_per_second": 1.289751307233535,
+  "model_id": "/root/autodl-tmp/Thesis/models/Qwen3.5-9B",
+  "backend": "vllm",
+  "tensor_parallel_size": 1,
+  "max_model_len": 32768
+}

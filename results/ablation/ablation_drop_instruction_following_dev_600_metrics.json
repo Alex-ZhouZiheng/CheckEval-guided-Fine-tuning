@@ -1,0 +1,95 @@
+{
+  "n_total": 600,
+  "n_valid": 418,
+  "n_tie": 181,
+  "n_unparseable": 1,
+  "parse_rate": 0.6966666666666667,
+  "accuracy": 0.7631578947368421,
+  "macro_f1": 0.7627655000429959,
+  "classification_report": {
+    "A": {
+      "precision": 0.755,
+      "recall": 0.7512437810945274,
+      "f1-score": 0.7531172069825436,
+      "support": 201.0
+    },
+    "B": {
+      "precision": 0.7706422018348624,
+      "recall": 0.7741935483870968,
+      "f1-score": 0.7724137931034483,
+      "support": 217.0
+    },
+    "accuracy": 0.7631578947368421,
+    "macro avg": {
+      "precision": 0.7628211009174313,
+      "recall": 0.7627186647408121,
+      "f1-score": 0.7627655000429959,
+      "support": 418.0
+    },
+    "weighted avg": {
+      "precision": 0.763120473201352,
+      "recall": 0.7631578947368421,
+      "f1-score": 0.7631348126960276,
+      "support": 418.0
+    }
+  },
+  "pred_distribution": {
+    "B": 218,
+    "A": 200,
+    "Tie": 181,
+    "NaN": 1
+  },
+  "position_bias_A": 0.4784688995215311,
+  "avg_score_a": NaN,
+  "avg_score_b": NaN,
+  "avg_score_gap": NaN,
+  "avg_tie_score_gap": NaN,
+  "avg_questions_answered_a": NaN,
+  "avg_questions_answered_b": NaN,
+  "per_domain": {
+    "code": {
+      "n": 126,
+      "accuracy": 0.8333333333333334,
+      "macro_f1": 0.8328173374613003
+    },
+    "general": {
+      "n": 234,
+      "accuracy": 0.7264957264957265,
+      "macro_f1": 0.7263157894736842
+    },
+    "stem": {
+      "n": 58,
+      "accuracy": 0.7586206896551724,
+      "macro_f1": 0.7574671445639187
+    }
+  },
+  "inference_time_s": 1008.6222198009491,
+  "samples_per_second": 0.5948708924124333,
+  "model_id": "/root/autodl-tmp/Thesis/models/Qwen3.5-9B",
+  "backend": "vllm",
+  "tensor_parallel_size": 1,
+  "max_model_len": 16384,
+  "checklist_parse_rate": 0.9983333333333333,
+  "n_checklist_questions": 174,
+  "tie_delta": 0.05,
+  "na_policy": "strict",
+  "scoring_method": "pairwise_naaware",
+  "dropped_dims": [
+    "instruction_following"
+  ],
+  "remaining_dims": [
+    "clarity_and_communication",
+    "coding_communication_conditional",
+    "correctness_and_completeness",
+    "helpfulness_and_usefulness",
+    "stem"
+  ],
+  "avg_pairwise_margin": -0.028096833606015576,
+  "avg_abs_pairwise_margin": 0.21643284372833618,
+  "avg_n_aligned": 81.10350584307179,
+  "pct_a_with_na": 0.8933333333333333,
+  "pct_b_with_na": 0.8983333333333333,
+  "pct_either_with_na": 0.9683333333333334,
+  "avg_n_na_a": 14.955,
+  "avg_n_na_b": 14.286666666666667
+}

@@ -1,0 +1,44 @@
+{
+  "clarity_and_communication": {
+    "n_samples": 600,
+    "avg_score_a": 0.8076228878648197,
+    "avg_score_b": 0.8455569288235173,
+    "dimension_accuracy": 0.55,
+    "avg_na_rate": 0.00024193548387096774
+  },
+  "coding_communication_conditional": {
+    "n_samples": 167,
+    "avg_score_a": 0.4814371257485032,
+    "avg_score_b": 0.5967065868263475,
+    "dimension_accuracy": 0.6347305389221557,
+    "avg_na_rate": 0.0
+  },
+  "correctness_and_completeness": {
+    "n_samples": 600,
+    "avg_score_a": 0.6681526176658327,
+    "avg_score_b": 0.7094699691887895,
+    "dimension_accuracy": 0.56,
+    "avg_na_rate": 0.006282051282051282
+  },
+  "helpfulness_and_usefulness": {
+    "n_samples": 600,
+    "avg_score_a": 0.5552235517568851,
+    "avg_score_b": 0.5966920227920235,
+    "dimension_accuracy": 0.59,
+    "avg_na_rate": 0.001388888888888889
+  },
+  "instruction_following": {
+    "n_samples": 600,
+    "avg_score_a": 0.5262241285403051,
+    "avg_score_b": 0.5650884502923971,
+    "dimension_accuracy": 0.4583333333333333,
+    "avg_na_rate": 0.024416666666666666
+  },
+  "stem": {
+    "n_samples": 91,
+    "avg_score_a": 0.5686651050113879,
+    "avg_score_b": 0.6206566157525647,
+    "dimension_accuracy": 0.5274725274725275,
+    "avg_na_rate": 0.029513343799058084
+  }
+}
