@@ -48,7 +48,7 @@ JUDGE_MODEL_ID = PROJECT_ROOT/"models"/"Qwen3.5-9B"
 
 VLLM_ENGINE_KWARGS = {
     "tensor_parallel_size": 1,
-    "gpu_memory_utilization": 0.96,
+    "gpu_memory_utilization": 0.92,
     "max_model_len": 16384,
     "dtype": "auto",
     "trust_remote_code": True,
