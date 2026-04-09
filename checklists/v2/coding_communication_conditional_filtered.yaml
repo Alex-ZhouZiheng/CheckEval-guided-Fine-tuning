@@ -1,0 +1,43 @@
+definition: When the response contains code, the code is integrated into the ongoing task, readable, and explained enough for the user to use it correctly.
+dimension: coding_communication_conditional
+sub_aspects:
+  Code Accuracy:
+    filtered_questions:
+    - Is the code correct and free of syntax errors?
+    - If the response includes code, is the code internally consistent with the described approach and unlikely to fail because of mismatched variables, missing imports, or incompatible function calls?
+    - When code is provided, does it avoid placeholder or pseudo-code fragments that would prevent the user from running or applying it as written?
+    - For any included code, are the commands, syntax, and APIs used in a way that is valid for the stated programming language or environment?
+    - Does the code avoid obvious logical mistakes that would prevent it from performing the stated task?
+    original_count: 10
+    removed_count: 5
+    seed_question: Is the code correct and free of syntax errors?
+  Code Context Integration:
+    filtered_questions:
+    - Does the code fit that context rather than appearing as a standalone snippet?
+    - Does the response present the code as part of solving the user’s specific request, rather than as a generic example that could apply to many unrelated tasks?
+    - Does the response connect the code to the surrounding explanation so the user can see what role the snippet plays in the overall solution?
+    - Does the response avoid including unrelated boilerplate or generic template code that is not needed for the user’s context?
+    - If assumptions are required, are they consistent with the user’s described situation?
+    original_count: 10
+    removed_count: 5
+    seed_question: Does the code fit that context rather than appearing as a standalone snippet?
+  Code Explainability:
+    filtered_questions:
+    - Does the code include comments or brief explanation for the key logic?
+    - Does the response explain what the provided code is doing at a high level so the user can connect it to the task?
+    - Does the response clarify any non-obvious parts of the code, such as key functions, parameters, or control flow, so the user can follow the logic?
+    - Does the response give enough explanation for the user to understand how to use or adapt the code correctly in their situation?
+    - Are expected outputs or effects of running the code briefly described?
+    original_count: 10
+    removed_count: 5
+    seed_question: Does the code include comments or brief explanation for the key logic?
+  Code Readability:
+    filtered_questions:
+    - Is the code reasonably readable and stylistically coherent for the chosen language?
+    - Does the code use clear naming and consistent formatting so that its structure is easy to follow?
+    - Are comments or docstrings used only where helpful to clarify non-obvious parts of the code without overwhelming it?
+    - Is the code presented at an appropriate level of complexity for the task, avoiding unnecessary boilerplate or overly compressed style that would hurt readability?
+    - Is the code organized into logical blocks or units that are easy to follow?
+    original_count: 10
+    removed_count: 5
+    seed_question: Is the code reasonably readable and stylistically coherent for the chosen language?

@@ -1,0 +1,48 @@
+{
+  "timestamp": "2026-04-09T05:22:31",
+  "argv": [
+    "src/diagnose_and_clean_bank.py",
+    "all",
+    "--dev-split",
+    "dev_600",
+    "--test-split",
+    "test"
+  ],
+  "dev_split": "dev_600",
+  "bank_in_dir": "/root/autodl-tmp/Thesis/checklists/filtered",
+  "bank_out_dir": "/root/autodl-tmp/Thesis/checklists/v2",
+  "thresholds": {
+    "yes_high": 0.95,
+    "yes_low": 0.05,
+    "signal_threshold": 0.02,
+    "signal_min_n": 30,
+    "rare_na_threshold": 0.8,
+    "sat_min_n": 30,
+    "prune_empty_subaspects": false
+  },
+  "per_dim_counts": {
+    "clarity_and_communication": {
+      "kept": 31,
+      "dropped": 0,
+      "orig": 44
+    },
+    "coding_communication_conditional": {
+      "kept": 20,
+      "dropped": 0,
+      "orig": 40
+    },
+    "correctness_and_completeness": {
+      "kept": 26,
+      "dropped": 0,
+      "orig": 44
+    },
+    "helpfulness_and_usefulness": {
+      "kept": 25,
+      "dropped": 2,
+      "orig": 48
+    }
+  },
+  "n_items_flagged": 2,
+  "n_items_total": 194,
+  "test_split": "test"
+}

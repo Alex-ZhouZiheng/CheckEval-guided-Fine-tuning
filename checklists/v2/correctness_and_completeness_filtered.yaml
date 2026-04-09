@@ -1,0 +1,49 @@
+definition: The response is factually accurate, logically sound, and addresses the full scope of what the user asked, providing the information needed for the user to trust and act on the answer.
+dimension: correctness_and_completeness
+sub_aspects:
+  Coverage Adequacy:
+    filtered_questions:
+    - Does the response address all the main aspects of the user's question without omitting key information that the user would need to consider the answer complete?
+    - Does the response cover each explicit request or sub-task in the user's prompt rather than answering only part of it?
+    - Does the response include the essential details or qualifiers needed for the answer to be usable without leaving major gaps?
+    - If the user asks for a comparison, explanation, or set of options, does the response address all required items instead of discussing only a subset?
+    - Does the response resolve the user's central question fully enough that no obvious follow-up is needed to obtain the basic requested information?
+    - Does the response avoid leaving out important conditions, exceptions, or limitations that are central to the question?
+    - Is the level of detail sufficient to make the answer usable rather than merely partial or skeletal?
+    - When context provided by the user raises important relevant points, does the response address those points rather than ignoring them?
+    original_count: 11
+    removed_count: 3
+    seed_question: Does the response address all the main aspects of the user's question without omitting key information that the user would need to consider the answer complete?
+  Factual Accuracy:
+    filtered_questions:
+    - Are the factual claims in the response accurate and free from errors that would mislead the user or undermine the usefulness of the answer?
+    - Does the response avoid making unsupported factual assertions or presenting speculation as established fact?
+    - If the response explains a process, mechanism, or causal relationship, is that explanation factually sound?
+    - When the prompt depends on domain knowledge, does the response apply that knowledge accurately without introducing factual misconceptions?
+    - If the response summarizes source material or user-provided information, does it do so without distorting the original facts?
+    - Does the response avoid overclaiming certainty on points that are actually unsupported or unknown?
+    - Are examples, illustrations, or analogies used in the response factually valid rather than misleading?
+    original_count: 11
+    removed_count: 4
+    seed_question: Are the factual claims in the response accurate and free from errors that would mislead the user or undermine the usefulness of the answer?
+  Logical Consistency:
+    filtered_questions:
+    - Does the response avoid contradicting itself across different parts of the answer, so that its claims, recommendations, and reasoning form a coherent whole?
+    - Are any stated conditions, exceptions, or assumptions applied consistently wherever they are relevant in the response?
+    - Does the conclusion follow logically from the reasoning presented earlier in the response?
+    - Does the response avoid switching positions on the same issue without explanation?
+    original_count: 11
+    removed_count: 7
+    seed_question: Does the response avoid contradicting itself across different parts of the answer, so that its claims, recommendations, and reasoning form a coherent whole?
+  Task Execution:
+    filtered_questions:
+    - Does the response perform the task the user actually asked for, producing the type of output requested rather than a different kind of answer?
+    - Does the response deliver the specific artifact or action the user requested (e.g., explanation, summary, translation, code, or list) rather than substituting a different output format?
+    - Does the response stay focused on completing the user's requested task instead of mainly offering adjacent commentary, background information, or advice?
+    - If the user specifies constraints on the requested output, does the response carry out the task within those constraints rather than answering in a more generic way?
+    - If the user requested an action on given content, does the response actually transform or use that content as requested?
+    - Does the response follow the requested format or structure when one is explicitly specified?
+    - Does the response avoid replacing the requested answer with only meta-commentary, refusal without basis, or unrelated advice?
+    original_count: 11
+    removed_count: 4
+    seed_question: Does the response perform the task the user actually asked for, producing the type of output requested rather than a different kind of answer?
