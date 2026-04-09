@@ -98,6 +98,13 @@ MAX_LENGTH = 2048
 # DPO
 DPO_BETA = 0.1
 
+# ────────────────────────── joint training (DPO + checklist SFT) ──
+CHECKLIST_SFT_DIR = DATA_DIR / "checklist_sft"
+CHECKLIST_SFT_DIR.mkdir(parents=True, exist_ok=True)
+
+JOINT_LAMBDA = 0.1          # weight of checklist SFT loss
+SFT_MAX_LENGTH = 2048       # max token length for SFT samples
+
 # DeepSpeed ZeRO-2
 DEEPSPEED_CONFIG = {
     "bf16": {"enabled": True},
