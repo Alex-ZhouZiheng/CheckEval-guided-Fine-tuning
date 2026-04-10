@@ -25,6 +25,7 @@ import json
 import logging
 import time
 from pathlib import Path
+from datetime import date
 
 import pandas as pd
 from tqdm import tqdm
@@ -310,8 +311,10 @@ def main():
         metrics["adapter_path"] = str(adapter_path)
         metrics["eval_mode"] = "vanilla"
         metrics["model_id"] = args.base_model
+        
+        time_now = date.today()
 
-        experiment_name = f"finetuned_vanilla_{adapter_name}_{split_tag}"
+        experiment_name = f"finetuned_vanilla_{adapter_name}_{split_tag}_{time_now}"
         save_results(results, metrics, experiment_name)
 
     # 5. CheckEval evaluation
@@ -349,7 +352,9 @@ def main():
         metrics["parse_rate"] = results["checklist_parsed"].mean()
         metrics["n_checklist_questions"] = total_q
 
-        experiment_name = f"finetuned_checkeval_{adapter_name}_{split_tag}"
+        time_now = date.today()
+
+        experiment_name = f"finetuned_checkeval_{adapter_name}_{split_tag}_{time_now}"
         save_results(results, metrics, experiment_name)
 
     log.info("Done.")
