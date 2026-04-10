@@ -19,6 +19,7 @@ ENV/
 .vllm/
 .conda/
 .python-version
+.venvmerge/
 
 # ────────────────────────── IDE / OS ─────────────────────────
 .vscode/
