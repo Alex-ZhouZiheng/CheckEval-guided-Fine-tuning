@@ -302,6 +302,12 @@ def main():
     parser.add_argument("--beta", type=float, default=None)
     parser.add_argument("--run-name", type=str, default=None)
     parser.add_argument("--model-id", type=str, default=cfg.JUDGE_MODEL_ID)
+    parser.add_argument(
+        "--dev-samples",
+        type=int,
+        default=None,
+        help="Subsample dev set to this many rows for faster eval during tuning",
+    )
     parser.add_argument("--no-wandb", action="store_true")
     parser.add_argument("--no-tensorboard", action="store_true")
     parser.add_argument(
@@ -361,6 +367,11 @@ def main():
                  len(train_ds), len(dev_ds))
     else:
         train_ds, dev_ds = load_dpo_dataset(args.tier)
+
+    # Subsample dev set for faster eval during hyper-parameter tuning
+    if args.dev_samples is not None and args.dev_samples < len(dev_ds):
+        dev_ds = dev_ds.shuffle(seed=cfg.SEED).select(range(args.dev_samples))
+        log.info("Subsampled dev set to %d rows (--dev-samples)", len(dev_ds))
 
     # 2. Load model + tokenizer
     model, tokenizer = load_base_model(args.model_id)
