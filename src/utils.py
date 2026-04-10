@@ -16,15 +16,17 @@ import re
 import time
 from collections import Counter
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from tqdm import tqdm
 
 import pandas as pd
 from rich.console import Console
 from sklearn.metrics import accuracy_score, classification_report, f1_score
-from vllm import LLM, SamplingParams
 
 import config as cfg
+
+if TYPE_CHECKING:
+    from vllm import LLM, SamplingParams
 
 log = logging.getLogger(__name__)
 console = Console()
@@ -76,6 +78,7 @@ def load_judge_model(
     max_loras: int | None = None,
 ) -> LLM:
     """Load the judge LLM through vLLM."""
+    from vllm import LLM
 
     model_id = str(model_id)
 
@@ -134,6 +137,7 @@ def load_judge_model(
 
 def build_sampling_params(**gen_kwargs) -> SamplingParams:
     """Convert shared generation kwargs into vLLM SamplingParams."""
+    from vllm import SamplingParams
     merged = {**cfg.GENERATION_KWARGS, **gen_kwargs}
 
     if "max_new_tokens" in merged and "max_tokens" not in merged:
@@ -385,6 +389,12 @@ _NA_RE = re.compile(
     r"^\s*Q(\d+):\s*(?:N\s*/\s*A|NA|not\s*applicable)\s*[.。]?\s*$",
     re.IGNORECASE,
 )
+# Bare yes/no/N/A without Q-prefix (e.g. gpt-5.4-mini sometimes omits "Q{n}: ")
+_BARE_YN_RE = re.compile(r"^\s*(yes|no)\s*$", re.IGNORECASE)
+_BARE_NA_RE = re.compile(
+    r"^\s*(?:N\s*/\s*A|NA|not\s*applicable)\s*[.。]?\s*$",
+    re.IGNORECASE,
+)
 
 
 def parse_checkeval_output(raw: str, expected_n: int | None = None) -> dict:
@@ -400,6 +410,7 @@ def parse_checkeval_output(raw: str, expected_n: int | None = None) -> dict:
     stop_reason: str | None = None
     first_bad_line: str | None = None
     first_bad_lineno: int | None = None
+    positional_q = 0          # counter for bare yes/no/N/A lines
 
     for lineno, line in enumerate(raw.splitlines(), 1):
         stripped = line.strip()
@@ -432,6 +443,46 @@ def parse_checkeval_output(raw: str, expected_n: int | None = None) -> dict:
             started = True
             hit_na = True
             q = int(m_na.group(1))
+
+            if expected_n is not None and not (1 <= q <= expected_n):
+                n_out_of_range += 1
+                continue
+
+            if q in seen:
+                n_duplicates += 1
+                continue
+
+            seen.add(q)
+            na_answers.append({"q": q})
+            continue
+
+        # ── try bare yes/no (no Q-prefix) → assign positional Q number ──
+        m_bare = _BARE_YN_RE.match(stripped)
+        if m_bare:
+            started = True
+            positional_q += 1
+            q = positional_q
+            ans = m_bare.group(1).lower()
+
+            if expected_n is not None and not (1 <= q <= expected_n):
+                n_out_of_range += 1
+                continue
+
+            if q in seen:
+                n_duplicates += 1
+                continue
+
+            seen.add(q)
+            answers.append({"q": q, "answer": ans})
+            continue
+
+        # ── try bare N/A (no Q-prefix) → assign positional Q number ──
+        m_bare_na = _BARE_NA_RE.match(stripped)
+        if m_bare_na:
+            started = True
+            hit_na = True
+            positional_q += 1
+            q = positional_q
 
             if expected_n is not None and not (1 <= q <= expected_n):
                 n_out_of_range += 1

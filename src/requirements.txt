@@ -57,6 +57,7 @@ multiprocess=0.70.19=pypi_0
 ncurses=6.5=h7934f7d_0
 networkx=3.4.2=pypi_0
 numpy=2.2.6=pypi_0
+openai=2.6.1=pypi_0
 nvidia-cublas=13.1.0.3=pypi_0
 nvidia-cuda-cupti=13.0.85=pypi_0
 nvidia-cuda-nvrtc=13.0.88=pypi_0

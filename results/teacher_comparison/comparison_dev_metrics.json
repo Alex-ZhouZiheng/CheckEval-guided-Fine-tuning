@@ -1,0 +1,52 @@
+[
+  {
+    "label": "ChatGPT (gpt-5.4-mini)",
+    "n_total": 50,
+    "parse_rate_a": 1.0,
+    "parse_rate_b": 1.0,
+    "pairwise_parse_rate": 1.0,
+    "n_ties": 8,
+    "n_unparseable": 0,
+    "accuracy_excl_ties": 0.6904761904761905,
+    "accuracy_incl_ties": 0.58,
+    "n_evaluated": 42,
+    "avg_na_a": 7.7,
+    "avg_na_b": 6.32,
+    "avg_chosen_score": 0.6207612509929118,
+    "avg_rejected_score": 0.41171927217970145,
+    "score_gap": 0.20904197881321035,
+    "per_domain": {
+      "code": {
+        "n": 42,
+        "accuracy": 0.6904761904761905
+      }
+    },
+    "time_s": 251.71209192276,
+    "model_id": "gpt-5.4-mini"
+  },
+  {
+    "label": "ChatGPT (gpt-4o-mini)",
+    "n_total": 50,
+    "parse_rate_a": 1.0,
+    "parse_rate_b": 1.0,
+    "pairwise_parse_rate": 1.0,
+    "n_ties": 31,
+    "n_unparseable": 0,
+    "accuracy_excl_ties": 0.6842105263157895,
+    "accuracy_incl_ties": 0.26,
+    "n_evaluated": 19,
+    "avg_na_a": 11.66,
+    "avg_na_b": 9.04,
+    "avg_chosen_score": 0.9855607416828042,
+    "avg_rejected_score": 0.9218060602663182,
+    "score_gap": 0.06375468141648599,
+    "per_domain": {
+      "code": {
+        "n": 19,
+        "accuracy": 0.6842105263157895
+      }
+    },
+    "time_s": 530.4969012737274,
+    "model_id": "gpt-4o-mini"
+  }
+]

@@ -7,14 +7,18 @@ both responses (A and B), paired with target checklist answers.
 
 Two modes:
 - **synthetic**: heuristic answers derived from preference labels (fast, no GPU)
-- **teacher**:  base model generates checklist answers via vLLM (accurate, GPU)
+- **teacher**: teacher model generates checklist answers via vLLM or ChatGPT
 
 Usage:
     # Quick synthetic data for pipeline testing
     python prepare_checklist_sft.py --tier debug_5k --mode synthetic
 
-    # Teacher-generated data (requires GPU)
+    # Teacher-generated data with local vLLM model
     python prepare_checklist_sft.py --tier debug_5k --mode teacher
+
+    # Teacher-generated data with ChatGPT
+    python prepare_checklist_sft.py --tier debug_5k --mode teacher \
+        --teacher-backend openai --model-id gpt-4o-mini
 
     # Different checklist source
     python prepare_checklist_sft.py --tier tier_10k --mode teacher \
@@ -30,6 +34,9 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import os
+import re
+import time
 from pathlib import Path
 
 import numpy as np
@@ -51,7 +58,7 @@ log = logging.getLogger(__name__)
 console = Console()
 
 
-# ────────────────────────── synthetic mode ──────────────────────
+# synthetic mode
 
 
 def generate_synthetic_answers(
@@ -60,18 +67,14 @@ def generate_synthetic_answers(
     preference_strength: int,
     seed: int,
 ) -> str:
-    """Generate synthetic checklist answers based on preference signal.
-
-    Chosen responses get more "yes" answers; rejected get more "no".
-    The proportion scales with preference_strength (2 or 3).
-    """
+    """Generate synthetic checklist answers based on preference signal."""
     rng = np.random.RandomState(seed)
     strength = abs(preference_strength)
 
     if is_chosen:
-        p_yes = 0.65 + 0.05 * strength   # strength 2 → 0.75, strength 3 → 0.80
+        p_yes = 0.65 + 0.05 * strength
     else:
-        p_yes = 0.35 - 0.05 * strength   # strength 2 → 0.25, strength 3 → 0.20
+        p_yes = 0.35 - 0.05 * strength
 
     lines = []
     for i in range(1, n_questions + 1):
@@ -87,8 +90,9 @@ def build_synthetic_sft(
 ) -> pd.DataFrame:
     """Build checklist SFT data using synthetic (heuristic) answers."""
     records = []
-    for idx, (_, row) in enumerate(tqdm(df.iterrows(), total=len(df),
-                                         desc="Synthetic SFT")):
+    for idx, (_, row) in enumerate(
+        tqdm(df.iterrows(), total=len(df), desc="Synthetic SFT")
+    ):
         domain = row["domain"]
         winner = row["winner"]
         pref = row.get("preference_strength", 2)
@@ -98,7 +102,7 @@ def build_synthetic_sft(
             prompt_text = build_checkeval_prompt(
                 row, checklists, definitions, domain=domain, side=side,
             )
-            is_chosen = (side == winner)
+            is_chosen = side == winner
             completion = generate_synthetic_answers(
                 n_q, is_chosen, pref, seed=idx * 2 + (0 if side == "A" else 1),
             )
@@ -115,7 +119,97 @@ def build_synthetic_sft(
     return pd.DataFrame(records)
 
 
-# ────────────────────────── teacher mode ───────────────────────
+# teacher mode
+
+
+def _infer_teacher_backend(model_id: str, teacher_backend: str) -> str:
+    """Resolve the teacher backend from CLI args."""
+    if teacher_backend != "auto":
+        return teacher_backend
+
+    openai_prefixes = ("gpt-", "chatgpt-", "o1", "o3", "o4")
+    if model_id.startswith(openai_prefixes):
+        return "openai"
+    return "vllm"
+
+
+def _get_openai_client():
+    """Create an OpenAI client from environment configuration."""
+    try:
+        from openai import OpenAI
+    except ImportError as exc:
+        raise ImportError("OpenAI backend requires `pip install openai`.") from exc
+
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        raise ValueError(
+            "OPENAI_API_KEY not found. Set it in your environment or project .env."
+        )
+
+    kwargs = {"api_key": api_key}
+    base_url = os.getenv("OPENAI_BASE_URL")
+    if base_url:
+        kwargs["base_url"] = base_url
+        log.info("Using custom OpenAI base URL: %s", base_url)
+
+    return OpenAI(**kwargs)
+
+
+def generate_openai_batch(
+    prompts: list[str],
+    model_id: str,
+    max_concurrent: int = 2,
+    max_new_tokens: int = 512,
+    temperature: float = 0.0,
+) -> list[str]:
+    """Generate checklist answers with an OpenAI-compatible chat model."""
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    client = _get_openai_client()
+    results = [""] * len(prompts)
+    errors = 0
+
+    def _retry_after_seconds(exc: Exception) -> float | None:
+        text = str(exc)
+        match = re.search(r"try again in ([0-9.]+)s", text, re.IGNORECASE)
+        if match:
+            return float(match.group(1)) + 1.0
+        return None
+
+    def _call(idx: int, prompt: str) -> tuple[int, str]:
+        for attempt in range(3):
+            try:
+                response = client.chat.completions.create(
+                    model=model_id,
+                    messages=[{"role": "user", "content": prompt}],
+                    temperature=temperature,
+                    max_tokens=max_new_tokens,
+                )
+                text = response.choices[0].message.content or ""
+                return idx, text.strip()
+            except Exception as exc:
+                if attempt == 2:
+                    log.warning("OpenAI teacher call failed (idx=%d): %s", idx, exc)
+                    return idx, ""
+                wait_s = _retry_after_seconds(exc)
+                if wait_s is None:
+                    wait_s = 2 ** attempt
+                log.info("Rate-limited / transient error on idx=%d, sleeping %.1fs", idx, wait_s)
+                time.sleep(wait_s)
+        return idx, ""
+
+    with ThreadPoolExecutor(max_workers=max_concurrent) as pool:
+        futures = {pool.submit(_call, i, p): i for i, p in enumerate(prompts)}
+        for future in tqdm(as_completed(futures), total=len(prompts),
+                           desc="Teacher inference"):
+            idx, text = future.result()
+            results[idx] = text
+            if not text:
+                errors += 1
+
+    if errors:
+        log.warning("OpenAI teacher: %d/%d calls failed", errors, len(prompts))
+    return results
 
 
 def build_teacher_sft(
@@ -123,15 +217,17 @@ def build_teacher_sft(
     checklists: dict[str, list[str]],
     definitions: dict[str, str],
     model_id: str = cfg.JUDGE_MODEL_ID,
+    teacher_backend: str = "auto",
     batch_size: int = 16,
+    max_concurrent: int = 2,
 ) -> pd.DataFrame:
-    """Build checklist SFT data using base model (teacher) via vLLM."""
+    """Build checklist SFT data using a teacher model via vLLM or OpenAI."""
     from utils import generate_batch, load_judge_model
 
-    log.info("Loading teacher model: %s", model_id)
-    llm = load_judge_model(model_id)
+    resolved_backend = _infer_teacher_backend(str(model_id), teacher_backend)
+    log.info("Teacher backend: %s", resolved_backend)
+    log.info("Teacher model: %s", model_id)
 
-    # Build all prompts (2 per sample: side A and B)
     all_prompts: list[str] = []
     meta: list[dict] = []
 
@@ -148,18 +244,25 @@ def build_teacher_sft(
             meta.append({
                 "domain": domain,
                 "side": side,
-                "is_chosen": (side == winner),
+                "is_chosen": side == winner,
                 "n_questions": n_q,
             })
 
-    # Batch inference
     log.info("Running teacher inference on %d prompts ...", len(all_prompts))
-    messages_list = [[{"role": "user", "content": p}] for p in all_prompts]
-    raw_outputs = generate_batch(
-        llm, messages_list, batch_size=batch_size, max_new_tokens=2048,
-    )
+    if resolved_backend == "openai":
+        raw_outputs = generate_openai_batch(
+            all_prompts,
+            model_id=str(model_id),
+            max_concurrent=max_concurrent,
+            max_new_tokens=512,
+        )
+    else:
+        llm = load_judge_model(model_id)
+        messages_list = [[{"role": "user", "content": p}] for p in all_prompts]
+        raw_outputs = generate_batch(
+            llm, messages_list, batch_size=batch_size, max_new_tokens=2048,
+        )
 
-    # Parse and validate
     records = []
     n_valid = 0
     for prompt_text, raw, m in zip(all_prompts, raw_outputs, meta):
@@ -178,21 +281,25 @@ def build_teacher_sft(
             "n_questions": m["n_questions"],
         })
 
-    log.info("Teacher parse rate: %d/%d (%.1f%%)",
-             n_valid, len(records), 100 * n_valid / len(records))
+    log.info(
+        "Teacher parse rate: %d/%d (%.1f%%)",
+        n_valid,
+        len(records),
+        100 * n_valid / len(records) if records else 0.0,
+    )
 
-    # Delete vLLM model to free GPU memory
-    del llm
-    try:
-        import torch
-        torch.cuda.empty_cache()
-    except Exception:
-        pass
+    if resolved_backend == "vllm":
+        del llm
+        try:
+            import torch
+            torch.cuda.empty_cache()
+        except Exception:
+            pass
 
     return pd.DataFrame(records)
 
 
-# ────────────────────────── summary ────────────────────────────
+# summary
 
 
 def print_summary(sft_df: pd.DataFrame) -> None:
@@ -204,8 +311,7 @@ def print_summary(sft_df: pd.DataFrame) -> None:
     table.add_row("Chosen side", f"{sft_df['is_chosen'].sum():,}")
     table.add_row("Rejected side", f"{(~sft_df['is_chosen']).sum():,}")
     table.add_row("Parse valid", f"{sft_df['parse_valid'].sum():,}")
-    table.add_row("Parse rate",
-                  f"{100 * sft_df['parse_valid'].mean():.1f}%")
+    table.add_row("Parse rate", f"{100 * sft_df['parse_valid'].mean():.1f}%")
 
     for domain in sorted(sft_df["domain"].unique()):
         n = (sft_df["domain"] == domain).sum()
@@ -214,7 +320,7 @@ def print_summary(sft_df: pd.DataFrame) -> None:
     console.print(table)
 
 
-# ────────────────────────── main ───────────────────────────────
+# main
 
 
 def main():
@@ -228,7 +334,7 @@ def main():
     parser.add_argument(
         "--mode", type=str, default="synthetic",
         choices=["synthetic", "teacher"],
-        help="synthetic = fast heuristic; teacher = base model via vLLM",
+        help="synthetic = fast heuristic; teacher = vLLM or ChatGPT teacher model",
     )
     parser.add_argument(
         "--checklist-dir", type=str, default=None,
@@ -239,7 +345,19 @@ def main():
         help="Override output directory (default: data/checklist_sft)",
     )
     parser.add_argument("--batch-size", type=int, default=16)
-    parser.add_argument("--model-id", type=str, default=str(cfg.JUDGE_MODEL_ID))
+    parser.add_argument(
+        "--model-id", type=str, default=str(cfg.JUDGE_MODEL_ID),
+        help="Teacher model path/name. Examples: local Qwen path or gpt-4o-mini.",
+    )
+    parser.add_argument(
+        "--teacher-backend", type=str, default="auto",
+        choices=["auto", "vllm", "openai"],
+        help="Teacher inference backend. 'auto' maps gpt/o-series names to OpenAI.",
+    )
+    parser.add_argument(
+        "--max-concurrent", type=int, default=2,
+        help="Max concurrent OpenAI requests when teacher-backend=openai.",
+    )
     parser.add_argument(
         "--filter-valid", action="store_true",
         help="Only keep samples that parsed successfully (teacher mode)",
@@ -247,18 +365,15 @@ def main():
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 
-    # Resolve paths
     checklist_dir = Path(args.checklist_dir) if args.checklist_dir else cfg.CHECKLISTS_DIR
     output_dir = Path(args.output_dir) if args.output_dir else cfg.CHECKLIST_SFT_DIR
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Load checklists
     log.info("Loading checklists from %s", checklist_dir)
     checklists, definitions = load_checklists(checklist_dir)
     total_q = sum(len(qs) for qs in checklists.values())
     log.info("  %d dimensions, %d total questions", len(checklists), total_q)
 
-    # Load pairwise data
     if args.tier == "full":
         src_path = cfg.SPLITS_DIR / "train.parquet"
     else:
@@ -269,29 +384,33 @@ def main():
         return
 
     df = pd.read_parquet(src_path)
-    # Filter out ties
     df = df[df["winner"].isin(["A", "B"])].reset_index(drop=True)
     log.info("Loaded %d pairwise samples from %s (ties excluded)", len(df), src_path.name)
 
-    # Generate SFT data
+    resolved_teacher_backend = None
     if args.mode == "synthetic":
         sft_df = build_synthetic_sft(df, checklists, definitions)
     else:
+        resolved_teacher_backend = _infer_teacher_backend(args.model_id, args.teacher_backend)
         sft_df = build_teacher_sft(
-            df, checklists, definitions,
-            model_id=args.model_id, batch_size=args.batch_size,
+            df,
+            checklists,
+            definitions,
+            model_id=args.model_id,
+            teacher_backend=args.teacher_backend,
+            batch_size=args.batch_size,
+            max_concurrent=args.max_concurrent,
         )
 
-    # Optionally filter invalid parses
     if args.filter_valid:
         before = len(sft_df)
         sft_df = sft_df[sft_df["parse_valid"]].reset_index(drop=True)
-        log.info("Filtered: %d → %d valid samples", before, len(sft_df))
+        log.info("Filtered: %d -> %d valid samples", before, len(sft_df))
 
     print_summary(sft_df)
 
     if args.dry_run:
-        log.info("Dry run — not saving.")
+        log.info("Dry run - not saving.")
         sample = sft_df.iloc[0]
         console.print("\n[bold]Sample:[/bold]")
         console.print(f"  [cyan]domain[/cyan]: {sample['domain']}")
@@ -301,17 +420,19 @@ def main():
         console.print(f"  [cyan]completion[/cyan]:\n{sample['completion_text'][:300]}")
         return
 
-    # Save
     tag = f"_{args.mode}" if args.mode != "teacher" else ""
-    out_name = f"train_{args.tier}{tag}.parquet" if args.tier != "full" else f"train{tag}.parquet"
+    out_name = (
+        f"train_{args.tier}{tag}.parquet" if args.tier != "full" else f"train{tag}.parquet"
+    )
     out_path = output_dir / out_name
     sft_df.to_parquet(out_path, index=False)
     log.info("Saved %d SFT samples to %s", len(sft_df), out_path)
 
-    # Save metadata
     meta = {
         "tier": args.tier,
         "mode": args.mode,
+        "teacher_backend": resolved_teacher_backend,
+        "model_id": args.model_id if args.mode == "teacher" else None,
         "checklist_dir": str(checklist_dir),
         "n_samples": len(sft_df),
         "n_valid": int(sft_df["parse_valid"].sum()),
@@ -324,7 +445,7 @@ def main():
         json.dump(meta, f, indent=2)
     log.info("Saved metadata to %s", meta_path)
 
-    console.print(f"\n[bold green]Done. Checklist SFT data → {out_path}[/bold green]")
+    console.print(f"\n[bold green]Done. Checklist SFT data -> {out_path}[/bold green]")
 
 
 if __name__ == "__main__":
