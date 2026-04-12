@@ -1,0 +1,35 @@
+[
+  {
+    "label": "ChatGPT (gpt-5.4-mini)",
+    "n_total": 600,
+    "parse_rate_a": 1.0,
+    "parse_rate_b": 1.0,
+    "pairwise_parse_rate": 1.0,
+    "n_ties": 130,
+    "n_unparseable": 0,
+    "accuracy_excl_ties": 0.7446808510638298,
+    "accuracy_incl_ties": 0.5833333333333334,
+    "n_evaluated": 470,
+    "avg_na_a": 7.5616666666666665,
+    "avg_na_b": 6.718333333333334,
+    "avg_chosen_score": 0.6879564118307908,
+    "avg_rejected_score": 0.5368046436440455,
+    "score_gap": 0.15115176818674536,
+    "per_domain": {
+      "code": {
+        "n": 130,
+        "accuracy": 0.8076923076923077
+      },
+      "general": {
+        "n": 265,
+        "accuracy": 0.7283018867924528
+      },
+      "stem": {
+        "n": 75,
+        "accuracy": 0.6933333333333334
+      }
+    },
+    "time_s": 3000.588641643524,
+    "model_id": "gpt-5.4-mini"
+  }
+]

@@ -113,3 +113,6 @@ tmp_*/
 
 # ---------- CheckListBak--------#
 checklistbak/
+
+/referencePapers/
+/_*.py
