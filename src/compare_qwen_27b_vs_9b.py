@@ -286,9 +286,9 @@ def main():
                         help="Run only one model (use cached results for the other)")
     parser.add_argument(
         "--model-27b", type=str,
-        default="Qwen/Qwen3.5-27B-AWQ",
+        default="Qwen/Qwen3.5-27B-GPTQ-Int4",
         help="Model ID or local path for 27B 4-bit model "
-             "(default: Qwen/Qwen3.5-27B-AWQ from HuggingFace)",
+             "(default: Qwen/Qwen3.5-27B-GPTQ-Int4 from HuggingFace)",
     )
     parser.add_argument(
         "--model-9b", type=str,
