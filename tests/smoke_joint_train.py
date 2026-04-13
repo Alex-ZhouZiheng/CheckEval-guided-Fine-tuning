@@ -57,8 +57,22 @@ def main():
 
     # ── 2. Test collator __call__ ────────────────────────────────
     fake_batch = [
-        {"prompt_text": "Rate this essay.", "completion_text": "Rating: 3\nDecent work."},
-        {"prompt_text": "Evaluate clarity.", "completion_text": "Score: 5\nVery clear writing."},
+        {
+            "prompt_text": "Rate this essay.",
+            "completion_text": (
+                "Rating: 3\n"
+                "The essay is understandable, but the reasoning is only partly developed. "
+                "Several points are clear, yet the support and detail stay fairly limited."
+            ),
+        },
+        {
+            "prompt_text": "Evaluate clarity.",
+            "completion_text": (
+                "Score: 5\n"
+                "The writing is very clear, the structure is easy to follow, and each main idea "
+                "is explained with precise, readable language."
+            ),
+        },
     ]
     batch = collator(fake_batch)
 

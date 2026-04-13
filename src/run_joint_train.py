@@ -146,6 +146,7 @@ class ChecklistSFTCollator:
     def __call__(self, batch: list[dict]) -> dict[str, torch.Tensor]:
         input_ids_list: list[list[int]] = []
         labels_list: list[list[int]] = []
+        completion_lengths: list[int] = []
 
         eos_id = self.tokenizer.eos_token_id
 
@@ -160,6 +161,7 @@ class ChecklistSFTCollator:
             ) + [eos_id]
 
             n_prompt, n_comp = len(prompt_ids), len(comp_ids)
+            completion_lengths.append(n_comp)
 
             # Truncate: prompt first, then completion; always keep
             # at least MIN_COMPLETION_TOKENS of the completion.
@@ -180,6 +182,16 @@ class ChecklistSFTCollator:
 
             input_ids_list.append(prompt_ids + comp_ids)
             labels_list.append([-100] * n_prompt + comp_ids)
+
+        if not input_ids_list:
+            preview = ", ".join(str(n) for n in completion_lengths[:5]) or "none"
+            raise ValueError(
+                "ChecklistSFTCollator filtered out every sample in the batch. "
+                f"batch_size={len(batch)}, min_completion_tokens={self.MIN_COMPLETION_TOKENS}, "
+                f"completion_token_lengths=[{preview}]. "
+                "Increase completion_text length, lower MIN_COMPLETION_TOKENS, "
+                "or inspect truncation."
+            )
 
         # Pad batch to uniform length
         max_len = max(len(ids) for ids in input_ids_list)
