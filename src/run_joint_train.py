@@ -121,17 +121,17 @@ class ChecklistSFTCollator:
                 {"role": "user", "content": prompt_text},
                 {"role": "assistant", "content": completion_text},
             ]
-            full_ids = self.tokenizer.apply_chat_template(
+            full_ids = list(self.tokenizer.apply_chat_template(
                 full_messages, tokenize=True, add_generation_prompt=False,
                 **self.template_kwargs,
-            )
+            ))
 
             # Prompt-only tokens (including generation prompt / assistant header)
             prompt_messages = [{"role": "user", "content": prompt_text}]
-            prompt_ids = self.tokenizer.apply_chat_template(
+            prompt_ids = list(self.tokenizer.apply_chat_template(
                 prompt_messages, tokenize=True, add_generation_prompt=True,
                 **self.template_kwargs,
-            )
+            ))
 
             n_prompt = len(prompt_ids)
 
@@ -391,7 +391,7 @@ def build_training_args(
     epochs: int,
     batch_size: int,
     grad_accum: int,
-    warmup_ratio: float,
+    warmup_steps: int,
     eval_steps: int,
     beta: float,
     use_wandb: bool,
@@ -405,7 +405,8 @@ def build_training_args(
     if not report_to:
         report_to = ["none"]
 
-    tb_dir = str(cfg.TENSORBOARD_DIR / run_name) if use_tensorboard else None
+    if use_tensorboard:
+        os.environ["TENSORBOARD_LOGGING_DIR"] = str(cfg.TENSORBOARD_DIR / run_name)
 
     return DPOConfig(
         output_dir=str(output_dir),
@@ -419,7 +420,7 @@ def build_training_args(
         eval_accumulation_steps=1,
         gradient_accumulation_steps=grad_accum,
         learning_rate=lr,
-        warmup_ratio=warmup_ratio,
+        warmup_steps=warmup_steps,
         bf16=True,
         gradient_checkpointing=True,
         gradient_checkpointing_kwargs={"use_reentrant": False},
@@ -432,7 +433,6 @@ def build_training_args(
         greater_is_better=False,
         logging_steps=10,
         report_to=report_to,
-        logging_dir=tb_dir,
         seed=cfg.SEED,
         dataloader_num_workers=4,
         remove_unused_columns=False,
@@ -560,6 +560,8 @@ def main():
 
     # ── 5. Training args ──
     output_dir = cfg.CHECKPOINTS_DIR / run_name
+    total_steps = steps_per_epoch * epochs
+    warmup_steps = int(total_steps * cfg.WARMUP_RATIO)
     training_args = build_training_args(
         output_dir=output_dir,
         run_name=run_name,
@@ -567,7 +569,7 @@ def main():
         epochs=epochs,
         batch_size=batch_size,
         grad_accum=grad_accum,
-        warmup_ratio=cfg.WARMUP_RATIO,
+        warmup_steps=warmup_steps,
         beta=beta,
         eval_steps=eval_steps,
         use_wandb=use_wandb,
@@ -631,7 +633,7 @@ def main():
         "sft_samples": len(sft_ds) if sft_ds else 0,
         "max_length": cfg.MAX_LENGTH,
         "sft_max_length": cfg.SFT_MAX_LENGTH,
-        "warmup_ratio": cfg.WARMUP_RATIO,
+        "warmup_steps": warmup_steps,
         "seed": cfg.SEED,
         "train_samples": len(train_ds),
         "dev_samples": len(dev_ds),

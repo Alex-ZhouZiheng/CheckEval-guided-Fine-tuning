@@ -221,7 +221,7 @@ def build_training_args(
     epochs: int,
     batch_size: int,
     grad_accum: int,
-    warmup_ratio: float,
+    warmup_steps: int,
     eval_steps,
     beta: float,
     use_deepspeed: bool,
@@ -238,7 +238,8 @@ def build_training_args(
     if not report_to:
         report_to = ["none"]
 
-    tb_dir = str(cfg.TENSORBOARD_DIR / run_name) if use_tensorboard else None
+    if use_tensorboard:
+        os.environ["TENSORBOARD_LOGGING_DIR"] = str(cfg.TENSORBOARD_DIR / run_name)
 
     return DPOConfig(
         output_dir=str(output_dir),
@@ -255,7 +256,7 @@ def build_training_args(
         eval_accumulation_steps=1,
         gradient_accumulation_steps=grad_accum,
         learning_rate=lr,
-        warmup_ratio=warmup_ratio,
+        warmup_steps=warmup_steps,
         # Precision
         bf16=True,
         # Checkpointing
@@ -272,7 +273,6 @@ def build_training_args(
         # Logging
         logging_steps=10,
         report_to=report_to,
-        logging_dir=tb_dir,
         # DeepSpeed
         deepspeed=cfg.DEEPSPEED_CONFIG if use_deepspeed else None,
         # Misc
@@ -386,6 +386,8 @@ def main():
 
     # 4. Training args
     output_dir = cfg.CHECKPOINTS_DIR / run_name
+    total_steps = steps_per_epoch * epochs
+    warmup_steps = int(total_steps * cfg.WARMUP_RATIO)
     training_args = build_training_args(
         output_dir=output_dir,
         run_name=run_name,
@@ -393,7 +395,7 @@ def main():
         epochs=epochs,
         batch_size=batch_size,
         grad_accum=grad_accum,
-        warmup_ratio=cfg.WARMUP_RATIO,
+        warmup_steps=warmup_steps,
         beta=beta,
         eval_steps=eval_steps,
         use_deepspeed=False,
@@ -448,7 +450,7 @@ def main():
         "effective_batch_size": batch_size * grad_accum,
         "beta": beta,
         "max_length": cfg.MAX_LENGTH,
-        "warmup_ratio": cfg.WARMUP_RATIO,
+        "warmup_steps": warmup_steps,
         "seed": cfg.SEED,
         "train_samples": len(train_ds),
         "dev_samples": len(dev_ds),
