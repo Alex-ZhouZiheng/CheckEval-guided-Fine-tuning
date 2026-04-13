@@ -510,8 +510,6 @@ def _parse_args():
 
 def main():
     args = _parse_args()
-
-    # ── Resolve defaults ─────────────────────────────────────────
     lr         = args.lr or cfg.LEARNING_RATE
     epochs     = args.epochs or cfg.NUM_EPOCHS
     batch_size = args.batch_size or cfg.PER_DEVICE_BATCH_SIZE
