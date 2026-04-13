@@ -104,22 +104,29 @@ class ChecklistSFTCollator:
     prompt portion masked (label = -100).
     """
 
+    # Minimum number of completion tokens to keep after truncation.
+    # Samples where even this many tokens cannot be preserved are skipped.
+    MIN_COMPLETION_TOKENS = 16
+
     def __init__(self, tokenizer, max_length: int = cfg.SFT_MAX_LENGTH):
         self.tokenizer = tokenizer
         self.max_length = max_length
 
-    def _apply_and_tokenize(self, messages, *, add_generation_prompt: bool) -> list[int]:
-        """Apply chat template and guarantee a list[int] of token ids.
+    @staticmethod
+    def _strip_think(text: str) -> str:
+        """Remove all Qwen3 <think> blocks — both closed and trailing unclosed."""
+        # Closed blocks:  <think>...</think>
+        text = re.sub(r"<think>.*?</think>\s*", "", text, flags=re.DOTALL)
+        # Trailing unclosed: <think>\n  (from add_generation_prompt)
+        text = re.sub(r"<think>\s*$", "", text)
+        return text
 
-        Always renders to string first, then encodes — this is the most
-        reliable path across different tokenizer / transformers versions.
-        """
+    def _apply_and_tokenize(self, messages, *, add_generation_prompt: bool) -> list[int]:
+        """Apply chat template and guarantee a list[int] of token ids."""
         text = self.tokenizer.apply_chat_template(
             messages, tokenize=False, add_generation_prompt=add_generation_prompt,
         )
-        # Strip any <think>...</think> block that Qwen3 injects even when
-        # the template is applied without enable_thinking (or defaults to True)
-        text = re.sub(r"<think>.*?</think>\s*", "", text, flags=re.DOTALL)
+        text = self._strip_think(text)
         return self.tokenizer.encode(text, add_special_tokens=False)
 
     def __call__(self, batch: list[dict]) -> dict[str, torch.Tensor]:
@@ -130,43 +137,47 @@ class ChecklistSFTCollator:
             prompt_text = sample["prompt_text"]
             completion_text = sample["completion_text"]
 
-            # Full conversation tokens
-            full_messages = [
-                {"role": "user", "content": prompt_text},
-                {"role": "assistant", "content": completion_text},
-            ]
-            full_ids = self._apply_and_tokenize(
-                full_messages, add_generation_prompt=False,
-            )
-
-            # Prompt-only tokens (including generation prompt / assistant header)
+            # ── Tokenize prompt and completion separately ──
+            # This avoids the fragile "find common prefix" approach entirely.
             prompt_messages = [{"role": "user", "content": prompt_text}]
             prompt_ids = self._apply_and_tokenize(
                 prompt_messages, add_generation_prompt=True,
             )
 
+            # Completion tokens only (no special tokens / headers)
+            comp_ids = self.tokenizer.encode(
+                completion_text, add_special_tokens=False,
+            )
+            # Append EOS
+            eos = self.tokenizer.eos_token_id
+            comp_ids.append(eos)
+
             n_prompt = len(prompt_ids)
+            n_comp = len(comp_ids)
 
-            # Truncate
-            if len(full_ids) > self.max_length:
-                full_ids = full_ids[: self.max_length]
+            # ── Truncation: guarantee at least MIN_COMPLETION_TOKENS ──
+            total = n_prompt + n_comp
+            if total > self.max_length:
+                budget_comp = max(self.MIN_COMPLETION_TOKENS, n_comp)
+                budget_prompt = self.max_length - budget_comp
+                if budget_prompt < 1:
+                    # Even with minimal prompt, can't fit — skip this sample
+                    continue
+                # Truncate prompt from the LEFT to keep the end (task instruction)
+                # But easier: truncate completion if it's huge, otherwise truncate prompt
+                if n_prompt > self.max_length - self.MIN_COMPLETION_TOKENS:
+                    # Prompt is too long — truncate prompt, keep last tokens
+                    prompt_ids = prompt_ids[: self.max_length - min(n_comp, self.max_length - 1)]
+                    n_prompt = len(prompt_ids)
+                # Now truncate completion if still over
+                if n_prompt + n_comp > self.max_length:
+                    comp_ids = comp_ids[: self.max_length - n_prompt]
+                    n_comp = len(comp_ids)
 
-            # Sanity: prompt_ids must be a strict prefix of full_ids
-            # If not, find the actual divergence point
-            if n_prompt >= len(full_ids) or full_ids[:n_prompt] != prompt_ids[:n_prompt]:
-                # Brute-force: find the last position where they match
-                common = 0
-                for a, b in zip(prompt_ids, full_ids):
-                    if a == b:
-                        common += 1
-                    else:
-                        break
-                n_prompt = common
+            full_ids = prompt_ids + comp_ids
 
-            # Labels: mask prompt tokens
-            labels = [-100] * min(n_prompt, len(full_ids))
-            if len(full_ids) > n_prompt:
-                labels += full_ids[n_prompt:]
+            # Labels: mask prompt tokens with -100, supervise completion
+            labels = [-100] * n_prompt + comp_ids
 
             input_ids_list.append(full_ids)
             labels_list.append(labels)

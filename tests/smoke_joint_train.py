@@ -36,36 +36,24 @@ def main():
     from run_joint_train import ChecklistSFTCollator
     collator = ChecklistSFTCollator(tokenizer, max_length=512)
 
-    msgs_full = [
-        {"role": "user", "content": "Rate this essay on a scale of 1-5."},
-        {"role": "assistant", "content": "Rating: 4\nThe essay is well-structured."},
-    ]
-    msgs_prompt = [{"role": "user", "content": "Rate this essay on a scale of 1-5."}]
+    # Test _strip_think
+    assert collator._strip_think("<think>\nhello\n</think>\nworld") == "world"
+    assert collator._strip_think("foo<think>\n") == "foo"
+    assert collator._strip_think("no think here") == "no think here"
+    print(f"{PASS}  _strip_think handles closed and unclosed <think> blocks")
 
-    full_ids = collator._apply_and_tokenize(msgs_full, add_generation_prompt=False)
+    msgs_prompt = [{"role": "user", "content": "Rate this essay on a scale of 1-5."}]
     prompt_ids = collator._apply_and_tokenize(msgs_prompt, add_generation_prompt=True)
 
     # Check types
-    assert isinstance(full_ids, list), f"full_ids is {type(full_ids)}, expected list"
-    assert all(isinstance(x, int) for x in full_ids), \
-        f"full_ids contains non-int: {type(full_ids[0])}, first 5 = {full_ids[:5]}"
     assert isinstance(prompt_ids, list) and all(isinstance(x, int) for x in prompt_ids)
-    print(f"{PASS}  _apply_and_tokenize returns list[int]")
-    print(f"       full_ids:   {len(full_ids)} tokens")
-    print(f"       prompt_ids: {len(prompt_ids)} tokens")
+    print(f"{PASS}  _apply_and_tokenize returns list[int]  ({len(prompt_ids)} tokens)")
 
-    # Check prompt is strict prefix
-    n_prompt = len(prompt_ids)
-    assert n_prompt < len(full_ids), \
-        f"prompt ({n_prompt}) >= full ({len(full_ids)}), no completion tokens!"
-    print(f"{PASS}  prompt ({n_prompt}) < full ({len(full_ids)}), "
-          f"completion has {len(full_ids) - n_prompt} tokens")
-
-    # Decode to visualize
-    print(f"\n  --- Prompt text (decoded) ---")
-    print(f"  {tokenizer.decode(prompt_ids[:50])}...")
-    print(f"  --- Completion tokens (decoded) ---")
-    print(f"  {tokenizer.decode(full_ids[n_prompt:n_prompt+50])}...")
+    # Check no <think> leak
+    decoded = tokenizer.decode(prompt_ids)
+    assert "<think>" not in decoded, f"<think> leaked into prompt_ids: {decoded[-100:]}"
+    print(f"{PASS}  No <think> token in prompt_ids")
+    print(f"       decoded tail: ...{decoded[-80:]}")
 
     # ── 2. Test collator __call__ ────────────────────────────────
     fake_batch = [
