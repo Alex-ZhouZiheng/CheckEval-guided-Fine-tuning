@@ -108,6 +108,17 @@ class ChecklistSFTCollator:
         self.max_length = max_length
         self.template_kwargs = {"enable_thinking": False}
 
+    def _apply_and_tokenize(self, messages, *, add_generation_prompt: bool) -> list[int]:
+        """Apply chat template and guarantee a list[int] of token ids."""
+        result = self.tokenizer.apply_chat_template(
+            messages, tokenize=True, add_generation_prompt=add_generation_prompt,
+            **self.template_kwargs,
+        )
+        # Some tokenizer versions return a string instead of ids
+        if isinstance(result, str):
+            result = self.tokenizer.encode(result, add_special_tokens=False)
+        return list(result)
+
     def __call__(self, batch: list[dict]) -> dict[str, torch.Tensor]:
         input_ids_list: list[list[int]] = []
         labels_list: list[list[int]] = []
@@ -121,17 +132,15 @@ class ChecklistSFTCollator:
                 {"role": "user", "content": prompt_text},
                 {"role": "assistant", "content": completion_text},
             ]
-            full_ids = list(self.tokenizer.apply_chat_template(
-                full_messages, tokenize=True, add_generation_prompt=False,
-                **self.template_kwargs,
-            ))
+            full_ids = self._apply_and_tokenize(
+                full_messages, add_generation_prompt=False,
+            )
 
             # Prompt-only tokens (including generation prompt / assistant header)
             prompt_messages = [{"role": "user", "content": prompt_text}]
-            prompt_ids = list(self.tokenizer.apply_chat_template(
-                prompt_messages, tokenize=True, add_generation_prompt=True,
-                **self.template_kwargs,
-            ))
+            prompt_ids = self._apply_and_tokenize(
+                prompt_messages, add_generation_prompt=True,
+            )
 
             n_prompt = len(prompt_ids)
 
@@ -364,13 +373,13 @@ def load_base_model(model_id: str = cfg.JUDGE_MODEL_ID):
     log.info("Loading base model: %s (bf16)", model_id)
     try:
         model = AutoModelForCausalLM.from_pretrained(
-            model_id, torch_dtype=torch.bfloat16,
+            model_id, dtype=torch.bfloat16,
             trust_remote_code=True, attn_implementation="flash_attention_2",
         )
         log.info("  Using Flash Attention 2")
     except (ImportError, ValueError):
         model = AutoModelForCausalLM.from_pretrained(
-            model_id, torch_dtype=torch.bfloat16,
+            model_id, dtype=torch.bfloat16,
             trust_remote_code=True, attn_implementation="sdpa",
         )
         log.info("  Using SDPA")

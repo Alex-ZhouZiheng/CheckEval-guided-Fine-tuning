@@ -186,7 +186,7 @@ def load_base_model(model_id: str = cfg.JUDGE_MODEL_ID):
     try:
         model = AutoModelForCausalLM.from_pretrained(
             model_id,
-            torch_dtype=torch.bfloat16,
+            dtype=torch.bfloat16,
             trust_remote_code=True,
             attn_implementation="flash_attention_2",
         )
@@ -194,7 +194,7 @@ def load_base_model(model_id: str = cfg.JUDGE_MODEL_ID):
     except (ImportError, ValueError):
         model = AutoModelForCausalLM.from_pretrained(
             model_id,
-            torch_dtype=torch.bfloat16,
+            dtype=torch.bfloat16,
             trust_remote_code=True,
             attn_implementation="sdpa",
         )

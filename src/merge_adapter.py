@@ -65,7 +65,7 @@ def merge_adapter(
 
     base_model = AutoModelVL.from_pretrained(
         base_model_id,
-        torch_dtype=torch.bfloat16,
+        dtype=torch.bfloat16,
         trust_remote_code=True,
         device_map="cpu",
     )
