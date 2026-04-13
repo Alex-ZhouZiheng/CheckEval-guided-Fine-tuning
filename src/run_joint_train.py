@@ -121,14 +121,23 @@ class ChecklistSFTCollator:
 
     def _apply_and_tokenize(self, messages, *, add_generation_prompt: bool) -> list[int]:
         """Apply chat template and guarantee a list[int] of token ids."""
+        # First try tokenize=True
         result = self.tokenizer.apply_chat_template(
             messages, tokenize=True, add_generation_prompt=add_generation_prompt,
             **self._template_kwargs,
         )
-        # Fallback: some tokenizer versions return a string instead of ids
+        # If we got a flat list of ints, we're done
+        if isinstance(result, list) and result and isinstance(result[0], int):
+            return result
+        # If we got a string, encode it
         if isinstance(result, str):
-            result = self.tokenizer.encode(result, add_special_tokens=False)
-        return list(result)
+            return self.tokenizer.encode(result, add_special_tokens=False)
+        # Fallback: render to string then encode
+        text = self.tokenizer.apply_chat_template(
+            messages, tokenize=False, add_generation_prompt=add_generation_prompt,
+            **self._template_kwargs,
+        )
+        return self.tokenizer.encode(text, add_special_tokens=False)
 
     def __call__(self, batch: list[dict]) -> dict[str, torch.Tensor]:
         input_ids_list: list[list[int]] = []
