@@ -122,7 +122,7 @@ def main():
     # ── 4. Test with real SFT data (if available) ────────────────
     try:
         import pandas as pd
-        sft_path = cfg.DATA_DIR / "sft" / "train_tier_10k.parquet"
+        sft_path = cfg.CHECKLIST_SFT_DIR / "train_tier_10k.parquet"
         if sft_path.exists():
             df = pd.read_parquet(sft_path)
             if "parse_valid" in df.columns:
