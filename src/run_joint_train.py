@@ -106,15 +106,26 @@ class ChecklistSFTCollator:
     def __init__(self, tokenizer, max_length: int = cfg.SFT_MAX_LENGTH):
         self.tokenizer = tokenizer
         self.max_length = max_length
-        self.template_kwargs = {"enable_thinking": False}
+        # Detect whether the chat template supports enable_thinking
+        self._template_kwargs = {}
+        try:
+            test = tokenizer.apply_chat_template(
+                [{"role": "user", "content": "t"}],
+                tokenize=True, add_generation_prompt=False,
+                enable_thinking=False,
+            )
+            if isinstance(test, list) and all(isinstance(x, int) for x in test):
+                self._template_kwargs = {"enable_thinking": False}
+        except (TypeError, Exception):
+            pass
 
     def _apply_and_tokenize(self, messages, *, add_generation_prompt: bool) -> list[int]:
         """Apply chat template and guarantee a list[int] of token ids."""
         result = self.tokenizer.apply_chat_template(
             messages, tokenize=True, add_generation_prompt=add_generation_prompt,
-            **self.template_kwargs,
+            **self._template_kwargs,
         )
-        # Some tokenizer versions return a string instead of ids
+        # Fallback: some tokenizer versions return a string instead of ids
         if isinstance(result, str):
             result = self.tokenizer.encode(result, add_special_tokens=False)
         return list(result)
