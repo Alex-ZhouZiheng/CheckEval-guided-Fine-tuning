@@ -32,6 +32,7 @@ import json
 import logging
 import math
 import os
+import re
 from pathlib import Path
 
 os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
@@ -106,37 +107,19 @@ class ChecklistSFTCollator:
     def __init__(self, tokenizer, max_length: int = cfg.SFT_MAX_LENGTH):
         self.tokenizer = tokenizer
         self.max_length = max_length
-        # Detect whether the chat template supports enable_thinking
-        self._template_kwargs = {}
-        try:
-            test = tokenizer.apply_chat_template(
-                [{"role": "user", "content": "t"}],
-                tokenize=True, add_generation_prompt=False,
-                enable_thinking=False,
-            )
-            if isinstance(test, list) and all(isinstance(x, int) for x in test):
-                self._template_kwargs = {"enable_thinking": False}
-        except (TypeError, Exception):
-            pass
 
     def _apply_and_tokenize(self, messages, *, add_generation_prompt: bool) -> list[int]:
-        """Apply chat template and guarantee a list[int] of token ids."""
-        # First try tokenize=True
-        result = self.tokenizer.apply_chat_template(
-            messages, tokenize=True, add_generation_prompt=add_generation_prompt,
-            **self._template_kwargs,
-        )
-        # If we got a flat list of ints, we're done
-        if isinstance(result, list) and result and isinstance(result[0], int):
-            return result
-        # If we got a string, encode it
-        if isinstance(result, str):
-            return self.tokenizer.encode(result, add_special_tokens=False)
-        # Fallback: render to string then encode
+        """Apply chat template and guarantee a list[int] of token ids.
+
+        Always renders to string first, then encodes — this is the most
+        reliable path across different tokenizer / transformers versions.
+        """
         text = self.tokenizer.apply_chat_template(
             messages, tokenize=False, add_generation_prompt=add_generation_prompt,
-            **self._template_kwargs,
         )
+        # Strip any <think>...</think> block that Qwen3 injects even when
+        # the template is applied without enable_thinking (or defaults to True)
+        text = re.sub(r"<think>.*?</think>\s*", "", text, flags=re.DOTALL)
         return self.tokenizer.encode(text, add_special_tokens=False)
 
     def __call__(self, batch: list[dict]) -> dict[str, torch.Tensor]:
@@ -167,6 +150,18 @@ class ChecklistSFTCollator:
             # Truncate
             if len(full_ids) > self.max_length:
                 full_ids = full_ids[: self.max_length]
+
+            # Sanity: prompt_ids must be a strict prefix of full_ids
+            # If not, find the actual divergence point
+            if n_prompt >= len(full_ids) or full_ids[:n_prompt] != prompt_ids[:n_prompt]:
+                # Brute-force: find the last position where they match
+                common = 0
+                for a, b in zip(prompt_ids, full_ids):
+                    if a == b:
+                        common += 1
+                    else:
+                        break
+                n_prompt = common
 
             # Labels: mask prompt tokens
             labels = [-100] * min(n_prompt, len(full_ids))
@@ -268,6 +263,9 @@ class JointDPOSFTTrainer(DPOTrainer):
             shift_labels.view(-1),
             ignore_index=-100,
         )
+        # Guard: if all labels were -100, cross_entropy returns NaN
+        if torch.isnan(loss):
+            loss = torch.tensor(0.0, device=loss.device, requires_grad=True)
         return loss
 
     def compute_loss(self, model, inputs, return_outputs=False, **kwargs):
