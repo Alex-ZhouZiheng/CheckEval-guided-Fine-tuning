@@ -125,7 +125,9 @@ class ChecklistSFTCollator:
         """Apply chat template and guarantee a list[int] of token ids."""
         text = self.tokenizer.apply_chat_template(
             messages, tokenize=False, add_generation_prompt=add_generation_prompt,
+            enable_thinking=False,   # Qwen3: suppress <think> block
         )
+        # Safety net: strip any residual <think> in case the kwarg is ignored
         text = self._strip_think(text)
         return self.tokenizer.encode(text, add_special_tokens=False)
 
