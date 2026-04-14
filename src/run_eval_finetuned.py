@@ -97,7 +97,7 @@ def run_vanilla_eval(
     return results
 
 
-TIE_DELTA = 0.05
+TIE_DELTA = 0.0  # test set contains no Tie labels — don't emit a Tie band by default
 
 
 def run_checkeval_eval(
