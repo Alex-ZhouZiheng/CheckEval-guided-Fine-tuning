@@ -1,0 +1,541 @@
+_name_or_path:
+    value: /root/autodl-tmp/Thesis/models/Qwen3.5-9B
+_wandb:
+    value:
+        cli_version: 0.25.1
+        e:
+            38oz4epl2ou8dmeeq0c3zzu57f1e8pyf:
+                args:
+                    - --tier
+                    - tier_10k
+                    - --sft-lambda
+                    - "1.0"
+                codePath: src/run_joint_train.py
+                codePathLocal: src/run_joint_train.py
+                cpu_count: 104
+                cpu_count_logical: 208
+                cudaVersion: "13.0"
+                disk:
+                    /:
+                        total: "32212254720"
+                        used: "4981395456"
+                email: alexzhou1305757@gmail.com
+                executable: /root/autodl-tmp/Thesis/.venvmerge/bin/python
+                git:
+                    commit: ad6beddf2442af96e5574895f374e37e63968297
+                    remote: git@github.com:Alex-ZhouZiheng/CheckEval-guided-Fine-tuning.git
+                gpu: NVIDIA GeForce RTX 5090
+                gpu_count: 1
+                gpu_nvidia:
+                    - architecture: Blackwell
+                      cudaCores: 21760
+                      memoryTotal: "34190917632"
+                      name: NVIDIA GeForce RTX 5090
+                      uuid: GPU-64bda0f2-4741-6466-094b-410c8bb6a76b
+                host: autodl-container-85654ab736-6e27982f
+                memory:
+                    total: "810155479040"
+                os: Linux-5.15.0-78-generic-x86_64-with-glibc2.35
+                program: /root/autodl-tmp/Thesis/src/run_joint_train.py
+                python: CPython 3.12.13
+                root: /root/autodl-tmp/Thesis
+                startedAt: "2026-04-13T17:52:27.603839Z"
+                writerId: 38oz4epl2ou8dmeeq0c3zzu57f1e8pyf
+        m:
+            - "1": train/global_step
+              "6":
+                - 3
+              "7": []
+            - "2": '*'
+              "5": 1
+              "6":
+                - 1
+              "7": []
+        python_version: 3.12.13
+        t:
+            "1":
+                - 1
+                - 5
+                - 11
+                - 41
+                - 49
+                - 51
+                - 53
+                - 71
+                - 84
+                - 98
+            "2":
+                - 1
+                - 5
+                - 11
+                - 41
+                - 49
+                - 51
+                - 53
+                - 71
+                - 84
+                - 98
+            "3":
+                - 7
+                - 13
+                - 19
+                - 66
+            "4": 3.12.13
+            "5": 0.25.1
+            "6": 5.4.0
+            "9":
+                "1": transformers_trainer
+            "12": 0.25.1
+            "13": linux-x86_64
+accelerator_config:
+    value:
+        dispatch_batches: null
+        even_batches: true
+        gradient_accumulation_kwargs: null
+        non_blocking: false
+        split_batches: false
+        use_seedable_sampler: true
+activation_offloading:
+    value: false
+adam_beta1:
+    value: 0.9
+adam_beta2:
+    value: 0.999
+adam_epsilon:
+    value: 1e-08
+architectures:
+    value: null
+attention_bias:
+    value: false
+attention_dropout:
+    value: 0
+attn_output_gate:
+    value: true
+auto_find_batch_size:
+    value: false
+average_tokens_across_devices:
+    value: true
+batch_eval_metrics:
+    value: false
+beta:
+    value: 0.1
+bf16:
+    value: true
+bf16_full_eval:
+    value: false
+bos_token_id:
+    value: null
+chunk_size_feed_forward:
+    value: 0
+data_seed:
+    value: null
+dataloader_drop_last:
+    value: false
+dataloader_num_workers:
+    value: 4
+dataloader_persistent_workers:
+    value: false
+dataloader_pin_memory:
+    value: true
+dataloader_prefetch_factor:
+    value: null
+dataset_num_proc:
+    value: null
+ddp_backend:
+    value: null
+ddp_broadcast_buffers:
+    value: null
+ddp_bucket_cap_mb:
+    value: null
+ddp_find_unused_parameters:
+    value: null
+ddp_timeout:
+    value: 1800
+debug:
+    value: []
+deepspeed:
+    value: null
+disable_dropout:
+    value: true
+disable_tqdm:
+    value: false
+discopop_tau:
+    value: 0.05
+do_eval:
+    value: true
+do_predict:
+    value: false
+do_train:
+    value: false
+dtype:
+    value: bfloat16
+enable_jit_checkpoint:
+    value: false
+eos_token_id:
+    value: 248046
+eval_accumulation_steps:
+    value: 1
+eval_delay:
+    value: 0
+eval_do_concat_batches:
+    value: true
+eval_on_start:
+    value: false
+eval_steps:
+    value: 78
+eval_strategy:
+    value: steps
+eval_use_gather_object:
+    value: false
+f_alpha_divergence_coef:
+    value: 0.5
+f_divergence_type:
+    value: reverse_kl
+fp16:
+    value: false
+fp16_full_eval:
+    value: false
+fsdp:
+    value: []
+fsdp_config:
+    value:
+        min_num_params: 0
+        xla: false
+        xla_fsdp_grad_ckpt: false
+        xla_fsdp_v2: false
+full_attention_interval:
+    value: 4
+full_determinism:
+    value: false
+gradient_accumulation_steps:
+    value: 32
+gradient_checkpointing:
+    value: true
+gradient_checkpointing_kwargs:
+    value:
+        use_reentrant: false
+greater_is_better:
+    value: false
+head_dim:
+    value: 256
+hidden_act:
+    value: silu
+hidden_size:
+    value: 4096
+hub_always_push:
+    value: false
+hub_model_id:
+    value: null
+hub_private_repo:
+    value: null
+hub_revision:
+    value: null
+hub_strategy:
+    value: every_save
+hub_token:
+    value: <HUB_TOKEN>
+id2label:
+    value:
+        "0": LABEL_0
+        "1": LABEL_1
+ignore_data_skip:
+    value: false
+include_for_metrics:
+    value: []
+include_num_input_tokens_seen:
+    value: "no"
+initializer_range:
+    value: 0.02
+intermediate_size:
+    value: 12288
+is_encoder_decoder:
+    value: false
+label_names:
+    value: null
+label_smoothing:
+    value: 0
+label_smoothing_factor:
+    value: 0
+label2id:
+    value:
+        LABEL_0: 0
+        LABEL_1: 1
+layer_types:
+    value:
+        - linear_attention
+        - linear_attention
+        - linear_attention
+        - full_attention
+        - linear_attention
+        - linear_attention
+        - linear_attention
+        - full_attention
+        - linear_attention
+        - linear_attention
+        - linear_attention
+        - full_attention
+        - linear_attention
+        - linear_attention
+        - linear_attention
+        - full_attention
+        - linear_attention
+        - linear_attention
+        - linear_attention
+        - full_attention
+        - linear_attention
+        - linear_attention
+        - linear_attention
+        - full_attention
+        - linear_attention
+        - linear_attention
+        - linear_attention
+        - full_attention
+        - linear_attention
+        - linear_attention
+        - linear_attention
+        - full_attention
+ld_alpha:
+    value: null
+learning_rate:
+    value: 1e-06
+length_column_name:
+    value: length
+liger_kernel_config:
+    value: null
+linear_conv_kernel_dim:
+    value: 4
+linear_key_head_dim:
+    value: 128
+linear_num_key_heads:
+    value: 16
+linear_num_value_heads:
+    value: 32
+linear_value_head_dim:
+    value: 128
+load_best_model_at_end:
+    value: true
+local_rank:
+    value: -1
+log_level:
+    value: passive
+log_level_replica:
+    value: warning
+log_on_each_node:
+    value: true
+logging_dir:
+    value: null
+logging_first_step:
+    value: false
+logging_nan_inf_filter:
+    value: true
+logging_steps:
+    value: 10
+logging_strategy:
+    value: steps
+loss_type:
+    value:
+        - sigmoid
+loss_weights:
+    value: null
+lr_scheduler_kwargs:
+    value: null
+lr_scheduler_type:
+    value: linear
+mamba_ssm_dtype:
+    value: float32
+max_grad_norm:
+    value: 1
+max_length:
+    value: 2048
+max_position_embeddings:
+    value: 262144
+max_steps:
+    value: -1
+metric_for_best_model:
+    value: eval_loss
+mlp_only_layers:
+    value: []
+model/num_parameters:
+    value: 8957735424
+model_init_kwargs:
+    value: null
+model_type:
+    value: qwen3_5_text
+mtp_num_hidden_layers:
+    value: 1
+mtp_use_dedicated_embeddings:
+    value: false
+neftune_noise_alpha:
+    value: null
+num_attention_heads:
+    value: 16
+num_hidden_layers:
+    value: 32
+num_key_value_heads:
+    value: 4
+num_train_epochs:
+    value: 1
+optim:
+    value: adamw_torch_fused
+optim_args:
+    value: null
+optim_target_modules:
+    value: null
+output_attentions:
+    value: false
+output_dir:
+    value: /root/autodl-tmp/Thesis/results/checkpoints/joint_dpo_tier_10k_r16_b0.1_lr1e-06_lam1.0
+output_hidden_states:
+    value: false
+pad_to_multiple_of:
+    value: null
+pad_token:
+    value: <PAD_TOKEN>
+pad_token_id:
+    value: 248044
+padding_free:
+    value: false
+parallelism_config:
+    value: null
+partial_rotary_factor:
+    value: 0.25
+peft_config:
+    value:
+        default:
+            alora_invocation_tokens: null
+            arrow_config: null
+            auto_mapping: null
+            base_model_name_or_path: /root/autodl-tmp/Thesis/models/Qwen3.5-9B
+            bias: none
+            corda_config: null
+            ensure_weight_tying: false
+            eva_config: null
+            exclude_modules: null
+            fan_in_fan_out: false
+            inference_mode: false
+            init_lora_weights: true
+            layer_replication: null
+            layers_pattern: null
+            layers_to_transform: null
+            lora_alpha: 32
+            lora_bias: false
+            lora_dropout: 0.1
+            megatron_config: null
+            megatron_core: megatron.core
+            modules_to_save: null
+            peft_type: LORA
+            peft_version: 0.18.1
+            qalora_group_size: 16
+            r: 16
+            revision: null
+            runtime_config:
+                ephemeral_gpu_offload: false
+            target_modules:
+                - o_proj
+                - k_proj
+                - v_proj
+                - q_proj
+            target_parameters: null
+            task_type: CAUSAL_LM
+            trainable_token_indices: null
+            use_dora: false
+            use_qalora: false
+            use_rslora: false
+per_device_eval_batch_size:
+    value: 1
+per_device_train_batch_size:
+    value: 1
+precompute_ref_batch_size:
+    value: null
+precompute_ref_log_probs:
+    value: true
+prediction_loss_only:
+    value: false
+problem_type:
+    value: null
+project:
+    value: huggingface
+push_to_hub:
+    value: false
+ref_model_mixup_alpha:
+    value: 0.6
+ref_model_sync_steps:
+    value: 512
+remove_unused_columns:
+    value: false
+report_to:
+    value:
+        - wandb
+        - tensorboard
+restore_callback_states_from_checkpoint:
+    value: false
+resume_from_checkpoint:
+    value: null
+return_dict:
+    value: true
+rms_norm_eps:
+    value: 1e-06
+rope_parameters:
+    value:
+        mrope_interleaved: true
+        mrope_section:
+            - 11
+            - 11
+            - 10
+        partial_rotary_factor: 0.25
+        rope_theta: 10000000
+        rope_type: default
+run_name:
+    value: joint_dpo_tier_10k_r16_b0.1_lr1e-06_lam1.0
+save_on_each_node:
+    value: false
+save_only_model:
+    value: false
+save_steps:
+    value: 78
+save_strategy:
+    value: steps
+save_total_limit:
+    value: null
+seed:
+    value: 42
+skip_memory_metrics:
+    value: true
+sync_ref_model:
+    value: false
+tf32:
+    value: null
+tie_word_embeddings:
+    value: false
+torch_compile:
+    value: false
+torch_compile_backend:
+    value: null
+torch_compile_mode:
+    value: null
+torch_empty_cache_steps:
+    value: null
+trackio_space_id:
+    value: trackio
+train_sampling_strategy:
+    value: random
+transformers_version:
+    value: 5.4.0
+truncation_mode:
+    value: keep_start
+use_cache:
+    value: false
+use_cpu:
+    value: false
+use_liger_kernel:
+    value: false
+use_weighting:
+    value: false
+vocab_size:
+    value: 248320
+warmup_ratio:
+    value: null
+warmup_steps:
+    value: 15
+weight_decay:
+    value: 0

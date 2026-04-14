@@ -1,0 +1,13 @@
+{
+  "error": "no valid predictions",
+  "n_total": 1098,
+  "n_tie": 0,
+  "n_unparseable": 1098,
+  "inference_time_s": 1860.8068449497223,
+  "samples_per_second": 0.5900666170591539,
+  "adapter_path": "/root/autodl-tmp/Thesis/results/checkpoints/joint_dpo_tier_10k_r16_b0.1_lr1e-06_lam1.0/final_adapter",
+  "eval_mode": "checkeval",
+  "model_id": "/root/autodl-tmp/Thesis/models/Qwen3.5-9B",
+  "parse_rate": 0.0,
+  "n_checklist_questions": 104
+}

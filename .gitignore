@@ -94,7 +94,6 @@ results/**/*_na_debug/
 !results/**/*_metrics.json
 
 # ────────────────────────── W&B / TB ─────────────────────────
-wandb/
 src/wandb/
 tb_logs/
 runs/

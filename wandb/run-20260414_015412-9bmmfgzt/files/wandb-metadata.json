@@ -1,0 +1,46 @@
+{
+  "os": "Linux-5.15.0-78-generic-x86_64-with-glibc2.35",
+  "python": "CPython 3.12.13",
+  "startedAt": "2026-04-13T17:54:12.235214Z",
+  "args": [
+    "--tier",
+    "tier_10k",
+    "--sft-lambda",
+    "1.0"
+  ],
+  "program": "/root/autodl-tmp/Thesis/src/run_joint_train.py",
+  "codePath": "src/run_joint_train.py",
+  "codePathLocal": "src/run_joint_train.py",
+  "git": {
+    "remote": "git@github.com:Alex-ZhouZiheng/CheckEval-guided-Fine-tuning.git",
+    "commit": "ad6beddf2442af96e5574895f374e37e63968297"
+  },
+  "email": "alexzhou1305757@gmail.com",
+  "root": "/root/autodl-tmp/Thesis",
+  "host": "autodl-container-85654ab736-6e27982f",
+  "executable": "/root/autodl-tmp/Thesis/.venvmerge/bin/python",
+  "cpu_count": 104,
+  "cpu_count_logical": 208,
+  "gpu": "NVIDIA GeForce RTX 5090",
+  "gpu_count": 1,
+  "disk": {
+    "/": {
+      "total": "32212254720",
+      "used": "4981460992"
+    }
+  },
+  "memory": {
+    "total": "810155479040"
+  },
+  "gpu_nvidia": [
+    {
+      "name": "NVIDIA GeForce RTX 5090",
+      "memoryTotal": "34190917632",
+      "cudaCores": 21760,
+      "architecture": "Blackwell",
+      "uuid": "GPU-64bda0f2-4741-6466-094b-410c8bb6a76b"
+    }
+  ],
+  "cudaVersion": "13.0",
+  "writerId": "o2uciehml92k9fsspdppfkgpo9auy64o"
+}
