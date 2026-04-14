@@ -33,9 +33,9 @@ from vllm.lora.request import LoRARequest
 
 import config as cfg
 from utils import (
-    aggregate_checklist_score,
     build_checkeval_prompt,
     build_vanilla_prompt,
+    compare_checklists_pairwise,
     compute_metrics,
     generate_batch,
     load_checklists,
@@ -97,7 +97,7 @@ def run_vanilla_eval(
     return results
 
 
-TIE_DELTA = 0.0
+TIE_DELTA = 0.05
 
 
 def run_checkeval_eval(
@@ -106,10 +106,15 @@ def run_checkeval_eval(
     checklists: dict[str, list[str]],
     definitions: dict[str, str],
     batch_size: int,
+    expected_n: int,
     tie_delta: float = TIE_DELTA,
     lora_request: LoRARequest | None = None,
 ) -> pd.DataFrame:
-    """Run pointwise CheckEval judge evaluation."""
+    """Run pointwise CheckEval judge evaluation with per-question pairwise aggregation.
+
+    Uses :func:`compare_checklists_pairwise` — N/A is a first-class label in the
+    margin table, so we no longer need to drop whole samples via a strict na_policy.
+    """
     messages_a: list[list[dict]] = []
     messages_b: list[list[dict]] = []
     for _, row in df.iterrows():
@@ -130,68 +135,44 @@ def run_checkeval_eval(
     raw_a = all_raw[:n]
     raw_b = all_raw[n:]
 
-    predicted_winners = []
-    scores_a_list = []
-    scores_b_list = []
-    n_yes_a_list = []
-    n_yes_b_list = []
-    n_answered_a_list = []
-    n_answered_b_list = []
-    score_gaps = []
-    parse_successes = []
+    predicted_winners: list[str | None] = []
+    margins: list[float | None] = []
+    n_aligned_list: list[int | None] = []
+    parse_successes: list[bool] = []
 
     for ra, rb in tqdm(zip(raw_a, raw_b), total=n, desc="CheckEval Parse"):
-        parsed_a = parse_checkeval_output(ra)
-        parsed_b = parse_checkeval_output(rb)
+        parsed_a = parse_checkeval_output(ra, expected_n=expected_n)
+        parsed_b = parse_checkeval_output(rb, expected_n=expected_n)
 
-        agg_a = aggregate_checklist_score(parsed_a)
-        agg_b = aggregate_checklist_score(parsed_b)
+        cmp = compare_checklists_pairwise(
+            parsed_a, parsed_b,
+            expected_n=expected_n,
+            tie_delta=tie_delta,
+        )
 
-        ok_a = agg_a is not None
-        ok_b = agg_b is not None
-        parse_successes.append(ok_a and ok_b)
-
-        score_a = agg_a["score"] if ok_a else None
-        score_b = agg_b["score"] if ok_b else None
-
-        scores_a_list.append(score_a)
-        scores_b_list.append(score_b)
-        n_yes_a_list.append(agg_a["n_yes"] if ok_a else None)
-        n_yes_b_list.append(agg_b["n_yes"] if ok_b else None)
-        n_answered_a_list.append(agg_a["n_answered"] if ok_a else None)
-        n_answered_b_list.append(agg_b["n_answered"] if ok_b else None)
-
-        winner = None
-        gap = None
-        if score_a is not None and score_b is not None:
-            gap = score_a - score_b
-            if abs(gap) <= tie_delta:
-                winner = "Tie"
-            elif gap > 0:
-                winner = "A"
-            else:
-                winner = "B"
-
-        predicted_winners.append(winner)
-        score_gaps.append(gap)
+        if cmp is None:
+            predicted_winners.append(None)
+            margins.append(None)
+            n_aligned_list.append(None)
+            parse_successes.append(False)
+        else:
+            predicted_winners.append(cmp["winner"])
+            margins.append(cmp["margin"])
+            n_aligned_list.append(cmp["n_aligned"])
+            parse_successes.append(True)
 
     results = df.copy()
     results["raw_output_a"] = raw_a
     results["raw_output_b"] = raw_b
-    results["score_a"] = scores_a_list
-    results["score_b"] = scores_b_list
-    results["n_yes_a"] = n_yes_a_list
-    results["n_yes_b"] = n_yes_b_list
-    results["n_answered_a"] = n_answered_a_list
-    results["n_answered_b"] = n_answered_b_list
-    results["score_gap"] = score_gaps
+    results["margin"] = margins
+    results["n_aligned"] = n_aligned_list
     results["predicted_winner"] = predicted_winners
     results["checklist_parsed"] = parse_successes
 
     n_parsed = sum(parse_successes)
     log.info(
-        "Parse rate: %s/%s (%.1f%%)",
-        n_parsed, n, 100 * n_parsed / n,
+        "Parse rate: %s/%s (%.1f%%)  [pairwise, tie_delta=%.3f]",
+        n_parsed, n, 100 * n_parsed / n, tie_delta,
     )
     return results
 
@@ -250,6 +231,12 @@ def main():
         "--gpu-memory-utilization",
         type=float,
         default=cfg.VLLM_ENGINE_KWARGS["gpu_memory_utilization"],
+    )
+    parser.add_argument(
+        "--tie-delta",
+        type=float,
+        default=TIE_DELTA,
+        help="Margin threshold for Tie in pairwise checklist scoring (|margin| <= tie_delta → Tie).",
     )
     args = parser.parse_args()
 
@@ -330,6 +317,8 @@ def main():
             checklists,
             definitions,
             args.batch_size,
+            expected_n=total_q,
+            tie_delta=args.tie_delta,
             lora_request=lora_request,
         )
         elapsed = time.time() - t0
@@ -339,10 +328,6 @@ def main():
             y_true=results["winner"].tolist(),
             y_pred=results["predicted_winner"].tolist(),
             domains=results["domain"].tolist(),
-            scores_a=results["score_a"].tolist(),
-            scores_b=results["score_b"].tolist(),
-            n_answered_a=results["n_answered_a"].tolist(),
-            n_answered_b=results["n_answered_b"].tolist(),
         )
         metrics["inference_time_s"] = elapsed
         metrics["samples_per_second"] = len(df) / elapsed
@@ -351,6 +336,8 @@ def main():
         metrics["model_id"] = args.base_model
         metrics["parse_rate"] = results["checklist_parsed"].mean()
         metrics["n_checklist_questions"] = total_q
+        metrics["tie_delta"] = args.tie_delta
+        metrics["scoring"] = "pairwise_per_question"
 
         time_now = date.today()
 
