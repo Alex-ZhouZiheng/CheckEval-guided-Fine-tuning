@@ -45,6 +45,8 @@ TIER_SIZES = {
 
 # ────────────────────────── model / inference ────────────────
 JUDGE_MODEL_ID = PROJECT_ROOT/"models"/"Qwen3.5-9B"
+# Smaller backbone for the checklist-generator model (two-model pipeline).
+GENERATOR_MODEL_ID = PROJECT_ROOT/"models"/"Qwen2.5-3B-Instruct"
 
 VLLM_ENGINE_KWARGS = {
     "tensor_parallel_size": 1,
@@ -101,6 +103,15 @@ DPO_BETA = 0.1
 # ────────────────────────── joint training (DPO + checklist SFT) ──
 CHECKLIST_SFT_DIR = DATA_DIR / "checklist_sft"
 CHECKLIST_SFT_DIR.mkdir(parents=True, exist_ok=True)
+
+# ────────────────────────── two-model pipeline ────────────────────
+# SFT data for the separate checklist-generator and checklist-conditioned judge.
+GENERATOR_SFT_DIR = DATA_DIR / "generator_sft"
+JUDGE_SFT_DIR = DATA_DIR / "judge_sft"
+# Generator inference output: one checklist per sample_id for each split.
+GENERATED_CHECKLIST_DIR = DATA_DIR / "generated_checklists"
+for _dir in [GENERATOR_SFT_DIR, JUDGE_SFT_DIR, GENERATED_CHECKLIST_DIR]:
+    _dir.mkdir(parents=True, exist_ok=True)
 
 JOINT_LAMBDA = 0.1          # weight of checklist SFT loss
 SFT_MAX_LENGTH = 2048       # max token length for SFT samples
