@@ -26,9 +26,12 @@ Usage:
     python prepare_generator_sft.py --tier debug_5k --dry-run --limit 3
 """
 
-import os as _os, sys as _sys
-_sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
 from __future__ import annotations
+
+import os as _os
+import sys as _sys
+_sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))  # src/
+_sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))                    # src/data_process/
 
 import argparse
 import json
@@ -40,6 +43,7 @@ from rich.console import Console
 from rich.table import Table
 
 import config as cfg
+from prepare_data_reasoning import make_sample_id
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s  %(message)s")
 log = logging.getLogger(__name__)
@@ -144,10 +148,22 @@ def load_pairwise(tier: str) -> pd.DataFrame:
     if not path.exists():
         raise FileNotFoundError(f"{path} not found. Run prepare_data.py first.")
     df = pd.read_parquet(path)
-    required = {"sample_id", "context", "response_a", "response_b", "domain"}
+    required = {"prompt_id", "context", "response_a", "response_b", "domain", "winner"}
     missing = required - set(df.columns)
     if missing:
         raise ValueError(f"Pairwise parquet missing columns: {sorted(missing)}")
+    # Compute sample_id with the same function as prepare_data_reasoning.py so
+    # the key aligns with the reasoning_questions parquet.
+    if "sample_id" not in df.columns:
+        df["sample_id"] = df.apply(
+            lambda r: make_sample_id(
+                prompt_id=r["prompt_id"],
+                response_a=str(r["response_a"]),
+                response_b=str(r["response_b"]),
+                winner=str(r["winner"]),
+            ),
+            axis=1,
+        )
     return df
 
 
