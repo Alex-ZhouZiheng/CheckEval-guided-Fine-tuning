@@ -6,8 +6,8 @@ The script:
 1. Loads an existing pairwise split (default: data/splits/dev_600.parquet).
 2. Loads the matching raw HelpSteer3 preference data.
 3. Aligns context / response_a / response_b / winner with
-   individual_preference[*].reasoning.
-4. Cleans reasoning into a single usable text field.
+   individual_preference[*].reasoning, feedback1, feedback2.
+4. Cleans reasoning / feedbacks into usable text fields.
 5. Emits both the original A/B order and a swapped B/A order.
 
 Output columns:
@@ -19,6 +19,8 @@ Output columns:
     winner
     gold_label
     reasoning_text
+    feedback_a_text
+    feedback_b_text
     swap_flag
 
 Usage:
@@ -64,6 +66,8 @@ OUTPUT_COLS = [
     "winner",
     "gold_label",
     "reasoning_text",
+    "feedback_a_text",
+    "feedback_b_text",
     "swap_flag",
 ]
 
@@ -160,6 +164,52 @@ def clean_reasoning_text(raw_reasoning: Any) -> str:
     return "\n\n".join(fragments).strip()
 
 
+def _extract_feedback_fragments(value: Any, feedback_key: str) -> list[str]:
+    """Collect strings under `feedback_key` (e.g. 'feedback1') across annotator entries.
+
+    The raw individual_preference column may be a JSON string or a list/tuple of
+    dicts — each dict carries 'reasoning', 'feedback1', 'feedback2'.
+    """
+    if value is None:
+        return []
+
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return []
+        if text[0] in "[{":
+            try:
+                parsed = json.loads(text)
+            except json.JSONDecodeError:
+                return []
+            return _extract_feedback_fragments(parsed, feedback_key)
+        return []
+
+    if isinstance(value, dict):
+        if feedback_key in value:
+            inner = value[feedback_key]
+            if isinstance(inner, str):
+                text = inner.strip()
+                return [_normalize_whitespace(text)] if text else []
+            return _extract_feedback_fragments(inner, feedback_key)
+        return []
+
+    if isinstance(value, (list, tuple)):
+        fragments: list[str] = []
+        for item in value:
+            fragments.extend(_extract_feedback_fragments(item, feedback_key))
+        return fragments
+
+    return []
+
+
+def clean_feedback_text(raw_individual_preference: Any, feedback_key: str) -> str:
+    fragments = _extract_feedback_fragments(raw_individual_preference, feedback_key)
+    fragments = [_standardize_response_refs(fragment) for fragment in fragments]
+    fragments = _dedupe_preserve_order([fragment for fragment in fragments if fragment])
+    return "\n\n".join(fragments).strip()
+
+
 def _swap_response_refs(text: str) -> str:
     if not text:
         return ""
@@ -238,7 +288,10 @@ def build_reasoning_lookup(raw_df: pd.DataFrame) -> pd.DataFrame:
     records: list[dict[str, Any]] = []
     for _, row in raw_df.iterrows():
         context_text = context_to_text(row["context"])
-        reasoning_text = clean_reasoning_text(row.get("individual_preference"))
+        indiv_pref = row.get("individual_preference")
+        reasoning_text = clean_reasoning_text(indiv_pref)
+        feedback_a_text = clean_feedback_text(indiv_pref, "feedback1")
+        feedback_b_text = clean_feedback_text(indiv_pref, "feedback2")
         records.append(
             {
                 "prompt_id": make_prompt_id(context_text),
@@ -248,6 +301,8 @@ def build_reasoning_lookup(raw_df: pd.DataFrame) -> pd.DataFrame:
                 "response_b": row["response2"],
                 "winner": preference_to_winner(int(row["overall_preference"])),
                 "reasoning_text": reasoning_text,
+                "feedback_a_text": feedback_a_text,
+                "feedback_b_text": feedback_b_text,
             }
         )
 
@@ -280,14 +335,16 @@ def load_pairwise_split(split_name: str | None, input_path: str | None) -> tuple
 
 
 def align_reasoning(split_df: pd.DataFrame, lookup_df: pd.DataFrame) -> pd.DataFrame:
+    aux_cols = ["reasoning_text", "feedback_a_text", "feedback_b_text"]
     merged = split_df.merge(
-        lookup_df[KEY_COLS + ["reasoning_text"]],
+        lookup_df[KEY_COLS + aux_cols],
         on=KEY_COLS,
         how="left",
         validate="one_to_one",
     )
 
-    merged["reasoning_text"] = merged["reasoning_text"].fillna("")
+    for col in aux_cols:
+        merged[col] = merged[col].fillna("")
     merged["sample_id"] = merged.apply(
         lambda row: make_sample_id(
             prompt_id=row["prompt_id"],
@@ -311,6 +368,11 @@ def make_original_and_swapped(df: pd.DataFrame) -> pd.DataFrame:
     swapped["winner"] = df["winner"].map(_swap_label)
     swapped["gold_label"] = swapped["winner"]
     swapped["reasoning_text"] = df["reasoning_text"].map(_swap_response_refs)
+    # feedback_a describes response_a; after swap it should describe the NEW
+    # response_a, which is the OLD response_b → swap the two feedback columns
+    # and also swap any internal "Response A"/"Response B" references.
+    swapped["feedback_a_text"] = df["feedback_b_text"].map(_swap_response_refs)
+    swapped["feedback_b_text"] = df["feedback_a_text"].map(_swap_response_refs)
     swapped["swap_flag"] = True
 
     combined = pd.concat([original, swapped], ignore_index=True)
@@ -321,6 +383,8 @@ def make_original_and_swapped(df: pd.DataFrame) -> pd.DataFrame:
 def print_summary(base_df: pd.DataFrame, final_df: pd.DataFrame, split_name: str, output_path: Path) -> None:
     matched = int(base_df["reasoning_text"].ne("").sum())
     missing = int(base_df["reasoning_text"].eq("").sum())
+    fa_matched = int(base_df["feedback_a_text"].ne("").sum())
+    fb_matched = int(base_df["feedback_b_text"].ne("").sum())
 
     table = Table(title=f"Reasoning Slice Summary — {split_name}")
     table.add_column("Metric", style="bold")
@@ -328,6 +392,8 @@ def print_summary(base_df: pd.DataFrame, final_df: pd.DataFrame, split_name: str
     table.add_row("Base rows", f"{len(base_df):,}")
     table.add_row("Rows with reasoning", f"{matched:,}")
     table.add_row("Rows missing reasoning", f"{missing:,}")
+    table.add_row("Rows with feedback_a", f"{fa_matched:,}")
+    table.add_row("Rows with feedback_b", f"{fb_matched:,}")
     table.add_row("Final rows (with swap)", f"{len(final_df):,}")
     table.add_row("Output", str(output_path))
     console.print(table)
