@@ -157,6 +157,11 @@ def main():
     df = pd.read_parquet(source_path)
     log.info("Loaded source dev split: %s rows from %s", len(df), source_path)
 
+    before = len(df)
+    df = df.drop_duplicates().reset_index(drop=True)
+    if len(df) < before:
+        log.warning("Dropped %d exact duplicate rows from source before sampling.", before - len(df))
+
     required_cols = {"domain", "winner"}
     missing = required_cols - set(df.columns)
     if missing:
