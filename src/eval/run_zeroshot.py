@@ -8,9 +8,10 @@ pairwise question: "Which response is better? Answer A or B."
 No training and no checklist: pure model capability.
 """
 
+from __future__ import annotations
 import os as _os, sys as _sys
 _sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
-from __future__ import annotations
+
 
 import argparse
 import logging
@@ -88,7 +89,7 @@ def main():
         default=None,
         help="Use a training subset instead (e.g. debug_5k)",
     )
-    parser.add_argument("--batch-size", type=int, default=1)
+    parser.add_argument("--batch-size", type=int, default=16)
     parser.add_argument("--max-samples", type=int, default=None)
     parser.add_argument("--model-id", type=str, default=cfg.JUDGE_MODEL_ID)
     parser.add_argument("--cache-dir", type=str, default=None)
