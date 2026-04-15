@@ -55,9 +55,28 @@ def _section(title: str) -> None:
 # Level-1: Exact duplicates
 # ──────────────────────────────────────────────────────────────────────────────
 
+def _hashable_cols(df: pd.DataFrame, cols: list[str] | None = None) -> list[str]:
+    """Return subset of cols (default: all) whose values are hashable by pandas."""
+    candidates = cols if cols is not None else list(df.columns)
+    hashable = []
+    for c in candidates:
+        if c not in df.columns:
+            continue
+        try:
+            df[c].duplicated()
+            hashable.append(c)
+        except TypeError:
+            log.warning("Column %r contains unhashable values (e.g. arrays) — skipped in duplicate check.", c)
+    return hashable
+
+
 def check_exact_duplicates(df: pd.DataFrame) -> pd.DataFrame:
-    """Return rows that are exact duplicates (keep='first' marks all copies after the first)."""
-    mask = df.duplicated(keep=False)
+    """Return rows that are exact duplicates across all hashable columns."""
+    cols = _hashable_cols(df)
+    if not cols:
+        log.warning("No hashable columns available for exact-duplicate check.")
+        return pd.DataFrame()
+    mask = df.duplicated(subset=cols, keep=False)
     return df[mask].copy()
 
 
@@ -66,8 +85,11 @@ def check_exact_duplicates(df: pd.DataFrame) -> pd.DataFrame:
 # ──────────────────────────────────────────────────────────────────────────────
 
 def check_key_duplicates(df: pd.DataFrame) -> pd.DataFrame:
-    """Return rows with duplicate KEY_COLS combinations."""
-    available = [c for c in KEY_COLS if c in df.columns]
+    """Return rows with duplicate KEY_COLS combinations (hashable ones only)."""
+    available = _hashable_cols(df, [c for c in KEY_COLS if c in df.columns])
+    if not available:
+        log.warning("No hashable KEY_COLS available for duplicate check.")
+        return pd.DataFrame()
     mask = df.duplicated(subset=available, keep=False)
     return df[mask].copy()
 
