@@ -4,10 +4,10 @@
     python prepare_data.py --dry-run          # just print stats, don't write
     python prepare_data.py --cache-dir /tmp   # custom HF cache
 """
+from __future__ import annotations
 
 import os as _os, sys as _sys
 _sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
-from __future__ import annotations
 
 import argparse
 import hashlib
