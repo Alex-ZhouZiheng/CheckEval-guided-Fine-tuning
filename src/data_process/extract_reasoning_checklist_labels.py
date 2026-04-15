@@ -34,10 +34,10 @@ Usage:
     python src/extract_reasoning_checklist_labels.py \
         --input data/dev_600_reasoning.parquet --dry-run --limit 5
 """
-
+from __future__ import annotations
 import os as _os, sys as _sys
 _sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
-from __future__ import annotations
+
 
 import argparse
 import json
@@ -65,6 +65,7 @@ DOMAINS = [
     "clarity_communication",
     "helpfulness_usefulness",
     "coding_communication_conditional",
+    'relevance_instruction_following'
 ]
 
 DOMAIN_DESCRIPTIONS = {
@@ -93,6 +94,17 @@ DOMAIN_DESCRIPTIONS = {
         "clear code comments/explanations. Use ONLY when the reasoning "
         "references code behavior, snippets, syntax, or implementation details."
     ),
+    "relevance_instruction_following":(
+        "This category evaluates the extent to which the model response directly "
+        "addresses the user's query and strictly adheres to all explicit and implicit instructions in the prompt."
+        "It assesses whether the content remains fully on-topic, fulfills specific requirements "
+        "(such as format, length, style, tone, scope, constraints, or target keywords), and avoids including any irrelevant, extraneous, or off-topic"
+    ),
+    "coherence_logic":(
+        "This category assesses the internal logical consistency, structural organization, and smooth progression of ideas within the response. "
+        "It examines whether the content flows logically from one idea to the next, maintains internal consistency without contradictions, "
+        "uses appropriate transitions, and presents arguments or information in a clear, well-structured, and easy-to-follow manner."
+    )
 }
 
 EXTRACTION_SYSTEM_PROMPT = (
