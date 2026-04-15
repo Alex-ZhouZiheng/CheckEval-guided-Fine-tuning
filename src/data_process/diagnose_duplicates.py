@@ -149,10 +149,28 @@ def report_exact(df: pd.DataFrame, exact_dups: pd.DataFrame) -> None:
     console.print(t)
 
 
+def _safe_nunique(series: pd.Series) -> int:
+    """nunique() that returns -1 for unhashable columns instead of crashing."""
+    try:
+        return series.nunique()
+    except TypeError:
+        return -1
+
+
 def report_key(df: pd.DataFrame, key_dups: pd.DataFrame) -> None:
     _section("Level 2 — KEY_COLS duplicates")
-    available = [c for c in KEY_COLS if c in df.columns]
-    console.print(f"Key columns used: {available}\n")
+    # Only report on the hashable KEY_COLS that were actually used
+    available = _hashable_cols(df, [c for c in KEY_COLS if c in df.columns])
+    skipped   = [c for c in KEY_COLS if c in df.columns and c not in available]
+    console.print(f"Key columns used: {available}")
+    if skipped:
+        console.print(f"[dim]Skipped (unhashable): {skipped}[/dim]")
+    console.print()
+
+    if len(available) < 2:
+        console.print("[yellow]Too few hashable KEY_COLS to produce meaningful duplicate groups — "
+                      "check skipped columns above.[/yellow]")
+        return
 
     if key_dups.empty:
         console.print("[green]No KEY_COLS duplicates found.[/green]")
@@ -178,12 +196,12 @@ def report_key(df: pd.DataFrame, key_dups: pd.DataFrame) -> None:
         # Show how the rows differ (if at all)
         extra_cols = [c for c in grp.columns if c not in available and c != "_key"]
         if extra_cols:
-            diff_cols = [c for c in extra_cols if grp[c].nunique() > 1]
+            diff_cols = [c for c in extra_cols if _safe_nunique(grp[c]) > 1]
             if diff_cols:
                 console.print(f"  Differs in: {diff_cols}")
                 for col in diff_cols[:3]:
                     vals = grp[col].tolist()
-                    console.print(f"    {col}: {[_truncate(v) for v in vals]}")
+                    console.print(f"    {col}: {[_truncate(str(v)) for v in vals]}")
             else:
                 console.print("  [dim]Rows are identical except for row index.[/dim]")
         shown += 1
