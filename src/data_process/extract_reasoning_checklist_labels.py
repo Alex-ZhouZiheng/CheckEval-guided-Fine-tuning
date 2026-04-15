@@ -209,6 +209,8 @@ def generate_vllm(
     gpu_memory_utilization: float | None,
     max_model_len: int | None,
     max_num_seqs: int | None,
+    quantization: str | None = None,
+    load_format: str | None = None,
 ) -> list[str]:
     from utils import generate_batch, load_judge_model
 
@@ -218,6 +220,8 @@ def generate_vllm(
         gpu_memory_utilization=gpu_memory_utilization,
         max_model_len=max_model_len,
         max_num_seqs=max_num_seqs,
+        quantization=quantization,
+        load_format=load_format,
     )
     return generate_batch(model, prompts, max_new_tokens=max_new_tokens)
 
@@ -328,6 +332,10 @@ def main() -> None:
     parser.add_argument("--gpu-memory-utilization", type=float, default=None)
     parser.add_argument("--max-model-len", type=int, default=None)
     parser.add_argument("--max-num-seqs", type=int, default=None)
+    parser.add_argument("--quantization", type=str, default=None,
+                        help="vLLM quantization backend, e.g. 'bitsandbytes'")
+    parser.add_argument("--load-format", type=str, default=None,
+                        help="vLLM load format, e.g. 'bitsandbytes' for on-the-fly int4")
     parser.add_argument("--openai-concurrency", type=int, default=4)
     args = parser.parse_args()
 
@@ -357,6 +365,8 @@ def main() -> None:
             gpu_memory_utilization=args.gpu_memory_utilization,
             max_model_len=args.max_model_len,
             max_num_seqs=args.max_num_seqs,
+            quantization=args.quantization,
+            load_format=args.load_format,
         )
     else:
         model_id = args.model_id or "gpt-4o-mini"

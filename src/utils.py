@@ -76,6 +76,8 @@ def load_judge_model(
     enable_lora: bool = False,
     max_lora_rank: int | None = None,
     max_loras: int | None = None,
+    quantization: str | None = None,
+    load_format: str | None = None,
 ) -> LLM:
     """Load the judge LLM through vLLM."""
     from vllm import LLM
@@ -93,6 +95,8 @@ def load_judge_model(
         "enable_prefix_caching": enable_prefix_caching,
         "max_num_batched_tokens": max_num_batched_tokens,
         "num_gpu_blocks_override": num_gpu_blocks_override,
+        "quantization": quantization,
+        "load_format": load_format,
     }
     engine_kwargs.update({k: v for k, v in overrides.items() if v is not None})
 
