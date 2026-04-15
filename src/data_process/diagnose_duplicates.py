@@ -56,17 +56,31 @@ def _section(title: str) -> None:
 # ──────────────────────────────────────────────────────────────────────────────
 
 def _hashable_cols(df: pd.DataFrame, cols: list[str] | None = None) -> list[str]:
-    """Return subset of cols (default: all) whose values are hashable by pandas."""
+    """Return subset of cols (default: all) whose values are hashable by pandas.
+
+    Checks the first non-null value of each column — avoids scanning the whole
+    column just to probe hashability.
+    """
+    import numpy as np
     candidates = cols if cols is not None else list(df.columns)
     hashable = []
     for c in candidates:
         if c not in df.columns:
             continue
+        # Fast path: numeric dtypes are always hashable
+        if pd.api.types.is_numeric_dtype(df[c]):
+            hashable.append(c)
+            continue
+        # For object columns, inspect the first non-null value
+        first = next((v for v in df[c] if v is not None and not (isinstance(v, float) and pd.isna(v))), None)
+        if first is None:
+            hashable.append(c)
+            continue
         try:
-            df[c].duplicated()
+            hash(first)
             hashable.append(c)
         except TypeError:
-            log.warning("Column %r contains unhashable values (e.g. arrays) — skipped in duplicate check.", c)
+            log.warning("Column %r contains unhashable values (e.g. arrays/lists) — skipped in duplicate check.", c)
     return hashable
 
 
