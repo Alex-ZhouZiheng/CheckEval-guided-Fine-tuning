@@ -1,7 +1,13 @@
 {
   "permissions": {
     "allow": [
-      "Bash(echo \"exit: $?\")"
+      "Bash(echo \"exit: $?\")",
+      "Bash(awk '{print $NF}')",
+      "Bash(mv prepare_data.py prepare_data_reasoning.py prepare_dpo_data.py prepare_generator_sft.py prepare_judge_sft.py prepare_checklist_sft.py extract_reasoning_checklist_labels.py download_data.py download_model.py make_dev600.py make_na_set.py diagnose_and_clean_bank.py export_train_csv.py view_parquet.py data/)",
+      "Bash(mv run_generator_sft.py run_judge_sft.py run_dpo_train.py run_joint_train.py merge_adapter.py train/)",
+      "Bash(mv run_generator_infer.py run_judge_eval.py run_checkeval_judge.py run_zeroshot.py run_pipeline_eval.py run_eval_finetuned.py run_ablation.py run_checklist_control.py eval/)",
+      "Bash(mv analyze_train_stats.py analyze_dpo_logits.py analyze_swap_test.py audit_checkeval.py compare_teacher_models.py compare_qwen_27b_vs_9b.py check.py analysis/)",
+      "Bash(python -c \"import pandas as pd; df = pd.read_parquet\\('data/splits/train_debug_5k.parquet'\\); print\\(df.columns.tolist\\(\\)\\); print\\(df.head\\(2\\).to_dict\\(\\)\\)\")"
     ]
   }
 }
