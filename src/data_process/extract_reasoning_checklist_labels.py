@@ -255,6 +255,68 @@ def _get_openai_client():
     return OpenAI(**kwargs)
 
 
+def generate_llama_cpp(
+    prompts: list[list[dict[str, str]]],
+    model_path: str,
+    max_new_tokens: int,
+    n_ctx: int = 8192,
+    n_gpu_layers: int = -1,
+    max_concurrent: int = 1,
+) -> list[str]:
+    """Generate completions using llama-cpp-python (supports GGUF models).
+
+    Parameters
+    ----------
+    model_path:
+        Absolute path to a .gguf model file.
+    n_ctx:
+        Context window size (tokens).
+    n_gpu_layers:
+        Number of layers to offload to GPU; -1 means all layers.
+    max_concurrent:
+        Llama.cpp is not thread-safe for a single model instance, so this
+        defaults to 1. Increase only if you load separate instances per thread.
+    """
+    try:
+        from llama_cpp import Llama
+    except ImportError as exc:
+        raise ImportError(
+            "llama-cpp backend requires `pip install llama-cpp-python`."
+        ) from exc
+
+    log.info("Loading GGUF model via llama.cpp: %s", model_path)
+    llm = Llama(
+        model_path=model_path,
+        n_ctx=n_ctx,
+        n_gpu_layers=n_gpu_layers,
+        verbose=False,
+    )
+    log.info("  Model loaded.")
+
+    results: list[str] = [""] * len(prompts)
+
+    def _call(idx: int, messages: list[dict[str, str]]) -> tuple[int, str]:
+        try:
+            resp = llm.create_chat_completion(
+                messages=messages,
+                temperature=0.0,
+                max_tokens=max_new_tokens,
+            )
+            text = (resp["choices"][0]["message"]["content"] or "").strip()
+            return idx, text
+        except Exception as exc:  # noqa: BLE001
+            log.warning("llama.cpp call failed (idx=%d): %s", idx, exc)
+            return idx, ""
+
+    with ThreadPoolExecutor(max_workers=max_concurrent) as pool:
+        futs = {pool.submit(_call, i, p): i for i, p in enumerate(prompts)}
+        for fut in tqdm(as_completed(futs), total=len(prompts), desc="llama.cpp extract"):
+            idx, text = fut.result()
+            results[idx] = text
+
+    return results
+
+
 def generate_openai(
     prompts: list[list[dict[str, str]]],
     model_id: str,
@@ -328,7 +390,7 @@ def main() -> None:
                         help="Path to *_reasoning.parquet from prepare_data_reasoning.py")
     parser.add_argument("--output", type=str, default=None,
                         help="Output parquet path (default: <input>_questions.parquet)")
-    parser.add_argument("--backend", choices=["vllm", "openai"], default="vllm")
+    parser.add_argument("--backend", choices=["vllm", "openai", "llama-cpp"], default="vllm")
     parser.add_argument("--model-id", type=str, default=None,
                         help="Override model id (default: cfg.JUDGE_MODEL_ID for vllm)")
     parser.add_argument("--max-new-tokens", type=int, default=768)
@@ -349,6 +411,13 @@ def main() -> None:
     parser.add_argument("--load-format", type=str, default=None,
                         help="vLLM load format, e.g. 'bitsandbytes' for on-the-fly int4")
     parser.add_argument("--openai-concurrency", type=int, default=4)
+    # llama.cpp-specific args
+    parser.add_argument("--llama-cpp-model-path", type=str, default=None,
+                        help="Path to a .gguf model file (required for --backend llama-cpp)")
+    parser.add_argument("--llama-cpp-n-ctx", type=int, default=8192,
+                        help="Context window size for llama.cpp (default: 8192)")
+    parser.add_argument("--llama-cpp-n-gpu-layers", type=int, default=-1,
+                        help="GPU layers to offload; -1 = all (default: -1)")
     args = parser.parse_args()
 
     input_path = Path(args.input)
@@ -379,6 +448,16 @@ def main() -> None:
             max_num_seqs=args.max_num_seqs,
             quantization=args.quantization,
             load_format=args.load_format,
+        )
+    elif args.backend == "llama-cpp":
+        if not args.llama_cpp_model_path:
+            parser.error("--llama-cpp-model-path is required when --backend llama-cpp")
+        raw_outputs = generate_llama_cpp(
+            prompts,
+            model_path=args.llama_cpp_model_path,
+            max_new_tokens=args.max_new_tokens,
+            n_ctx=args.llama_cpp_n_ctx,
+            n_gpu_layers=args.llama_cpp_n_gpu_layers,
         )
     else:
         model_id = args.model_id or "gpt-4o-mini"
