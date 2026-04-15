@@ -96,6 +96,13 @@ def build_pairwise(df: pd.DataFrame) -> pd.DataFrame:
         )
 
     out = pd.DataFrame(records)
+    before = len(out)
+    out = out.drop_duplicates(
+        subset=["prompt_id", "response_a", "response_b", "winner"]
+    ).reset_index(drop=True)
+    dropped = before - len(out)
+    if dropped:
+        log.info(f"  Dropped {dropped:,} annotator-duplicate pairs")
     log.info(f"  Pairwise pairs (including ties): {len(out):,}")
     return out
 
