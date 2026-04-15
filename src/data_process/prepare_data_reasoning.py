@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+from __future__ import annotations
 """
 Prepare a reasoning-augmented pairwise slice for strict A/B vs B/A comparisons.
 
@@ -28,7 +28,7 @@ Usage:
     python src/prepare_data_reasoning.py --dry-run
 """
 
-from __future__ import annotations
+
 
 import os as _os
 import sys as _sys
