@@ -450,7 +450,7 @@ def main() -> None:
     base_df = align_reasoning(split_df, lookup_df)
     final_df = make_original_and_swapped(base_df)
 
-    output_path = Path(args.output_path) if args.output_path else (cfg.DATA_DIR / f"{split_name}_reasoning.parquet")
+    output_path = Path(args.output_path) if args.output_path else (cfg.WITH_REASON_DIR / f"{split_name}_reasoning.parquet")
     print_summary(base_df, final_df, split_name=split_name, output_path=output_path)
 
     if args.dry_run:
