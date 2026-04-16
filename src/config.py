@@ -137,3 +137,52 @@ DEEPSPEED_CONFIG = {
 
 # Logging
 WANDB_PROJECT = "Thesis"
+
+# ────────────────────────── dynamic checklist domains ────────────────────────────
+
+DOMAINS = [
+    "correctness_completeness",
+    "clarity_communication",
+    "helpfulness_usefulness",
+    "coding_communication_conditional",
+    'relevance_instruction_following'
+]
+
+DOMAIN_DESCRIPTIONS = {
+    "correctness_completeness": (
+        "Factual accuracy, logical consistency, coverage of the user's request, "
+        "and faithful task execution. Use when the reasoning talks about errors, "
+        "missing information, wrong facts, incomplete answers, or whether the "
+        "response actually does what was asked."
+    ),
+    "clarity_communication": (
+        "How clearly the response is written: structure, readability, tone, "
+        "conciseness, formatting, absence of confusing or ambiguous phrasing. "
+        "Use when the reasoning talks about wording, explanation quality, "
+        "organization, verbosity, or style."
+    ),
+    "helpfulness_usefulness": (
+        "Whether the response is genuinely useful and actionable for the user, "
+        "including relevance, depth, practical value, safety of advice, and "
+        "whether it anticipates the user's real need. Use when the reasoning "
+        "discusses how useful, relevant, or on-point the answer is."
+    ),
+    "coding_communication_conditional": (
+        "Code-specific quality criteria that only apply when the response "
+        "contains code: syntax correctness, runnable examples, consistent "
+        "variable/import usage, avoidance of placeholder/pseudo-code, and "
+        "clear code comments/explanations. Use ONLY when the reasoning "
+        "references code behavior, snippets, syntax, or implementation details."
+    ),
+    "relevance_instruction_following":(
+        "This category evaluates the extent to which the model response directly "
+        "addresses the user's query and strictly adheres to all explicit and implicit instructions in the prompt."
+        "It assesses whether the content remains fully on-topic, fulfills specific requirements "
+        "(such as format, length, style, tone, scope, constraints, or target keywords), and avoids including any irrelevant, extraneous, or off-topic"
+    ),
+    "coherence_logic":(
+        "This category assesses the internal logical consistency, structural organization, and smooth progression of ideas within the response. "
+        "It examines whether the content flows logically from one idea to the next, maintains internal consistency without contradictions, "
+        "uses appropriate transitions, and presents arguments or information in a clear, well-structured, and easy-to-follow manner."
+    )
+}

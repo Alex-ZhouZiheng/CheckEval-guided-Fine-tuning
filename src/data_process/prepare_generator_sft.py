@@ -50,13 +50,9 @@ log = logging.getLogger(__name__)
 console = Console()
 
 
-DOMAIN_ORDER = [
-    "correctness_completeness",
-    "clarity_communication",
-    "helpfulness_usefulness",
-    "coding_communication_conditional",
-]
 
+DOMAINS = cfg.DOMAINS
+DOMAIN_DESCRIPTIONS = cfg.DOMAIN_DESCRIPTIONS
 
 GENERATOR_SYSTEM_PROMPT = (
     "You are a checklist writer for LLM response evaluation. Given a user "
@@ -71,10 +67,7 @@ GENERATOR_USER_TEMPLATE = """\
 Produce a Yes/No evaluation checklist for the following pairwise comparison.
 
 Group questions under these section headers (skip a section if it does not apply):
-  ### correctness_completeness
-  ### clarity_communication
-  ### helpfulness_usefulness
-  ### coding_communication_conditional  (only when the task involves code)
+{domain}
 
 Output format:
 ### <domain>
@@ -101,6 +94,11 @@ Rules:
 
 # Checklist"""
 
+def _domain_block() -> str:
+    lines = []
+    for name in DOMAINS:
+        lines.append(f"- {name}: {DOMAIN_DESCRIPTIONS[name]}")
+    return "\n".join(lines)
 
 def build_generator_messages(row: dict | pd.Series) -> list[dict[str, str]]:
     """Chat-template messages consumed by the generator model at both train and eval."""
@@ -108,6 +106,7 @@ def build_generator_messages(row: dict | pd.Series) -> list[dict[str, str]]:
         context=row["context"],
         response_a=row["response_a"],
         response_b=row["response_b"],
+        domain=_domain_block(),
     )
     return [
         {"role": "system", "content": GENERATOR_SYSTEM_PROMPT},
@@ -118,7 +117,7 @@ def build_generator_messages(row: dict | pd.Series) -> list[dict[str, str]]:
 def format_checklist_target(questions_by_domain: dict[str, list[str]]) -> str:
     """Render aggregated questions as the canonical `### <domain>\\n- ...` string."""
     sections: list[str] = []
-    for domain in DOMAIN_ORDER:
+    for domain in DOMAINS:
         qs = questions_by_domain.get(domain, [])
         if not qs:
             continue
