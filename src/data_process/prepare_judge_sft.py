@@ -21,10 +21,10 @@ Usage:
         --generated data/generated_checklists/tier_10k.parquet
     python prepare_judge_sft.py --tier debug_5k --dry-run --limit 3
 """
-
+from __future__ import annotations
 import os as _os, sys as _sys
 _sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
-from __future__ import annotations
+
 
 import argparse
 import json

@@ -14,10 +14,10 @@ Usage:
     python prepare_dpo_data.py --chat-template           # chat message list format
     python prepare_dpo_data.py --dry-run                 # print stats only
 """
-
+from __future__ import annotations
 import os as _os, sys as _sys
 _sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
-from __future__ import annotations
+
 
 import argparse
 import json

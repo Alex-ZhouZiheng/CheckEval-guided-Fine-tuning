@@ -34,10 +34,9 @@ Usage:
     python prepare_checklist_sft.py --tier tier_10k --mode teacher \
         --output-dir ../data/checklist_sft_v2
 """
-
+from __future__ import annotations
 import os as _os, sys as _sys
 _sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
-from __future__ import annotations
 
 import argparse
 import json

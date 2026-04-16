@@ -17,10 +17,10 @@ Usage:
         --generated data/generated_checklists/dev_600.parquet \\
         --eval-split dev --subset dev_600
 """
-
+from __future__ import annotations
 import os as _os, sys as _sys
 _sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
-from __future__ import annotations
+
 
 import argparse
 import json
@@ -34,7 +34,7 @@ from tqdm import tqdm
 from vllm.lora.request import LoRARequest
 
 import config as cfg
-from prepare_judge_sft import build_pointwise_prompt
+from data_process.prepare_judge_sft import build_pointwise_prompt
 from run_generator_infer import parse_generated_checklist
 from utils import (
     compare_checklists_pairwise,
