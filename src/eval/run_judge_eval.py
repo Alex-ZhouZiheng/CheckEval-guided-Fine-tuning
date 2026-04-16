@@ -40,7 +40,6 @@ from utils import (
     compare_checklists_pairwise,
     compute_metrics,
     generate_batch,
-    load_eval_data,
     load_judge_model,
     parse_checkeval_output,
     save_results,
@@ -51,6 +50,30 @@ log = logging.getLogger(__name__)
 
 
 TIE_DELTA = 0.0
+
+
+def load_eval_data(eval_split: str = "dev", subset: str | None = None) -> pd.DataFrame:
+    """Load reasoning-augmented eval data from ``data/with_reason/``.
+
+    The judge eval needs ``sample_id`` to look up generated checklists, so it
+    must read the same reasoning parquet that ``run_generator_infer.py``
+    consumed. We also filter to ``swap_flag == False`` to match the generator
+    (one row per sample_id).
+    """
+    split_tag = subset if (subset and subset != "full") else eval_split
+    path = cfg.WITH_REASON_DIR / f"{split_tag}_reasoning.parquet"
+
+    if not path.exists():
+        raise FileNotFoundError(
+            f"{path} not found. Run prepare_data_reasoning.py first, e.g. "
+            f"`python src/data_process/prepare_data_reasoning.py --split {split_tag}`."
+        )
+
+    df = pd.read_parquet(path)
+    if "swap_flag" in df.columns:
+        df = df[df["swap_flag"] == False].reset_index(drop=True)  # noqa: E712
+    log.info("Loaded %s pairs from %s", f"{len(df):,}", path.name)
+    return df
 
 
 def load_generated_map(path: Path) -> dict[str, dict[str, list[str]]]:
