@@ -45,8 +45,7 @@ def main() -> None:
     parser.add_argument("--generator-base", type=str,
                         default=str(cfg.GENERATOR_MODEL_ID))
     parser.add_argument("--judge-base", type=str, default=str(cfg.JUDGE_MODEL_ID))
-    parser.add_argument("--eval-split", type=str, default="dev",
-                        choices=["train", "dev", "test"])
+    parser.add_argument("--eval-split", type=str, default="dev")
     parser.add_argument("--subset", type=str, default=None)
     parser.add_argument("--batch-size", type=int, default=16)
     parser.add_argument("--max-samples", type=int, default=None)

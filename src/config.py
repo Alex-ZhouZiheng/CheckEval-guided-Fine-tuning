@@ -46,7 +46,7 @@ TIER_SIZES = {
 # ────────────────────────── model / inference ────────────────
 JUDGE_MODEL_ID = PROJECT_ROOT/"models"/"Qwen3.5-9B"
 # Smaller backbone for the checklist-generator model (two-model pipeline).
-GENERATOR_MODEL_ID = PROJECT_ROOT/"models"/"Qwen2.5-3B-Instruct"
+GENERATOR_MODEL_ID = PROJECT_ROOT/"models"/"Qwen3.5-4B"
 
 VLLM_ENGINE_KWARGS = {
     "tensor_parallel_size": 1,

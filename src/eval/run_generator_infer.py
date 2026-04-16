@@ -32,7 +32,6 @@ from vllm.lora.request import LoRARequest
 
 import config as cfg
 from prepare_generator_sft import (
-    DOMAIN_ORDER,
     build_generator_messages,
     format_checklist_target,
 )
@@ -44,8 +43,7 @@ log = logging.getLogger(__name__)
 
 _SECTION_RE = re.compile(r"^\s*#{2,}\s*(\S+)\s*$")
 _BULLET_RE = re.compile(r"^\s*(?:[-*•]|\d+[.)])\s+(.*\S)\s*$")
-_VALID_DOMAINS = set(DOMAIN_ORDER)
-
+_VALID_DOMAINS = cfg.DOMAINS
 
 def parse_generated_checklist(raw: str) -> dict[str, list[str]]:
     """Parse `### <domain>\\n- ...` blocks into {domain: [questions]}."""
@@ -90,8 +88,7 @@ def main() -> None:
                              "Omit to run the base model (pre-FT baseline).")
     parser.add_argument("--base-model", type=str,
                         default=str(cfg.GENERATOR_MODEL_ID))
-    parser.add_argument("--split", type=str, default="dev",
-                        choices=["train", "dev", "test"])
+    parser.add_argument("--split", type=str, default="dev")
     parser.add_argument("--subset", type=str, default=None,
                         help="Training tier (e.g. tier_10k). Overrides --split.")
     parser.add_argument("--output-path", type=str, default=None,
