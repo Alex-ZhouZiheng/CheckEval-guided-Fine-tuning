@@ -22,10 +22,11 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = PROJECT_ROOT / "data"
 RAW_DIR = DATA_DIR / "raw"
 SPLITS_DIR = DATA_DIR / "splits"
+WITH_REASON_DIR = DATA_DIR / "with_reason"
 RESULTS_DIR = PROJECT_ROOT / "results"
 CHECKLISTS_DIR = PROJECT_ROOT/ "checklists" / "filtered"
 
-for _dir in [DATA_DIR, RAW_DIR, SPLITS_DIR, RESULTS_DIR]:
+for _dir in [DATA_DIR, RAW_DIR, SPLITS_DIR, WITH_REASON_DIR, RESULTS_DIR]:
     _dir.mkdir(parents=True, exist_ok=True)
 
 # ────────────────────────── dataset ──────────────────────────

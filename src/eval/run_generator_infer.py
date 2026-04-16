@@ -35,7 +35,7 @@ from prepare_generator_sft import (
     build_generator_messages,
     format_checklist_target,
 )
-from utils import generate_batch, load_eval_data, load_judge_model
+from utils import generate_batch, load_judge_model
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s  %(message)s")
 log = logging.getLogger(__name__)
@@ -79,6 +79,33 @@ def parse_generated_checklist(raw: str) -> dict[str, list[str]]:
             dedup.append(q)
         per_domain[dom] = dedup
     return per_domain
+
+
+def load_eval_data(eval_split: str = "dev", subset: str | None = None) -> pd.DataFrame:
+    """Load reasoning-augmented eval data from data/with_reason/.
+
+    Expected filename: ``{split_tag}_reasoning.parquet`` — produced by
+    ``src/data_process/prepare_data_reasoning.py``. This file carries the
+    ``sample_id`` column required by the generator → judge pipeline.
+
+    The reasoning parquet contains both original and swapped A/B orderings
+    (``swap_flag == False`` / ``True``). For checklist generation we only
+    want one row per sample, so we filter to ``swap_flag == False``.
+    """
+    split_tag = subset if (subset and subset != "full") else eval_split
+    path = cfg.WITH_REASON_DIR / f"{split_tag}_reasoning.parquet"
+
+    if not path.exists():
+        raise FileNotFoundError(
+            f"{path} not found. Run prepare_data_reasoning.py first, e.g. "
+            f"`python src/data_process/prepare_data_reasoning.py --split {split_tag}`."
+        )
+
+    df = pd.read_parquet(path)
+    if "swap_flag" in df.columns:
+        df = df[df["swap_flag"] == False].reset_index(drop=True)  # noqa: E712
+    log.info("Loaded %s pairs from %s", f"{len(df):,}", path.name)
+    return df
 
 
 def main() -> None:
