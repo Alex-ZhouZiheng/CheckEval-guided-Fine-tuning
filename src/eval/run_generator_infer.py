@@ -85,8 +85,9 @@ def parse_generated_checklist(raw: str) -> dict[str, list[str]]:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--adapter-path", type=str, required=True,
-                        help="Path to the generator's final_adapter directory")
+    parser.add_argument("--adapter-path", type=str, default=None,
+                        help="Path to the generator's final_adapter directory. "
+                             "Omit to run the base model (pre-FT baseline).")
     parser.add_argument("--base-model", type=str,
                         default=str(cfg.GENERATOR_MODEL_ID))
     parser.add_argument("--split", type=str, default="dev",
@@ -106,37 +107,49 @@ def main() -> None:
                         default=cfg.VLLM_ENGINE_KWARGS["gpu_memory_utilization"])
     args = parser.parse_args()
 
-    adapter_path = Path(args.adapter_path).resolve()
-    with (adapter_path / "adapter_config.json").open("r", encoding="utf-8") as f:
-        adapter_cfg = json.load(f)
-    lora_rank = int(adapter_cfg.get("r", 16))
+    if args.adapter_path:
+        adapter_path = Path(args.adapter_path).resolve()
+        with (adapter_path / "adapter_config.json").open("r", encoding="utf-8") as f:
+            adapter_cfg = json.load(f)
+        lora_rank = int(adapter_cfg.get("r", 16))
+    else:
+        adapter_path = None
+        lora_rank = 16
+        log.info("No adapter provided — running base %s as pre-FT baseline",
+                 args.base_model)
 
     df = load_eval_data(args.split, args.subset)
     if args.max_samples:
         df = df.head(args.max_samples).reset_index(drop=True)
 
     split_tag = args.subset or args.split
+    default_fname = f"{split_tag}.parquet" if adapter_path else f"{split_tag}_base.parquet"
     output_path = (
         Path(args.output_path)
         if args.output_path
-        else cfg.GENERATED_CHECKLIST_DIR / f"{split_tag}.parquet"
+        else cfg.GENERATED_CHECKLIST_DIR / default_fname
     )
 
-    log.info("Loading base %s with enable_lora=True (rank=%d)",
-             args.base_model, lora_rank)
+    enable_lora = adapter_path is not None
+    log.info("Loading %s (enable_lora=%s, rank=%d)",
+             args.base_model, enable_lora, lora_rank)
     model = load_judge_model(
         model_id=args.base_model,
         tensor_parallel_size=args.tensor_parallel_size,
         max_model_len=args.max_model_len,
         gpu_memory_utilization=args.gpu_memory_utilization,
-        enable_lora=True,
-        max_lora_rank=max(lora_rank, 16),
-        max_loras=1,
+        enable_lora=enable_lora,
+        max_lora_rank=max(lora_rank, 16) if enable_lora else None,
+        max_loras=1 if enable_lora else None,
     )
-    lora_request = LoRARequest(
-        lora_name=adapter_path.name,
-        lora_int_id=1,
-        lora_path=str(adapter_path),
+    lora_request = (
+        LoRARequest(
+            lora_name=adapter_path.name,
+            lora_int_id=1,
+            lora_path=str(adapter_path),
+        )
+        if enable_lora
+        else None
     )
 
     all_messages = [build_generator_messages(r) for _, r in df.iterrows()]
@@ -179,7 +192,7 @@ def main() -> None:
     out_df.to_parquet(output_path, index=False)
 
     meta = {
-        "adapter_path": str(adapter_path),
+        "adapter_path": str(adapter_path) if adapter_path else "base",
         "base_model": args.base_model,
         "split": split_tag,
         "n_samples": len(df),

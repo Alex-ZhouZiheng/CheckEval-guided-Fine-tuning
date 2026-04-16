@@ -10,10 +10,14 @@ Each step is a separate subprocess — we avoid loading two models into the same
 vLLM process which would fight for GPU memory and use different bases.
 
 Usage:
+    # Post-FT (both adapters)
     python run_pipeline_eval.py \\
         --generator-adapter results/checkpoints/generator_sft_.../final_adapter \\
         --judge-adapter     results/checkpoints/judge_sft_.../final_adapter \\
         --eval-split dev --subset dev_600
+
+    # Pre-FT baseline (no adapters — base models end-to-end)
+    python run_pipeline_eval.py --eval-split dev --subset dev_600
 """
 
 from __future__ import annotations
@@ -34,8 +38,10 @@ log = logging.getLogger(__name__)
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--generator-adapter", type=str, required=True)
-    parser.add_argument("--judge-adapter", type=str, required=True)
+    parser.add_argument("--generator-adapter", type=str, default=None,
+                        help="Generator final_adapter. Omit for pre-FT baseline.")
+    parser.add_argument("--judge-adapter", type=str, default=None,
+                        help="Judge final_adapter. Omit for pre-FT baseline.")
     parser.add_argument("--generator-base", type=str,
                         default=str(cfg.GENERATOR_MODEL_ID))
     parser.add_argument("--judge-base", type=str, default=str(cfg.JUDGE_MODEL_ID))
@@ -50,7 +56,13 @@ def main() -> None:
     args = parser.parse_args()
 
     split_tag = args.subset or args.eval_split
-    gen_out = cfg.GENERATED_CHECKLIST_DIR / f"{split_tag}.parquet"
+    gen_fname = f"{split_tag}.parquet" if args.generator_adapter else f"{split_tag}_base.parquet"
+    gen_out = cfg.GENERATED_CHECKLIST_DIR / gen_fname
+
+    if not args.generator_adapter:
+        log.info("No generator adapter — will run base model for Step 1")
+    if not args.judge_adapter:
+        log.info("No judge adapter — will run base model for Step 2")
 
     py = sys.executable
     src = Path(__file__).parent
@@ -61,12 +73,13 @@ def main() -> None:
     else:
         cmd = [
             py, str(src / "run_generator_infer.py"),
-            "--adapter-path", args.generator_adapter,
             "--base-model", args.generator_base,
             "--split", args.eval_split,
             "--batch-size", str(args.batch_size),
             "--output-path", str(gen_out),
         ]
+        if args.generator_adapter:
+            cmd += ["--adapter-path", args.generator_adapter]
         if args.subset:
             cmd += ["--subset", args.subset]
         if args.max_samples:
@@ -77,13 +90,14 @@ def main() -> None:
     # Step 2: judge eval.
     cmd = [
         py, str(src / "run_judge_eval.py"),
-        "--judge-adapter", args.judge_adapter,
         "--base-model", args.judge_base,
         "--generated", str(gen_out),
         "--eval-split", args.eval_split,
         "--batch-size", str(args.batch_size),
         "--tie-delta", str(args.tie_delta),
     ]
+    if args.judge_adapter:
+        cmd += ["--judge-adapter", args.judge_adapter]
     if args.subset:
         cmd += ["--subset", args.subset]
     if args.max_samples:

@@ -71,8 +71,9 @@ def load_generated_map(path: Path) -> dict[str, dict[str, list[str]]]:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--judge-adapter", type=str, required=True,
-                        help="Path to judge final_adapter directory")
+    parser.add_argument("--judge-adapter", type=str, default=None,
+                        help="Path to judge final_adapter directory. "
+                             "Omit to run the base model (pre-FT baseline).")
     parser.add_argument("--base-model", type=str, default=str(cfg.JUDGE_MODEL_ID))
     parser.add_argument("--generated", type=str, required=True,
                         help="data/generated_checklists/<split>.parquet")
@@ -91,9 +92,15 @@ def main() -> None:
                         default=cfg.VLLM_ENGINE_KWARGS["gpu_memory_utilization"])
     args = parser.parse_args()
 
-    adapter_path = Path(args.judge_adapter).resolve()
-    with (adapter_path / "adapter_config.json").open("r", encoding="utf-8") as f:
-        lora_rank = int(json.load(f).get("r", 16))
+    if args.judge_adapter:
+        adapter_path = Path(args.judge_adapter).resolve()
+        with (adapter_path / "adapter_config.json").open("r", encoding="utf-8") as f:
+            lora_rank = int(json.load(f).get("r", 16))
+    else:
+        adapter_path = None
+        lora_rank = 16
+        log.info("No judge adapter — running base %s as pre-FT baseline",
+                 args.base_model)
 
     df = load_eval_data(args.eval_split, args.subset)
     if args.max_samples:
@@ -128,20 +135,25 @@ def main() -> None:
     if not keep_idx:
         raise SystemExit("No evaluable samples — regenerate checklists first.")
 
-    # vLLM with judge LoRA.
+    # vLLM with optional judge LoRA.
+    enable_lora = adapter_path is not None
     model = load_judge_model(
         model_id=args.base_model,
         tensor_parallel_size=args.tensor_parallel_size,
         max_model_len=args.max_model_len,
         gpu_memory_utilization=args.gpu_memory_utilization,
-        enable_lora=True,
-        max_lora_rank=max(lora_rank, 16),
-        max_loras=1,
+        enable_lora=enable_lora,
+        max_lora_rank=max(lora_rank, 16) if enable_lora else None,
+        max_loras=1 if enable_lora else None,
     )
-    lora_request = LoRARequest(
-        lora_name=adapter_path.name,
-        lora_int_id=1,
-        lora_path=str(adapter_path),
+    lora_request = (
+        LoRARequest(
+            lora_name=adapter_path.name,
+            lora_int_id=1,
+            lora_path=str(adapter_path),
+        )
+        if enable_lora
+        else None
     )
 
     t0 = time.time()
@@ -203,12 +215,13 @@ def main() -> None:
     metrics["coverage_rate"] = n_eval / len(df) if len(df) else 0.0
     metrics["parse_rate"] = float(df_eval["checklist_parsed"].mean())
     metrics["tie_delta"] = args.tie_delta
-    metrics["judge_adapter"] = str(adapter_path)
+    metrics["judge_adapter"] = str(adapter_path) if adapter_path else "base"
     metrics["base_model"] = args.base_model
     metrics["generated_source"] = str(Path(args.generated))
 
     split_tag = args.subset or args.eval_split
-    exp_name = f"pipeline_judge_{adapter_path.name}_{split_tag}_{date.today()}"
+    adapter_tag = adapter_path.name if adapter_path else "base"
+    exp_name = f"pipeline_judge_{adapter_tag}_{split_tag}_{date.today()}"
     save_results(df_eval, metrics, exp_name)
     log.info("Done.")
 
