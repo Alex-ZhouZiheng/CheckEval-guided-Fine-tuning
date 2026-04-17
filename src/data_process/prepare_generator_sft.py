@@ -270,7 +270,7 @@ def main() -> None:
     questions_path = (
         Path(args.questions_path)
         if args.questions_path
-        else cfg.DATA_DIR / f"train_{args.tier}_reasoning_questions.parquet"
+        else cfg.WITH_REASON_DIR / f"train_{args.tier}_reasoning_questions.parquet"
     )
     output_path = (
         Path(args.output_path)
