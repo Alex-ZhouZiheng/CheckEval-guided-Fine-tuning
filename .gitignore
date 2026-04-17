@@ -116,3 +116,4 @@ checklistbak/
 /referencePapers/
 /_*.py
 .claude/
+wandb/
