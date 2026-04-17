@@ -147,7 +147,8 @@ def main() -> None:
         df = df.head(args.max_samples).reset_index(drop=True)
 
     split_tag = args.subset or args.split
-    default_fname = f"{split_tag}_{adapter_path}.parquet" if adapter_path else f"{split_tag}_base_{str(args.base_model)}.parquet"
+    model_tag = adapter_path.name if adapter_path else Path(args.base_model).name
+    default_fname = f"{split_tag}_{model_tag}.parquet" if adapter_path else f"{split_tag}_base_{model_tag}.parquet"
     output_path = (
         Path(args.output_path)
         if args.output_path
