@@ -50,6 +50,34 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s  %(message)s")
 log = logging.getLogger(__name__)
 
 
+# ── Liger Kernel: fused RoPE / RMSNorm / SwiGLU saves ~6-10 GB on Qwen3 ──
+def _apply_liger():
+    if os.environ.get("DISABLE_LIGER", "0") == "1":
+        return
+    try:
+        import liger_kernel.transformers as lk
+    except ImportError:
+        log.warning("liger-kernel not installed; running without it (higher memory)")
+        return
+
+    kwargs = dict(rope=True, rms_norm=True, swiglu=True,
+                  cross_entropy=False, fused_linear_cross_entropy=False)
+    for fn_name in ("apply_liger_kernel_to_qwen3_5",
+                    "apply_liger_kernel_to_qwen3",
+                    "apply_liger_kernel_to_qwen2"):
+        fn = getattr(lk, fn_name, None)
+        if fn is not None:
+            try:
+                fn(**kwargs)
+                log.info("Applied Liger Kernel via %s", fn_name)
+                return
+            except Exception as e:
+                log.warning("%s failed: %s", fn_name, e)
+
+
+_apply_liger()
+
+
 class _AssistantOnlyCollator:
     """
     TRL 1.0's ``assistant_only_loss=True`` requires ``{% generation %}`` blocks
@@ -200,6 +228,9 @@ def main() -> None:
     # ── DeepSpeed ──
     parser.add_argument("--deepspeed", action="store_true",
                         help="Enable DeepSpeed ZeRO-2 (cfg.DEEPSPEED_CONFIG)")
+    parser.add_argument("--optim", type=str, default="adamw_torch",
+                        choices=["adamw_torch", "paged_adamw_8bit", "adamw_bnb_8bit"],
+                        help="Optimizer. paged_adamw_8bit needs bitsandbytes, saves memory.")
     # ── Logging ──
     parser.add_argument("--run-name", type=str, default=None)
     parser.add_argument("--no-wandb", action="store_true")
@@ -289,6 +320,7 @@ def main() -> None:
         gradient_accumulation_steps=args.grad_accum,
         learning_rate=args.lr,
         warmup_steps=warmup_steps,
+        optim=args.optim,
         # ── Precision ──
         bf16=True,
         gradient_checkpointing=True,
