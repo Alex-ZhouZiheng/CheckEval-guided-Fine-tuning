@@ -95,8 +95,9 @@ def main() -> None:
         "--eval-split", args.eval_split,
         "--batch-size", str(args.batch_size),
         "--tie-delta", str(args.tie_delta),
-        "--experiment-suffix",args.experiment_suffix
     ]
+    if args.experiment_suffix:
+        cmd += ["--experiment-suffix", args.experiment_suffix]
     if args.judge_adapter:
         cmd += ["--judge-adapter", args.judge_adapter]
     if args.subset:
