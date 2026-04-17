@@ -11,9 +11,10 @@ Usage:
     python run_generator_sft.py --tier tier_10k --lr 2e-5 --epochs 2
 """
 
+from __future__ import annotations
+
 import os as _os, sys as _sys
 _sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
-from __future__ import annotations
 
 import argparse
 import json
@@ -32,6 +33,12 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 from trl import SFTConfig, SFTTrainer
 
 import config as cfg
+
+try:
+    import wandb as _wandb
+    _WANDB_AVAILABLE = True
+except ImportError:
+    _WANDB_AVAILABLE = False
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s  %(message)s")
 log = logging.getLogger(__name__)
@@ -122,12 +129,30 @@ def main() -> None:
     run_name = args.run_name or f"generator_sft_{args.tier}_r{args.lora_rank}_lr{args.lr}"
     output_dir = cfg.CHECKPOINTS_DIR / run_name
 
-    use_wandb = not args.no_wandb
+    use_wandb = not args.no_wandb and _WANDB_AVAILABLE
     use_tb = not args.no_tensorboard
     if not use_wandb:
         os.environ["WANDB_DISABLED"] = "true"
     else:
         os.environ["WANDB_PROJECT"] = cfg.WANDB_PROJECT
+        _wandb.init(
+            project=cfg.WANDB_PROJECT,
+            name=run_name,
+            config={
+                "tier": args.tier,
+                "model_id": args.model_id,
+                "lora_rank": args.lora_rank,
+                "lora_alpha": args.lora_alpha,
+                "lora_dropout": args.lora_dropout,
+                "lr": args.lr,
+                "epochs": args.epochs,
+                "batch_size": args.batch_size,
+                "grad_accum": args.grad_accum,
+                "max_length": args.max_length,
+                "seed": cfg.SEED,
+            },
+            tags=["generator-sft", args.tier],
+        )
     if use_tb:
         os.environ["TENSORBOARD_LOGGING_DIR"] = str(cfg.TENSORBOARD_DIR / run_name)
 
@@ -211,6 +236,16 @@ def main() -> None:
     }
     with open(output_dir / "train_config.json", "w", encoding="utf-8") as f:
         json.dump(meta, f, indent=2, default=str)
+
+    if use_wandb:
+        _wandb.summary.update({
+            "train_samples": len(train_ds),
+            "total_steps": total_steps,
+            "warmup_steps": warmup_steps,
+            "output_dir": str(output_dir),
+        })
+        _wandb.finish()
+
     log.info("Done.")
 
 
