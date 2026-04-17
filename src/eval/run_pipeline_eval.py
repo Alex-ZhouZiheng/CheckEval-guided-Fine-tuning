@@ -52,6 +52,7 @@ def main() -> None:
     parser.add_argument("--tie-delta", type=float, default=0.0)
     parser.add_argument("--skip-generator", action="store_true",
                         help="Reuse existing generated_checklists parquet")
+    parser.add_argument("--experiment-suffix",type=str,default=None)
     args = parser.parse_args()
 
     split_tag = args.subset or args.eval_split
@@ -94,6 +95,7 @@ def main() -> None:
         "--eval-split", args.eval_split,
         "--batch-size", str(args.batch_size),
         "--tie-delta", str(args.tie_delta),
+        "--experiment-suffix",args.experiment_suffix
     ]
     if args.judge_adapter:
         cmd += ["--judge-adapter", args.judge_adapter]

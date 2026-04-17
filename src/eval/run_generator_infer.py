@@ -147,7 +147,7 @@ def main() -> None:
         df = df.head(args.max_samples).reset_index(drop=True)
 
     split_tag = args.subset or args.split
-    default_fname = f"{split_tag}.parquet" if adapter_path else f"{split_tag}_base.parquet"
+    default_fname = f"{split_tag}_{adapter_path}.parquet" if adapter_path else f"{split_tag}_base_{str(args.base_model)}.parquet"
     output_path = (
         Path(args.output_path)
         if args.output_path
@@ -213,6 +213,7 @@ def main() -> None:
 
     out_df = pd.DataFrame(records)
     output_path.parent.mkdir(parents=True, exist_ok=True)
+    log.info(f"output_path:{output_path}")
     out_df.to_parquet(output_path, index=False)
 
     meta = {

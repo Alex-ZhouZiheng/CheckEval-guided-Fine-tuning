@@ -320,7 +320,7 @@ def load_pairwise_split(split_name: str | None, input_path: str | None) -> tuple
         path = Path(input_path)
         resolved_split = path.stem
     else:
-        resolved_split = split_name or "dev_600"
+        resolved_split = split_name
         path = cfg.SPLITS_DIR / f"{resolved_split}.parquet"
 
     if not path.exists():

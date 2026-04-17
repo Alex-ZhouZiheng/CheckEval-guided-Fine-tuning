@@ -36,7 +36,7 @@ from rich.console import Console
 from rich.table import Table
 
 import config as cfg
-from run_generator_infer import parse_generated_checklist
+from eval.run_generator_infer import parse_generated_checklist
 from utils import CHECKEVAL_POINTWISE_PROMPT
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s  %(message)s")
@@ -44,22 +44,15 @@ log = logging.getLogger(__name__)
 console = Console()
 
 
-DOMAIN_DEFS = {
-    "correctness_completeness": "Factual accuracy, logical consistency, coverage of the user's request.",
-    "clarity_communication": "Clarity, structure, readability, conciseness of the response.",
-    "helpfulness_usefulness": "Practical value, relevance, actionability for the user's real need.",
-    "coding_communication_conditional": "Code-specific quality (syntax, runnability, comments); apply only when code is present.",
-}
-
+DOMAIN_DEFS = cfg.DOMAIN_DESCRIPTIONS
 
 def flatten_checklist(per_domain: dict[str, list[str]]) -> tuple[list[str], list[str], list[str]]:
     """Return (dimension_block_lines, flat_questions, flat_domains_per_q)."""
-    from prepare_generator_sft import DOMAIN_ORDER
 
     dim_lines: list[str] = []
     flat_q: list[str] = []
     flat_dom: list[str] = []
-    for domain in DOMAIN_ORDER:
+    for domain in cfg.DOMAINS:
         qs = per_domain.get(domain, [])
         if not qs:
             continue

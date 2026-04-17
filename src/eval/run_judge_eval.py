@@ -100,8 +100,7 @@ def main() -> None:
     parser.add_argument("--base-model", type=str, default=str(cfg.JUDGE_MODEL_ID))
     parser.add_argument("--generated", type=str, required=True,
                         help="data/generated_checklists/<split>.parquet")
-    parser.add_argument("--eval-split", type=str, default="dev",
-                        choices=["train", "dev", "test"])
+    parser.add_argument("--eval-split", type=str, default="dev")
     parser.add_argument("--subset", type=str, default=None)
     parser.add_argument("--max-samples", type=int, default=None)
     parser.add_argument("--batch-size", type=int, default=16)
@@ -113,6 +112,7 @@ def main() -> None:
                         default=cfg.VLLM_ENGINE_KWARGS["max_model_len"])
     parser.add_argument("--gpu-memory-utilization", type=float,
                         default=cfg.VLLM_ENGINE_KWARGS["gpu_memory_utilization"])
+    parser.add_argument("--experiment-suffix",type=str,default=date.today())
     args = parser.parse_args()
 
     if args.judge_adapter:
@@ -244,7 +244,7 @@ def main() -> None:
 
     split_tag = args.subset or args.eval_split
     adapter_tag = adapter_path.name if adapter_path else "base"
-    exp_name = f"pipeline_judge_{adapter_tag}_{split_tag}_{date.today()}"
+    exp_name = f"pipeline_judge_{adapter_tag}_{split_tag}_{args.experiment_suffix}"
     save_results(df_eval, metrics, exp_name)
     log.info("Done.")
 
