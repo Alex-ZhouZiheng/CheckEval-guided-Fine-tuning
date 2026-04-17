@@ -2,14 +2,14 @@
 SFT the checklist-generator model with LoRA.
 
 Uses TRL's SFTTrainer on the conversational parquet produced by
-``prepare_generator_sft.py``. The assistant-only loss mask is handled natively
-by TRL via ``assistant_only_loss=True``; the Qwen chat template is patched
-with ``get_training_chat_template`` so the required ``{% generation %}`` blocks
-are present.
+``prepare_generator_sft.py``. The assistant-only loss mask is handled by a
+small custom ``_AssistantOnlyCollator`` because TRL 1.0's
+``assistant_only_loss=True`` requires ``{% generation %}`` in the chat template
+— Qwen3.5 lacks it, and ``get_training_chat_template`` returns a patched
+template that still has no marker.
 
 Other settings follow ms-swift's Qwen3.5 SFT recipe:
   - target_modules all-linear  (attention + MLP projections)
-  - group_by_length            (reduces padding waste)
   - deepspeed zero2            (optional, via --deepspeed flag)
 
 Usage:
@@ -36,7 +36,7 @@ import torch
 from datasets import Dataset
 from peft import LoraConfig, TaskType
 from transformers import AutoModelForCausalLM, AutoTokenizer
-from trl import SFTConfig, SFTTrainer, get_training_chat_template
+from trl import SFTConfig, SFTTrainer
 
 import config as cfg
 
@@ -48,6 +48,47 @@ except ImportError:
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s  %(message)s")
 log = logging.getLogger(__name__)
+
+
+class _AssistantOnlyCollator:
+    """
+    TRL 1.0's ``assistant_only_loss=True`` requires ``{% generation %}`` blocks
+    in the chat template, which Qwen3.5 doesn't ship and which TRL's
+    ``get_training_chat_template`` fails to inject (returns a template without
+    the marker, mask is all-zero). This collator replaces that mechanism:
+    it finds the last ``<|im_start|>assistant\\n`` in each sequence and masks
+    every label before it.
+    """
+
+    def __init__(self, tokenizer):
+        self.pad_id = tokenizer.pad_token_id or 0
+        self.header_ids = tokenizer.encode(
+            "<|im_start|>assistant\n", add_special_tokens=False
+        )
+        log.info("AssistantOnlyCollator: header token ids = %s", self.header_ids)
+
+    def __call__(self, features: list[dict]) -> dict:
+        input_ids  = [torch.tensor(f["input_ids"],      dtype=torch.long) for f in features]
+        attn_masks = [torch.tensor(f["attention_mask"], dtype=torch.long) for f in features]
+        max_len = max(t.size(0) for t in input_ids)
+
+        batch_ids    = input_ids[0].new_full((len(features), max_len), self.pad_id)
+        batch_attn   = attn_masks[0].new_zeros(len(features), max_len)
+        batch_labels = input_ids[0].new_full((len(features), max_len), -100)
+
+        h, hl = self.header_ids, len(self.header_ids)
+        for i, (ids, attn) in enumerate(zip(input_ids, attn_masks)):
+            n = ids.size(0)
+            batch_ids[i, :n]  = ids
+            batch_attn[i, :n] = attn
+            last_end = -1
+            for j in range(n - hl + 1):
+                if ids[j : j + hl].tolist() == h:
+                    last_end = j + hl
+            if last_end >= 0:
+                batch_labels[i, last_end:n] = ids[last_end:n]
+
+        return {"input_ids": batch_ids, "attention_mask": batch_attn, "labels": batch_labels}
 
 
 def load_sft_dataset(
@@ -104,19 +145,6 @@ def load_base(model_id: str):
     )
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
-
-    # Patch chat template so TRL's assistant_only_loss can produce masks.
-    # Qwen3.5's stock template lacks {% generation %} blocks; TRL ships a patched
-    # version for known model families (Qwen3 included).
-    patched = get_training_chat_template(tokenizer)
-    if patched is not None:
-        tokenizer.chat_template = patched
-        log.info("  Patched chat template via get_training_chat_template().")
-    else:
-        log.warning(
-            "  get_training_chat_template() returned None — assistant_only_loss "
-            "may fail. Check whether this model family is supported by TRL."
-        )
 
     try:
         model = AutoModelForCausalLM.from_pretrained(
@@ -221,6 +249,7 @@ def main() -> None:
     lora_config  = build_lora_config(
         args.lora_rank, args.lora_alpha, args.lora_dropout, target_modules
     )
+    data_collator = _AssistantOnlyCollator(tokenizer)
 
     # ── Step/schedule math ──
     world_size      = int(os.environ.get("WORLD_SIZE", "1"))
@@ -244,7 +273,7 @@ def main() -> None:
         run_name=run_name,
         # ── Data / loss ──
         max_length=args.max_length,
-        assistant_only_loss=True,       # requires patched chat template (done in load_base)
+        assistant_only_loss=False,      # handled by _AssistantOnlyCollator below
         packing=False,
         dataset_num_proc=args.dataset_num_proc,
         # ── Training ──
@@ -282,6 +311,7 @@ def main() -> None:
         eval_dataset=eval_ds,
         processing_class=tokenizer,
         peft_config=lora_config,
+        data_collator=data_collator,
     )
 
     log.info("Starting generator SFT: %d train rows, %d steps", len(train_ds), total_steps)
