@@ -162,7 +162,6 @@ def main() -> None:
     parser.add_argument("--batch-size", type=int, default=1)
     parser.add_argument("--grad-accum", type=int, default=16)
     parser.add_argument("--max-length", type=int, default=cfg.SFT_MAX_LENGTH)
-    parser.add_argument("--no-group-by-length", action="store_true")
     parser.add_argument("--dataloader-workers", type=int, default=4)
     # ── DeepSpeed ──
     parser.add_argument("--deepspeed", action="store_true",
@@ -255,7 +254,6 @@ def main() -> None:
         gradient_accumulation_steps=args.grad_accum,
         learning_rate=args.lr,
         warmup_steps=warmup_steps,
-        group_by_length=not args.no_group_by_length,
         # ── Precision ──
         bf16=True,
         gradient_checkpointing=True,
