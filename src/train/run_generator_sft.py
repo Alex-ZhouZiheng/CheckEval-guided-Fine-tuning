@@ -8,10 +8,6 @@ small custom ``_AssistantOnlyCollator`` because TRL 1.0's
 — Qwen3.5 lacks it, and ``get_training_chat_template`` returns a patched
 template that still has no marker.
 
-Other settings follow ms-swift's Qwen3.5 SFT recipe:
-  - target_modules all-linear  (attention + MLP projections)
-  - deepspeed zero2            (optional, via --deepspeed flag)
-
 Usage:
     python run_generator_sft.py --tier debug_5k --no-wandb
     python run_generator_sft.py --tier tier_10k --lr 2e-5 --epochs 2 --deepspeed
@@ -207,7 +203,7 @@ def main() -> None:
     # ── Data ──
     parser.add_argument("--tier", type=str, default="debug_5k",
                         choices=["debug_5k", "tier_10k", "tier_20k"])
-    parser.add_argument("--eval-split-ratio", type=float, default=0.01,
+    parser.add_argument("--eval-split-ratio", type=float, default=0.1,
                         help="Fraction of train data held out for eval (0 = no eval)")
     parser.add_argument("--dataset-num-proc", type=int, default=4)
     # ── Model ──
