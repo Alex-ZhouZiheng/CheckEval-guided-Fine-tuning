@@ -56,15 +56,15 @@ DOMAIN_DESCRIPTIONS = cfg.DOMAIN_DESCRIPTIONS
 
 GENERATOR_SYSTEM_PROMPT = (
     "You are a checklist writer for LLM response evaluation. Given a user "
-    "request and two candidate responses, produce a list of Yes/No evaluation "
-    "questions, grouped by quality dimension. Each question must be phrased so "
-    "that 'Yes' means the response meets the criterion, and must not reference "
-    "either specific response (A or B). Output ONLY the checklist in the "
-    "required format."
+    "request, produce a list of Yes/No evaluation questions, grouped by "
+    "quality dimension, that could be used to judge any candidate response to "
+    "this request. Each question must be phrased so that 'Yes' means the "
+    "response meets the criterion. Output ONLY the checklist in the required "
+    "format."
 )
 
 GENERATOR_USER_TEMPLATE = """\
-Produce a Yes/No evaluation checklist for the following pairwise comparison.
+Produce a Yes/No evaluation checklist for judging responses to the following request.
 
 Group questions under these section headers (skip a section if it does not apply):
 {domain}
@@ -79,18 +79,12 @@ Output format:
 
 Rules:
 - Phrase each question so that "Yes" means the response is good on that criterion.
-- Do not mention "Response A", "Response B", or specific content of either response.
+- Do not reference any specific response; questions must apply to any candidate.
 - Keep each question under ~40 words.
 - Output only the checklist, no commentary.
 
 # Conversation Context
 {context}
-
-# Response A
-{response_a}
-
-# Response B
-{response_b}
 
 # Checklist"""
 
@@ -104,8 +98,6 @@ def build_generator_messages(row: dict | pd.Series) -> list[dict[str, str]]:
     """Chat-template messages consumed by the generator model at both train and eval."""
     user = GENERATOR_USER_TEMPLATE.format(
         context=row["context"],
-        response_a=row["response_a"],
-        response_b=row["response_b"],
         domain=_domain_block(),
     )
     return [
