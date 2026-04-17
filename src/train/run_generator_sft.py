@@ -30,7 +30,7 @@ import torch
 from datasets import Dataset
 from peft import LoraConfig, TaskType
 from transformers import AutoModelForCausalLM, AutoTokenizer
-from trl import SFTConfig, SFTTrainer
+from trl import DataCollatorForCompletionOnlyLM, SFTConfig, SFTTrainer
 
 import config as cfg
 
@@ -160,6 +160,17 @@ def main() -> None:
     model, tokenizer = load_base(args.model_id)
     lora_config = build_lora_config(args.lora_rank, args.lora_alpha, args.lora_dropout)
 
+    # assistant_only_loss=True requires {% generation %} in the chat template,
+    # which Qwen3.5 doesn't have. Use DataCollatorForCompletionOnlyLM instead:
+    # encode the assistant header as it appears in the full tokenized sequence.
+    response_template_ids = tokenizer.encode(
+        "<|im_start|>assistant\n", add_special_tokens=False
+    )
+    data_collator = DataCollatorForCompletionOnlyLM(
+        response_template=response_template_ids,
+        tokenizer=tokenizer,
+    )
+
     world_size = int(os.environ.get("WORLD_SIZE", "1"))
     eff_bs = args.batch_size * args.grad_accum * world_size
     steps_per_epoch = max(1, math.ceil(len(train_ds) / eff_bs))
@@ -180,7 +191,6 @@ def main() -> None:
         run_name=run_name,
         # Data / loss
         max_length=args.max_length,
-        assistant_only_loss=True,
         packing=False,
         # Training
         num_train_epochs=args.epochs,
@@ -210,6 +220,7 @@ def main() -> None:
         train_dataset=train_ds,
         processing_class=tokenizer,
         peft_config=lora_config,
+        data_collator=data_collator,
     )
 
     log.info("Starting generator SFT: %d rows, %d steps", len(train_ds), total_steps)
