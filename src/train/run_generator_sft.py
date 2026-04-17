@@ -68,12 +68,18 @@ class _AssistantOnlyCollator:
         log.info("AssistantOnlyCollator: header token ids = %s", self.header_ids)
 
     def __call__(self, features: list[dict]) -> dict:
-        input_ids  = [torch.tensor(f["input_ids"],      dtype=torch.long) for f in features]
-        attn_masks = [torch.tensor(f["attention_mask"], dtype=torch.long) for f in features]
+        input_ids = [torch.tensor(f["input_ids"], dtype=torch.long) for f in features]
+        # TRL 1.0's tokenize_fn doesn't always produce attention_mask; derive it if absent.
+        attn_masks = [
+            torch.tensor(f["attention_mask"], dtype=torch.long)
+            if "attention_mask" in f
+            else torch.ones_like(input_ids[i])
+            for i, f in enumerate(features)
+        ]
         max_len = max(t.size(0) for t in input_ids)
 
         batch_ids    = input_ids[0].new_full((len(features), max_len), self.pad_id)
-        batch_attn   = attn_masks[0].new_zeros(len(features), max_len)
+        batch_attn   = input_ids[0].new_zeros(len(features), max_len)
         batch_labels = input_ids[0].new_full((len(features), max_len), -100)
 
         h, hl = self.header_ids, len(self.header_ids)
