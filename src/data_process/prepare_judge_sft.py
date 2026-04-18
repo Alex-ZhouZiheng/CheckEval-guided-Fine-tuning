@@ -91,10 +91,20 @@ def build_pointwise_prompt(
 
 # ────────────────────────── data loading ─────────────────────────
 def load_pairwise(tier: str) -> pd.DataFrame:
-    path = cfg.SPLITS_DIR / f"train_{tier}.parquet"
+    """Load pairs from the reasoning parquet (same source run_generator_infer uses).
+
+    The basic splits parquet lacks ``sample_id`` — it only has ``prompt_id``.
+    ``sample_id`` is materialized in ``{tier}_reasoning.parquet`` and is the
+    key used to join with generated_checklists.
+    """
+    path = cfg.WITH_REASON_DIR / f"{tier}_reasoning.parquet"
     if not path.exists():
-        raise FileNotFoundError(f"{path} not found. Run prepare_data.py first.")
+        raise FileNotFoundError(
+            f"{path} not found. Run prepare_data_reasoning.py --split {tier} first."
+        )
     df = pd.read_parquet(path)
+    if "swap_flag" in df.columns:
+        df = df[df["swap_flag"] == False].reset_index(drop=True)
     required = {"sample_id", "context", "response_a", "response_b", "domain", "winner"}
     missing = required - set(df.columns)
     if missing:
