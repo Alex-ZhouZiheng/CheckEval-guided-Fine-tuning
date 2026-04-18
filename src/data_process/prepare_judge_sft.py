@@ -51,7 +51,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s  %(message)s")
 log = logging.getLogger(__name__)
 console = Console()
 
-DEFAULT_TEACHER_MODEL = "Qwen/Qwen3.5-27B-GPTQ-Int4"
+DEFAULT_TEACHER_MODEL = "/root/autodl-tmp/Thesis/models/Qwen3.5-27B-AWQ-4bit"
 DOMAIN_DEFS = cfg.DOMAIN_DESCRIPTIONS
 
 
