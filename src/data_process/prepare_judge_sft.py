@@ -41,7 +41,7 @@ from rich.table import Table
 import config as cfg
 from eval.run_generator_infer import parse_generated_checklist
 from utils import (
-    CHECKEVAL_POINTWISE_PROMPT,
+    CHECKEVAL_POINTWISE_PROMPT_BINARY,
     generate_batch,
     load_judge_model,
     parse_checkeval_output,
@@ -80,7 +80,7 @@ def build_pointwise_prompt(
     dimension_block = "\n".join(dim_lines)
     checklist_text = "\n".join(f"Q{i + 1}: {q}" for i, q in enumerate(flat_q))
     response_key = "response_a" if side == "A" else "response_b"
-    prompt = CHECKEVAL_POINTWISE_PROMPT.format(
+    prompt = CHECKEVAL_POINTWISE_PROMPT_BINARY.format(
         dimension_block=dimension_block,
         context=row["context"],
         response=row[response_key],
@@ -154,23 +154,27 @@ def stratified_sample(
 
 
 # ────────────────────────── teacher labeling ─────────────────────
-def reconstruct_target(parsed: dict, n_q: int) -> str | None:
-    """Build canonical ``Q{i}: {label}`` target from parsed teacher output.
+def reconstruct_target(parsed: dict, n_q: int) -> tuple[str | None, int]:
+    """Build canonical binary ``Q{i}: yes|no`` target from teacher output.
 
-    Returns None if any question is unanswered (teacher didn't cover all n_q).
+    Binary-only: if the teacher emits N/A despite the binary prompt, coerce it
+    to ``no`` (matches the "when in doubt, no" rule). Returns (target, n_coerced).
+    Target is None if any question is still unanswered.
     """
     labels: dict[int, str] = {}
     for a in parsed.get("answers", []):
         q = a.get("q")
         if isinstance(q, int) and 1 <= q <= n_q:
             labels[q] = a["answer"]  # 'yes' / 'no'
+    n_coerced = 0
     for a in parsed.get("na_answers", []):
         q = a.get("q")
-        if isinstance(q, int) and 1 <= q <= n_q:
-            labels[q] = "N/A"
+        if isinstance(q, int) and 1 <= q <= n_q and q not in labels:
+            labels[q] = "no"
+            n_coerced += 1
     if len(labels) != n_q:
-        return None
-    return "\n".join(f"Q{i}: {labels[i]}" for i in range(1, n_q + 1))
+        return None, n_coerced
+    return "\n".join(f"Q{i}: {labels[i]}" for i in range(1, n_q + 1)), n_coerced
 
 
 def build_rows(
@@ -221,24 +225,24 @@ def build_rows(
     rows: list[dict] = []
     n_parse_fail = 0
     n_incomplete = 0
+    n_na_coerced_total = 0
     label_counter = Counter()
     for m, raw in zip(metas, raws):
         parsed = parse_checkeval_output(raw, expected_n=m["n_q"])
         if parsed.get("_raw_fallback"):
             n_parse_fail += 1
             continue
-        target = reconstruct_target(parsed, m["n_q"])
+        target, n_coerced = reconstruct_target(parsed, m["n_q"])
         if target is None:
             n_incomplete += 1
             continue
+        n_na_coerced_total += n_coerced
 
         # diagnostics
         n_yes = sum(1 for ln in target.splitlines() if ln.endswith(": yes"))
         n_no = sum(1 for ln in target.splitlines() if ln.endswith(": no"))
-        n_na = sum(1 for ln in target.splitlines() if ln.endswith(": N/A"))
         label_counter["yes"] += n_yes
         label_counter["no"] += n_no
-        label_counter["na"] += n_na
 
         messages = [{"role": "user", "content": m["prompt"]}]
         rows.append({
@@ -249,7 +253,7 @@ def build_rows(
             "n_questions": m["n_q"],
             "n_yes": n_yes,
             "n_no": n_no,
-            "n_na": n_na,
+            "n_na_coerced": n_coerced,
             "messages": json.dumps(messages, ensure_ascii=False),
             "target_output": target,
             "teacher_raw": raw,
@@ -260,6 +264,7 @@ def build_rows(
         "n_parse_fail": n_parse_fail,
         "n_incomplete": n_incomplete,
         "n_rows_kept": len(rows),
+        "n_na_coerced_to_no": n_na_coerced_total,
         "label_totals": dict(label_counter),
         "teacher_inference_seconds": elapsed,
     }
@@ -278,11 +283,11 @@ def print_summary(df: pd.DataFrame, stats: dict, output_path: Path) -> None:
         table.add_row("Avg Q per row", f"{df['n_questions'].mean():.1f}")
         table.add_row("Rows side A", f"{int((df['side']=='A').sum()):,}")
         table.add_row("Rows side B", f"{int((df['side']=='B').sum()):,}")
-        n_total = df[["n_yes", "n_no", "n_na"]].sum().sum()
+        n_total = df[["n_yes", "n_no"]].sum().sum()
         if n_total:
             table.add_row("yes %", f"{df['n_yes'].sum() / n_total:.1%}")
             table.add_row("no %",  f"{df['n_no'].sum()  / n_total:.1%}")
-            table.add_row("N/A %", f"{df['n_na'].sum()  / n_total:.1%}")
+        table.add_row("N/A→no coerced", f"{int(df['n_na_coerced'].sum()):,}")
     table.add_row("Parse failures", f"{stats.get('n_parse_fail', 0):,}")
     table.add_row("Incomplete teacher outputs", f"{stats.get('n_incomplete', 0):,}")
     table.add_row("Output", str(output_path))
