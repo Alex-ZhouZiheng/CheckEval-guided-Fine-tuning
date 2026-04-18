@@ -23,8 +23,8 @@ os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
 import pandas as pd
 import torch
 from datasets import Dataset
-from peft import LoraConfig, TaskType
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from peft import LoraConfig, TaskType, prepare_model_for_kbit_training
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 from trl import SFTConfig, SFTTrainer
 
 import config as cfg
@@ -137,31 +137,41 @@ def build_lora_config(rank: int, alpha: int, dropout: float) -> LoraConfig:
     )
 
 
-def load_base(model_id: str):
-    log.info("Loading tokenizer and base model: %s", model_id)
+def load_base(model_id: str, qlora: bool = False):
+    log.info("Loading tokenizer and base model: %s (qlora=%s)", model_id, qlora)
     tokenizer = AutoTokenizer.from_pretrained(
         model_id, trust_remote_code=True, padding_side="right",
     )
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 
+    kwargs = dict(trust_remote_code=True)
+    if qlora:
+        kwargs["quantization_config"] = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_quant_type="nf4",
+            bnb_4bit_compute_dtype=torch.bfloat16,
+            bnb_4bit_use_double_quant=True,
+        )
+    else:
+        kwargs["dtype"] = torch.bfloat16
+
     try:
         model = AutoModelForCausalLM.from_pretrained(
-            model_id,
-            dtype=torch.bfloat16,
-            trust_remote_code=True,
-            attn_implementation="flash_attention_2",
+            model_id, attn_implementation="flash_attention_2", **kwargs,
         )
         log.info("  Using Flash Attention 2")
     except (ImportError, ValueError):
         model = AutoModelForCausalLM.from_pretrained(
-            model_id,
-            dtype=torch.bfloat16,
-            trust_remote_code=True,
-            attn_implementation="sdpa",
+            model_id, attn_implementation="sdpa", **kwargs,
         )
         log.info("  Using SDPA")
 
+    if qlora:
+        model = prepare_model_for_kbit_training(
+            model, use_gradient_checkpointing=True,
+            gradient_checkpointing_kwargs={"use_reentrant": False},
+        )
     if hasattr(model, "enable_input_require_grads"):
         model.enable_input_require_grads()
     return model, tokenizer
@@ -179,6 +189,10 @@ def main() -> None:
     parser.add_argument("--lora-alpha", type=int, default=cfg.LORA_ALPHA)
     parser.add_argument("--lora-dropout", type=float, default=cfg.LORA_DROPOUT)
     parser.add_argument("--max-length", type=int, default=cfg.MAX_LENGTH)
+    parser.add_argument("--qlora", action="store_true",
+                        help="Load base model in 4-bit NF4 (QLoRA). Saves ~13GB on a 9B model.")
+    parser.add_argument("--optim", type=str, default="adamw_torch",
+                        choices=["adamw_torch", "paged_adamw_8bit", "adamw_bnb_8bit"])
     parser.add_argument("--run-name", type=str, default=None)
     parser.add_argument("--no-wandb", action="store_true")
     parser.add_argument("--no-tensorboard", action="store_true")
@@ -197,7 +211,7 @@ def main() -> None:
         os.environ["TENSORBOARD_LOGGING_DIR"] = str(cfg.TENSORBOARD_DIR / run_name)
 
     train_ds = load_sft_dataset(args.tier)
-    model, tokenizer = load_base(args.model_id)
+    model, tokenizer = load_base(args.model_id, qlora=args.qlora)
     lora_config = build_lora_config(args.lora_rank, args.lora_alpha, args.lora_dropout)
     data_collator = _AssistantOnlyCollator(tokenizer)
 
@@ -227,6 +241,7 @@ def main() -> None:
         gradient_accumulation_steps=args.grad_accum,
         learning_rate=args.lr,
         warmup_steps=warmup_steps,
+        optim=args.optim,
         bf16=True,
         gradient_checkpointing=True,
         gradient_checkpointing_kwargs={"use_reentrant": False},
