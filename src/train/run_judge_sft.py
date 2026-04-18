@@ -44,7 +44,7 @@ def _apply_liger():
         return
 
     kwargs = dict(rope=True, rms_norm=True, swiglu=True,
-                  cross_entropy=False, fused_linear_cross_entropy=False)
+                  cross_entropy=False, fused_linear_cross_entropy=True)
     for fn_name in ("apply_liger_kernel_to_qwen3_5",
                     "apply_liger_kernel_to_qwen3",
                     "apply_liger_kernel_to_qwen2"):
