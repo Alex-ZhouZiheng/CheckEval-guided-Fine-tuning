@@ -292,8 +292,7 @@ def print_summary(df: pd.DataFrame, stats: dict, output_path: Path) -> None:
 # ────────────────────────── main ─────────────────────────
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--tier", type=str, default="tier_10k",
-                        choices=["debug_5k", "tier_10k", "tier_20k"])
+    parser.add_argument("--tier", type=str, default="tier_10k")
     parser.add_argument("--generated", type=str, default=None,
                         help="Path to data/generated_checklists/<tier>.parquet "
                              "(default: inferred from --tier)")
