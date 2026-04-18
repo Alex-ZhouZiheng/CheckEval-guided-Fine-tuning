@@ -33,6 +33,34 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s  %(message)s")
 log = logging.getLogger(__name__)
 
 
+# ── Liger Kernel: fused RoPE / RMSNorm / SwiGLU saves ~6-10 GB on Qwen3 ──
+def _apply_liger():
+    if os.environ.get("DISABLE_LIGER", "0") == "1":
+        return
+    try:
+        import liger_kernel.transformers as lk
+    except ImportError:
+        log.warning("liger-kernel not installed; running without it (higher memory)")
+        return
+
+    kwargs = dict(rope=True, rms_norm=True, swiglu=True,
+                  cross_entropy=False, fused_linear_cross_entropy=False)
+    for fn_name in ("apply_liger_kernel_to_qwen3_5",
+                    "apply_liger_kernel_to_qwen3",
+                    "apply_liger_kernel_to_qwen2"):
+        fn = getattr(lk, fn_name, None)
+        if fn is not None:
+            try:
+                fn(**kwargs)
+                log.info("Applied Liger Kernel via %s", fn_name)
+                return
+            except Exception as e:
+                log.warning("%s failed: %s", fn_name, e)
+
+
+_apply_liger()
+
+
 def load_sft_dataset(tier: str) -> Dataset:
     path = cfg.JUDGE_SFT_DIR / f"train_{tier}.parquet"
     if not path.exists():
