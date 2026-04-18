@@ -361,14 +361,11 @@ def main() -> None:
         return
 
     # ── load teacher ──
+    # Let vLLM auto-detect quantization from the model's config.json.
+    # Only override when --quantization is explicitly passed.
     quantization = args.quantization
-    if quantization is None:
-        low = args.teacher_model_id.lower()
-        if "gptq" in low:
-            quantization = "gptq_marlin"
-        elif "awq" in low:
-            quantization = "awq_marlin"
-    log.info("Teacher: %s  (quantization=%s)", args.teacher_model_id, quantization)
+    log.info("Teacher: %s  (quantization=%s)",
+             args.teacher_model_id, quantization or "auto")
 
     teacher = load_judge_model(
         model_id=args.teacher_model_id,
