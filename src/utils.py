@@ -303,6 +303,55 @@ Think silently, then output ONLY the final answer lines.
 """
 
 
+# Binary (yes/no only) variant — used for per-sample generated checklists
+# where every question is, by construction, applicable to the sample.
+# Keep CHECKEVAL_POINTWISE_PROMPT untouched so the zero-shot CheckEval
+# baseline numbers (with N/A support) remain reproducible.
+CHECKEVAL_POINTWISE_PROMPT_BINARY = """\
+<Task Overview>
+You will be given a conversation between a user and an assistant, followed by \
+a candidate response for the next turn. Your task is to read the conversation \
+history and the response, then answer 'yes' or 'no' to specific quality \
+checklist questions about that response.
+
+<Dimension Definitions>
+{dimension_block}
+
+<Instructions>
+1. Read these instructions thoroughly.
+2. Carefully read the Conversation History and the Response.
+3. Understand the given questions and the definitions of each dimension.
+4. For each question, answer strictly 'yes' or 'no'.
+5. Follow the specified format for your answers.
+6. If the requirement is satisfied, answer yes. Otherwise answer no.
+7. When in doubt, answer no.
+8. Do not provide explanations, rationale, notes, or extra text.
+9. Output only the answer lines.
+
+<Answer Format>
+Q1: yes
+Q2: no
+Q3: yes
+...
+
+# Conversation History #
+
+{context}
+
+# Response #
+
+{response}
+
+# Questions #
+
+{checklist_text}
+
+# Your Answer #
+
+Following the specified Answer Format.
+Think silently, then output ONLY the final answer lines.
+"""
+
 
 def load_checklists(checklists_dir: Path = cfg.CHECKLISTS_DIR) -> dict[str, list[str]]:
     """Load filtered checklist questions from YAML files.
