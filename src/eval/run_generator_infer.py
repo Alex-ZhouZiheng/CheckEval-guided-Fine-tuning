@@ -103,7 +103,7 @@ def load_eval_data(eval_split: str = "dev", subset: str | None = None) -> pd.Dat
 
     df = pd.read_parquet(path)
     if "swap_flag" in df.columns:
-        df = df[df["swap_flag"] == False].reset_index(drop=True)  # noqa: E712
+        df = df[df["swap_flag"] == False].reset_index(drop=True)  
     log.info("Loaded %s pairs from %s", f"{len(df):,}", path.name)
     return df
 
