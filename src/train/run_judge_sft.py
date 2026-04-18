@@ -97,8 +97,7 @@ def load_base(model_id: str):
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--tier", type=str, default="debug_5k",
-                        choices=["debug_5k", "tier_10k", "tier_20k"])
+    parser.add_argument("--tier", type=str, default="debug_5k")
     parser.add_argument("--model-id", type=str, default=str(cfg.JUDGE_MODEL_ID))
     parser.add_argument("--lr", type=float, default=1e-5)
     parser.add_argument("--epochs", type=int, default=1)
