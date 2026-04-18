@@ -59,9 +59,8 @@ export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
 swift sft \
   --model "${MODEL_PATH}" \
-  --model_type qwen3_5 \
   --dataset "${JSONL_PATH}" \
-  --train_type lora \
+  --tuner_type lora \
   --lora_rank "${LORA_RANK}" \
   --lora_alpha "${LORA_ALPHA}" \
   --target_modules all-linear \
@@ -72,8 +71,9 @@ swift sft \
   --torch_dtype bfloat16 \
   --max_length "${MAX_LEN}" \
   --truncation_strategy left \
-  --packing true \
-  --lazy_tokenize true \
+  --group_by_length true \
+  --add_non_thinking_prefix true \
+  --loss_scale ignore_empty_think \
   --use_liger_kernel true \
   --attn_impl flash_attn \
   --gradient_checkpointing true \
@@ -83,6 +83,9 @@ swift sft \
   --num_train_epochs "${EPOCHS}" \
   --warmup_ratio "${WARMUP_RATIO}" \
   --optim paged_adamw_8bit \
+  --dataset_num_proc 4 \
+  --dataloader_num_workers 2 \
+  --load_from_cache_file true \
   --save_strategy steps \
   --save_steps 100 \
   --save_total_limit 2 \
