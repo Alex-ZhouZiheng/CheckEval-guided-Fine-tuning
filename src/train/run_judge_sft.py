@@ -61,6 +61,50 @@ def _apply_liger():
 _apply_liger()
 
 
+class _AssistantOnlyCollator:
+    """
+    TRL 1.0's ``assistant_only_loss=True`` requires ``{% generation %}`` blocks
+    in the chat template, which Qwen3.5 doesn't ship. This collator replaces
+    that mechanism: it finds the last ``<|im_start|>assistant\\n`` in each
+    sequence and masks every label before it.
+    """
+
+    def __init__(self, tokenizer):
+        self.pad_id = tokenizer.pad_token_id or 0
+        self.header_ids = tokenizer.encode(
+            "<|im_start|>assistant\n", add_special_tokens=False
+        )
+        log.info("AssistantOnlyCollator: header token ids = %s", self.header_ids)
+
+    def __call__(self, features: list[dict]) -> dict:
+        input_ids = [torch.tensor(f["input_ids"], dtype=torch.long) for f in features]
+        attn_masks = [
+            torch.tensor(f["attention_mask"], dtype=torch.long)
+            if "attention_mask" in f
+            else torch.ones_like(input_ids[i])
+            for i, f in enumerate(features)
+        ]
+        max_len = max(t.size(0) for t in input_ids)
+
+        batch_ids    = input_ids[0].new_full((len(features), max_len), self.pad_id)
+        batch_attn   = input_ids[0].new_zeros(len(features), max_len)
+        batch_labels = input_ids[0].new_full((len(features), max_len), -100)
+
+        h, hl = self.header_ids, len(self.header_ids)
+        for i, (ids, attn) in enumerate(zip(input_ids, attn_masks)):
+            n = ids.size(0)
+            batch_ids[i, :n]  = ids
+            batch_attn[i, :n] = attn
+            last_end = -1
+            for j in range(n - hl + 1):
+                if ids[j : j + hl].tolist() == h:
+                    last_end = j + hl
+            if last_end >= 0:
+                batch_labels[i, last_end:n] = ids[last_end:n]
+
+        return {"input_ids": batch_ids, "attention_mask": batch_attn, "labels": batch_labels}
+
+
 def load_sft_dataset(tier: str) -> Dataset:
     path = cfg.JUDGE_SFT_DIR / f"train_{tier}.parquet"
     if not path.exists():
@@ -155,6 +199,7 @@ def main() -> None:
     train_ds = load_sft_dataset(args.tier)
     model, tokenizer = load_base(args.model_id)
     lora_config = build_lora_config(args.lora_rank, args.lora_alpha, args.lora_dropout)
+    data_collator = _AssistantOnlyCollator(tokenizer)
 
     world_size = int(os.environ.get("WORLD_SIZE", "1"))
     eff_bs = args.batch_size * args.grad_accum * world_size
@@ -175,7 +220,7 @@ def main() -> None:
         output_dir=str(output_dir),
         run_name=run_name,
         max_length=args.max_length,
-        assistant_only_loss=True,
+        assistant_only_loss=False,
         packing=False,
         num_train_epochs=args.epochs,
         per_device_train_batch_size=args.batch_size,
@@ -201,6 +246,7 @@ def main() -> None:
         train_dataset=train_ds,
         processing_class=tokenizer,
         peft_config=lora_config,
+        data_collator=data_collator,
     )
 
     log.info("Starting judge SFT: %d rows, %d steps", len(train_ds), total_steps)
