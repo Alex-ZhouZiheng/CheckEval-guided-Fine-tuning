@@ -6,10 +6,10 @@ Usage:
     python run_judge_sft.py --tier debug_5k --no-wandb
     python run_judge_sft.py --tier tier_10k --lr 1e-5 --epochs 1
 """
-
+from __future__ import annotations
 import os as _os, sys as _sys
 _sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
-from __future__ import annotations
+
 
 import argparse
 import json
