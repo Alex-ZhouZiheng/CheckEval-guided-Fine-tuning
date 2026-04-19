@@ -1,8 +1,4 @@
 #!/usr/bin/env bash
-# Judge SFT via ms-swift (Qwen3.5-9B + QLoRA).
-# Handles the Triton-autotune / long-seq OOMs that TRL couldn't, by using
-# swift's packing + length-sorted sampler + Liger integration.
-#
 # Usage:
 #   bash src/train/run_judge_sft_swift.sh debug_5k_teacher
 #
