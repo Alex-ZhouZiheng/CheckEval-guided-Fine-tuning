@@ -52,7 +52,7 @@ if str(_SRC_DIR / "eval") not in sys.path:
 
 import config as cfg 
 from data_process.prepare_judge_sft import build_pointwise_prompt
-from eval.run_generator_infer import parse_generated_checklist
+from evaluation.run_generator_infer import parse_generated_checklist
 from utils import ( 
     compare_checklists_pairwise,
     parse_checkeval_output,

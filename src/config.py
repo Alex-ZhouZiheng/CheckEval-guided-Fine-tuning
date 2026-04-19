@@ -39,7 +39,7 @@ DEV_RATIO = 0.10
 SEED = 42
 
 TIER_SIZES = {
-    "debug_5k": 5_000,
+    "tier_5k": 5_000,
     "tier_10k": 10_000,
     "tier_20k": 20_000,
 }

@@ -34,7 +34,7 @@ PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
 # Default: continue from the latest generator SFT final_adapter-merged checkpoint.
 # You can also pass an HF id via env MODEL.
-MODEL="${MODEL:-${PROJECT_ROOT}/checkpoints/judge_sft_swift_debug_5k_teacher_r16_lr2e-5/v0-20260419-003133/checkpoint-282}"
+MODEL="${MODEL:-${PROJECT_ROOT}/results/checkpoints/generator_sft_debug_5k_r16_lr2e-05/final_merged}"
 
 TIER="${TIER:-tier_10k}"
 TAG="${TAG:-judge_rl}"
@@ -94,7 +94,10 @@ swift rlhf \
     --vllm_tensor_parallel_size 1 \
     --vllm_max_model_len "${VLLM_MAX_LEN}" \
     --sleep_level 1 \
-    --tuner_type full \
+    --tuner_type lora \
+    --lora_rank 16 \
+    --lora_alpha 32 \
+    --target_modules all-linear \
     --torch_dtype bfloat16 \
     --dataset "${DATASET_PATH}" \
     --load_from_cache_file true \
@@ -108,13 +111,13 @@ swift rlhf \
     --save_steps "${SAVE_STEPS}" \
     --save_total_limit "${SAVE_TOTAL_LIMIT}" \
     --logging_steps 1 \
-    --warmup_ratio 0.0 \
+    --warmup_steps 0.0 \
     --dataloader_num_workers 2 \
     --num_generations "${NUM_GENERATIONS}" \
     --temperature "${TEMPERATURE}" \
     --deepspeed zero2 \
     --log_completions true \
-    --report_to tensorboard swanlab \
+    --report_to tensorboard wandb \
     --max_grad_norm 1.0 \
     --epsilon 0.2 \
     --epsilon_high 0.28 \
