@@ -34,7 +34,7 @@ PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
 # Default: continue from the latest generator SFT final_adapter-merged checkpoint.
 # You can also pass an HF id via env MODEL.
-MODEL="${MODEL:-${PROJECT_ROOT}/results/checkpoints/generator_sft_tier_10k/final_merged}"
+MODEL="${MODEL:-${PROJECT_ROOT}/checkpoints/judge_sft_swift_debug_5k_teacher_r16_lr2e-5/v0-20260419-003133/checkpoint-282}"
 
 TIER="${TIER:-tier_10k}"
 TAG="${TAG:-judge_rl}"
@@ -63,7 +63,7 @@ if [[ "${JUDGE_MODE}" == "http" && -z "${JUDGE_MODEL:-}" ]]; then
   exit 1
 fi
 export JUDGE_MODEL="${JUDGE_MODEL:-}"
-export JUDGE_MAX_NEW_TOKENS="${JUDGE_MAX_NEW_TOKENS:-512}"
+export JUDGE_MAX_NEW_TOKENS="${JUDGE_MAX_NEW_TOKENS:-1024}"
 export JUDGE_TEMPERATURE="${JUDGE_TEMPERATURE:-0.0}"
 export TIE_DELTA="${TIE_DELTA:-0.0}"
 
