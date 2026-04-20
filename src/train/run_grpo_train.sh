@@ -35,6 +35,7 @@ VLLM_MAX_LEN="${VLLM_MAX_LEN:-10240}"
 TEMPERATURE="${TEMPERATURE:-1.0}"
 SAVE_STEPS="${SAVE_STEPS:-10}"
 SAVE_TOTAL_LIMIT="${SAVE_TOTAL_LIMIT:-100}"
+RESUME="${RESUME:-}"
 
 MODEL_TAG="$(basename "${MODEL}")"
 RUN_NAME="grpo_${MODEL_TAG}_${TAG}_lr${LR}"
@@ -46,6 +47,22 @@ export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0}"
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
 SYSTEM_PROMPT='You are a helpful math assistant. Solve the problem step by step and put your final answer within \\boxed{}.'
+
+RESUME_ARGS=()
+if [[ -n "${RESUME}" ]]; then
+    if [[ "${RESUME}" == "auto" ]]; then
+        LATEST_CKPT="$(ls -1dt "${OUTPUT_DIR}"/checkpoint-* 2>/dev/null | head -n 1 || true)"
+        if [[ -z "${LATEST_CKPT}" ]]; then
+            echo "[resume] no checkpoint found under ${OUTPUT_DIR}, starting fresh" >&2
+        else
+            echo "[resume] resuming from ${LATEST_CKPT}" >&2
+            RESUME_ARGS=(--resume_from_checkpoint "${LATEST_CKPT}")
+        fi
+    else
+        echo "[resume] resuming from ${RESUME}" >&2
+        RESUME_ARGS=(--resume_from_checkpoint "${RESUME}")
+    fi
+fi
 
 swift rlhf \
     --rlhf_type grpo \
@@ -86,4 +103,5 @@ swift rlhf \
     --epsilon 0.2 \
     --epsilon_high 0.28 \
     --scale_rewards none \
-    --output_dir "${OUTPUT_DIR}"
+    --output_dir "${OUTPUT_DIR}" \
+    "${RESUME_ARGS[@]}"
