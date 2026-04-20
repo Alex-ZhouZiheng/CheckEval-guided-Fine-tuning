@@ -65,6 +65,7 @@ models/
 *.tflite
 hf_cache/
 .cache/
+checkpoints/
 
 # ────────────────────────── Data ─────────────────────────────
 # Raw + processed datasets should live outside git.

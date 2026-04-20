@@ -39,7 +39,7 @@ from rich.console import Console
 from rich.table import Table
 
 import config as cfg
-from eval.run_generator_infer import parse_generated_checklist
+from evaluation.run_generator_infer import parse_generated_checklist
 from utils import (
     CHECKEVAL_POINTWISE_PROMPT_BINARY,
     generate_batch,
