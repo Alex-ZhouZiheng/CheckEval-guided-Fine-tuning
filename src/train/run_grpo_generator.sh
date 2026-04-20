@@ -65,9 +65,8 @@ fi
 export JUDGE_MODEL="${JUDGE_MODEL:-}"
 export JUDGE_MAX_NEW_TOKENS="${JUDGE_MAX_NEW_TOKENS:-1024}"
 export JUDGE_TEMPERATURE="${JUDGE_TEMPERATURE:-0.0}"
-export TIE_DELTA="${TIE_DELTA:-0.0}"
-# CheckEval-paper aggregation: per-side score via aggregate_checklist_score.
-#   na_policy ∈ {strict, as_no, skip, partial}. "as_no" matches the paper.
+# Per-side aggregation for the continuous HelpSteer3 reward.
+#   na_policy ∈ {strict, as_no, skip, partial}. "as_no" matches the CheckEval paper.
 export CHECKEVAL_NA_POLICY="${CHECKEVAL_NA_POLICY:-as_no}"
 export CHECKEVAL_COVERAGE_THRESHOLD="${CHECKEVAL_COVERAGE_THRESHOLD:-0.8}"
 

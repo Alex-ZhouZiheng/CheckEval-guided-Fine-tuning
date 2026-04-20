@@ -35,6 +35,7 @@ This plugin registers two reward functions with ms-swift's `orms`:
 from __future__ import annotations
 
 import logging
+import math
 import os
 import sys
 from pathlib import Path
@@ -165,12 +166,36 @@ def _get_judge() -> Any:
 # ─────────────────────────── reward functions ─────────────────────────
 
 
+def _continuous_reward(s_a: float, s_b: float, c_a: float, c_b: float, p: int) -> float:
+    """HelpSteer3-aware reward combining direction / magnitude / coverage / co-high penalty.
+
+    Inputs:
+      s_a, s_b ∈ [0, 1]  per-side checklist scores from aggregate_checklist_score
+      c_a, c_b ∈ [0, 1]  per-side coverage (n_answered / expected_n)
+      p ∈ {-3,…,3}       overall_preference (neg → A wins, pos → B wins, 0 → tie)
+    """
+    delta = s_b - s_a
+    c = min(c_a, c_b)
+    m = 0.5 * (s_a + s_b)
+    if p == 0:
+        return 0.80 * math.exp(-(delta * delta) / 0.05) + 0.20 * c
+    t = p / 3.0
+    sign_t = 1.0 if t > 0 else -1.0
+    direction = 0.30 * 0.5 * (1.0 + sign_t * delta)
+    magnitude = 0.45 * math.exp(-((delta - t) ** 2) / 0.15)
+    if delta * t < 0:
+        magnitude *= 0.5
+    coverage = 0.15 * c
+    co_high = 0.20 * abs(t) * m * math.exp(-(delta * delta) / (0.12 ** 2))
+    r=direction + magnitude + coverage - co_high
+    return max(0.0, min(1.0, r))
+
+
 class CheckEvalPairwise(ORM):
-    """1.0 if judge(generated checklist) picks the ground-truth winner, else 0.0."""
+    """Continuous HelpSteer3-aware reward based on per-side CheckEval scores."""
 
     def __init__(self, *args, **kwargs) -> None:
-        self.tie_delta = float(os.environ.get("TIE_DELTA", "0.0"))
-        self.na_policy = os.environ.get("CHECKEVAL_NA_POLICY", "as_no")
+        self.na_policy = os.environ.get("CHECKEVAL_NA_POLICY", "strict")
         self.coverage_threshold = float(
             os.environ.get("CHECKEVAL_COVERAGE_THRESHOLD", "0.8")
         )
@@ -182,12 +207,19 @@ class CheckEvalPairwise(ORM):
         context: List[Any] | None = None,
         response_a: List[str] | None = None,
         response_b: List[str] | None = None,
+        overall_preference: List[Any] | None = None,
         **kwargs,
     ) -> List[float]:
-        if winner is None or context is None or response_a is None or response_b is None:
+        if (
+            winner is None
+            or context is None
+            or response_a is None
+            or response_b is None
+            or overall_preference is None
+        ):
             raise RuntimeError(
-                "CheckEvalPairwise reward needs winner/context/response_a/response_b "
-                "columns in the dataset. Use prepare_grpo_pairwise.py."
+                "CheckEvalPairwise reward needs winner/context/response_a/response_b/"
+                "overall_preference columns. Rebuild with prepare_grpo_pairwise.py."
             )
 
         # 1) Parse checklists; keep track of which completions have non-empty ones.
@@ -245,16 +277,15 @@ class CheckEvalPairwise(ORM):
             )
             if agg_a is None or agg_b is None:
                 continue
-            diff = agg_a["score"] - agg_b["score"]
-            if diff > self.tie_delta:
-                pred = "A"
-            elif diff < -self.tie_delta:
-                pred = "B"
-            else:
-                pred = "Tie"
-            gt = str(winner[i]).strip().upper()
-            if pred == gt:
-                rewards[i] = 1.0
+            s_a = float(agg_a["score"])
+            s_b = float(agg_b["score"])
+            c_a = float(agg_a.get("coverage") or 0.0)
+            c_b = float(agg_b.get("coverage") or 0.0)
+            try:
+                p = int(overall_preference[i])
+            except (TypeError, ValueError):
+                continue
+            rewards[i] = _continuous_reward(s_a, s_b, c_a, c_b, p)
         return rewards
 
 
