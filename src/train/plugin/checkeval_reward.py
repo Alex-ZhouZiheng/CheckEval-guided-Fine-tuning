@@ -167,7 +167,7 @@ def _get_judge() -> Any:
 class CheckEvalPairwise(ORM):
     """1.0 if judge(generated checklist) picks the ground-truth winner, else 0.0."""
 
-    def __init__(self) -> None:
+    def __init__(self, *args, **kwargs) -> None:
         self.tie_delta = float(os.environ.get("TIE_DELTA", "0.0"))
 
     def __call__(
@@ -239,7 +239,9 @@ class CheckEvalPairwise(ORM):
 
 class ChecklistFormat(ORM):
     """0.5 if the completion parses into at least one non-empty domain section."""
-
+    def __init__(self, *args, **kwargs) -> None:
+        pass
+    
     def __call__(self, completions: List[str], **kwargs) -> List[float]:
         out: List[float] = []
         for comp in completions:
