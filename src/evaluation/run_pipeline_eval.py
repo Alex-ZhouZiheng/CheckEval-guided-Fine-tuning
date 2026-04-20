@@ -56,9 +56,8 @@ def main() -> None:
     args = parser.parse_args()
 
     split_tag = args.subset or args.eval_split
-    if args.adapter_path:
-        adapter_path = Path(args.adapter_path).resolve()
-    model_tag = adapter_path.name if adapter_path else Path(args.base_model).name
+    adapter_path = Path(args.generator_adapter).resolve() if args.generator_adapter else None
+    model_tag = adapter_path.name if adapter_path else Path(args.generator_base).name
     gen_fname = f"{split_tag}_{model_tag}.parquet" if adapter_path else f"{split_tag}_base_{model_tag}.parquet"
     gen_out = cfg.GENERATED_CHECKLIST_DIR / gen_fname
 

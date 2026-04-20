@@ -5,6 +5,7 @@ Export a pairwise train split to a JSONL dataset consumable by ms-swift GRPO.
 Each row carries:
   * messages       - generator's system+user prompt (ready for the chat template)
   * winner, context, response_a, response_b, domain, sample_id
+  * preference_strength, overall_preference  (signed; -k → A (Response 1) wins by k, +k → B (Response 2) wins by k)
 
 ms-swift GRPO forwards every non-`messages` column into the reward plugin as
 **kwargs, so the CheckEval reward can rebuild the judge prompts per-completion.
@@ -40,7 +41,7 @@ def load_pairwise(tier: str) -> pd.DataFrame:
     if not path.exists():
         raise FileNotFoundError(f"{path} not found. Run prepare_data.py first.")
     df = pd.read_parquet(path)
-    required = {"prompt_id", "context", "response_a", "response_b", "domain", "winner"}
+    required = {"prompt_id", "context", "response_a", "response_b", "domain", "winner", "preference_strength"}
     missing = required - set(df.columns)
     if missing:
         raise ValueError(f"Pairwise parquet missing columns: {sorted(missing)}")
@@ -85,6 +86,8 @@ def main() -> None:
                 n_skipped += 1
                 continue
             msgs = build_generator_messages(row)
+            strength = int(abs(int(row["preference_strength"])))
+            overall_pref = -strength if winner == "A" else strength
             rec = {
                 "messages": msgs,
                 "winner": winner,
@@ -93,6 +96,8 @@ def main() -> None:
                 "response_b": row["response_b"],
                 "domain": row["domain"],
                 "sample_id": row["sample_id"],
+                "preference_strength": strength,
+                "overall_preference": overall_pref,
             }
             f.write(json.dumps(rec, ensure_ascii=False) + "\n")
             n_written += 1

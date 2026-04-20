@@ -66,6 +66,22 @@ export JUDGE_MODEL="${JUDGE_MODEL:-}"
 export JUDGE_MAX_NEW_TOKENS="${JUDGE_MAX_NEW_TOKENS:-1024}"
 export JUDGE_TEMPERATURE="${JUDGE_TEMPERATURE:-0.0}"
 export TIE_DELTA="${TIE_DELTA:-0.0}"
+# CheckEval-paper aggregation: per-side score via aggregate_checklist_score.
+#   na_policy ∈ {strict, as_no, skip, partial}. "as_no" matches the paper.
+export CHECKEVAL_NA_POLICY="${CHECKEVAL_NA_POLICY:-as_no}"
+export CHECKEVAL_COVERAGE_THRESHOLD="${CHECKEVAL_COVERAGE_THRESHOLD:-0.8}"
+
+# Periodic pipeline-eval (dev_600) via PipelineEvalCallback.
+export PIPELINE_EVAL_STEPS="${PIPELINE_EVAL_STEPS:-100}"
+export PIPELINE_EVAL_SUBSET="${PIPELINE_EVAL_SUBSET:-dev_600}"
+export PIPELINE_EVAL_SPLIT="${PIPELINE_EVAL_SPLIT:-dev}"
+export PIPELINE_EVAL_BATCH_SIZE="${PIPELINE_EVAL_BATCH_SIZE:-16}"
+export PIPELINE_EVAL_TIE_DELTA="${PIPELINE_EVAL_TIE_DELTA:-0.0}"
+# The eval subprocess spawns its own vLLM for generator + judge. With 2 GPUs,
+# keep training on one card and set PIPELINE_EVAL_CUDA_DEVICES to the other.
+export PIPELINE_EVAL_CUDA_DEVICES="${PIPELINE_EVAL_CUDA_DEVICES:-}"
+# Optional: judge final_adapter to wrap around the judge base during eval.
+export PIPELINE_EVAL_JUDGE_ADAPTER="${PIPELINE_EVAL_JUDGE_ADAPTER:-}"
 
 [[ -f "${DATASET_PATH}" ]] || {
   echo "[grpo] dataset not found: ${DATASET_PATH}" >&2
@@ -87,6 +103,7 @@ swift rlhf \
     --external_plugins "${PLUGIN_PATH}" \
     --reward_funcs checkeval_pairwise checklist_format \
     --reward_weights 1.0 0.1 \
+    --callbacks pipeline_eval \
     --enable_thinking false \
     --use_vllm true \
     --vllm_mode colocate \

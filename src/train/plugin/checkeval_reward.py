@@ -53,12 +53,13 @@ if str(_SRC_DIR / "eval") not in sys.path:
 import config as cfg 
 from data_process.prepare_judge_sft import build_pointwise_prompt
 from evaluation.run_generator_infer import parse_generated_checklist
-from utils import ( 
-    compare_checklists_pairwise,
+from utils import (
+    aggregate_checklist_score,
     parse_checkeval_output,
 )
 
 from swift.rewards import ORM, orms  # noqa: E402
+from swift.callbacks import TrainerCallback, callbacks_map  # noqa: E402
 
 log = logging.getLogger(__name__)
 
@@ -169,6 +170,10 @@ class CheckEvalPairwise(ORM):
 
     def __init__(self, *args, **kwargs) -> None:
         self.tie_delta = float(os.environ.get("TIE_DELTA", "0.0"))
+        self.na_policy = os.environ.get("CHECKEVAL_NA_POLICY", "as_no")
+        self.coverage_threshold = float(
+            os.environ.get("CHECKEVAL_COVERAGE_THRESHOLD", "0.8")
+        )
 
     def __call__(
         self,
@@ -226,13 +231,29 @@ class CheckEvalPairwise(ORM):
             cursor += 2
             parsed_a = parse_checkeval_output(ra, expected_n=n_q)
             parsed_b = parse_checkeval_output(rb, expected_n=n_q)
-            cmp = compare_checklists_pairwise(
-                parsed_a, parsed_b, expected_n=n_q, tie_delta=self.tie_delta
+            agg_a = aggregate_checklist_score(
+                parsed_a,
+                na_policy=self.na_policy,
+                coverage_threshold=self.coverage_threshold,
+                expected_n=n_q,
             )
-            if cmp is None:
+            agg_b = aggregate_checklist_score(
+                parsed_b,
+                na_policy=self.na_policy,
+                coverage_threshold=self.coverage_threshold,
+                expected_n=n_q,
+            )
+            if agg_a is None or agg_b is None:
                 continue
+            diff = agg_a["score"] - agg_b["score"]
+            if diff > self.tie_delta:
+                pred = "A"
+            elif diff < -self.tie_delta:
+                pred = "B"
+            else:
+                pred = "Tie"
             gt = str(winner[i]).strip().upper()
-            if cmp["winner"] == gt:
+            if pred == gt:
                 rewards[i] = 1.0
         return rewards
 
@@ -252,3 +273,99 @@ class ChecklistFormat(ORM):
 
 orms["checkeval_pairwise"] = CheckEvalPairwise
 orms["checklist_format"] = ChecklistFormat
+
+
+# ─────────────────────── periodic pipeline-eval callback ──────────────────────
+
+
+class PipelineEvalCallback(TrainerCallback):
+    """Every ``PIPELINE_EVAL_STEPS`` training steps, save the current LoRA
+    adapter to a temp dir and run ``src/evaluation/run_pipeline_eval.py`` on
+    ``PIPELINE_EVAL_SUBSET`` (default ``dev_600``) as a blocking subprocess.
+
+    Env:
+      PIPELINE_EVAL_STEPS         default 100
+      PIPELINE_EVAL_SUBSET        default dev_600
+      PIPELINE_EVAL_SPLIT         default dev
+      PIPELINE_EVAL_JUDGE_ADAPTER optional; path to judge final_adapter
+      PIPELINE_EVAL_CUDA_DEVICES  optional; overrides CUDA_VISIBLE_DEVICES
+                                   for the eval subprocess (e.g. "1")
+      PIPELINE_EVAL_BATCH_SIZE    default 16
+      PIPELINE_EVAL_TIE_DELTA     default 0.0
+    """
+
+    def __init__(self, args, trainer) -> None:
+        super().__init__()
+        self.trainer = trainer
+        self.args = args
+        self.every = int(os.environ.get("PIPELINE_EVAL_STEPS", "100"))
+        self.subset = os.environ.get("PIPELINE_EVAL_SUBSET", "dev_600")
+        self.split = os.environ.get("PIPELINE_EVAL_SPLIT", "dev")
+        self.judge_adapter = os.environ.get("PIPELINE_EVAL_JUDGE_ADAPTER") or None
+        self.eval_cuda = os.environ.get("PIPELINE_EVAL_CUDA_DEVICES") or None
+        self.batch_size = os.environ.get("PIPELINE_EVAL_BATCH_SIZE", "16")
+        self.tie_delta = os.environ.get("PIPELINE_EVAL_TIE_DELTA", "0.0")
+        self.generator_base = os.environ.get(
+            "PIPELINE_EVAL_GENERATOR_BASE", str(cfg.GENERATOR_MODEL_ID)
+        )
+        self.judge_base = os.environ.get(
+            "PIPELINE_EVAL_JUDGE_BASE", str(cfg.JUDGE_MODEL_ID)
+        )
+        log.info(
+            "PipelineEvalCallback enabled: every=%d subset=%s cuda=%s",
+            self.every, self.subset, self.eval_cuda,
+        )
+
+    def on_step_end(self, args, state, control, **kwargs):
+        if self.every <= 0 or state.global_step <= 0:
+            return
+        if state.global_step % self.every != 0:
+            return
+        # Only main process.
+        try:
+            if not self.trainer.is_world_process_zero():
+                return
+        except Exception:
+            pass
+
+        step = state.global_step
+        out_dir = Path(args.output_dir) / f"pipeline_eval_adapter_step_{step}"
+        try:
+            self.trainer.save_model(str(out_dir))
+        except Exception as e:
+            log.warning("[pipeline_eval] save_model failed at step %d: %s", step, e)
+            return
+
+        project_root = Path(__file__).resolve().parents[3]
+        script = project_root / "src" / "evaluation" / "run_pipeline_eval.py"
+        cmd = [
+            sys.executable, str(script),
+            "--generator-base", self.generator_base,
+            "--judge-base", self.judge_base,
+            "--generator-adapter", str(out_dir),
+            "--eval-split", self.split,
+            "--subset", self.subset,
+            "--batch-size", str(self.batch_size),
+            "--tie-delta", str(self.tie_delta),
+            "--experiment-suffix", f"grpo_step_{step}",
+        ]
+        if self.judge_adapter:
+            cmd += ["--judge-adapter", self.judge_adapter]
+
+        env = os.environ.copy()
+        if self.eval_cuda:
+            env["CUDA_VISIBLE_DEVICES"] = self.eval_cuda
+        # Avoid the child reusing parent's distributed-training env.
+        for k in ("RANK", "LOCAL_RANK", "WORLD_SIZE", "MASTER_ADDR",
+                  "MASTER_PORT", "LOCAL_WORLD_SIZE"):
+            env.pop(k, None)
+
+        log.info("[pipeline_eval] step=%d  launching: %s", step, " ".join(cmd))
+        import subprocess
+        try:
+            subprocess.run(cmd, check=True, env=env)
+        except subprocess.CalledProcessError as e:
+            log.warning("[pipeline_eval] step=%d failed (rc=%s)", step, e.returncode)
+
+
+callbacks_map["pipeline_eval"] = PipelineEvalCallback
