@@ -25,7 +25,9 @@ _sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)
 import argparse
 import json
 import logging
+import os
 import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date
 from pathlib import Path
 
@@ -50,6 +52,36 @@ log = logging.getLogger(__name__)
 
 
 TIE_DELTA = 0.0
+
+
+def _http_judge_generate(
+    messages_list: list[list[dict]],
+    url: str,
+    model: str,
+    api_key: str,
+    max_new_tokens: int,
+    temperature: float = 0.0,
+    concurrency: int = 32,
+) -> list[str]:
+    """Fan out chat.completions calls to a running vLLM OpenAI server."""
+    from openai import OpenAI
+
+    client = OpenAI(base_url=url, api_key=api_key)
+
+    def one(msgs: list[dict]) -> str:
+        resp = client.chat.completions.create(
+            model=model,
+            messages=msgs,
+            temperature=temperature,
+            max_tokens=max_new_tokens,
+            extra_body={"chat_template_kwargs": {"enable_thinking": False}},
+        )
+        return resp.choices[0].message.content or ""
+
+    with ThreadPoolExecutor(max_workers=concurrency) as ex:
+        return list(
+            tqdm(ex.map(one, messages_list), total=len(messages_list), desc="Judge HTTP")
+        )
 
 
 def load_eval_data(eval_split: str = "dev", subset: str | None = None) -> pd.DataFrame:
@@ -158,36 +190,56 @@ def main() -> None:
     if not keep_idx:
         raise SystemExit("No evaluable samples — regenerate checklists first.")
 
-    # vLLM with optional judge LoRA.
-    enable_lora = adapter_path is not None
-    model = load_judge_model(
-        model_id=args.base_model,
-        tensor_parallel_size=args.tensor_parallel_size,
-        max_model_len=args.max_model_len,
-        gpu_memory_utilization=args.gpu_memory_utilization,
-        enable_lora=enable_lora,
-        max_lora_rank=max(lora_rank, 16) if enable_lora else None,
-        max_loras=1 if enable_lora else None,
-    )
-    lora_request = (
-        LoRARequest(
-            lora_name=adapter_path.name,
-            lora_int_id=1,
-            lora_path=str(adapter_path),
-        )
-        if enable_lora
-        else None
-    )
-
-    t0 = time.time()
+    judge_mode = os.environ.get("JUDGE_MODE", "").lower()
     all_msgs = messages_a + messages_b
-    raw = generate_batch(
-        model, all_msgs,
-        batch_size=args.batch_size,
-        max_new_tokens=args.max_new_tokens,
-        lora_request=lora_request,
-    )
-    elapsed = time.time() - t0
+
+    if judge_mode == "http":
+        url = os.environ.get("JUDGE_URL", "http://127.0.0.1:8000/v1")
+        judge_model_name = os.environ.get("JUDGE_MODEL")
+        if not judge_model_name:
+            raise SystemExit("JUDGE_MODE=http requires JUDGE_MODEL env var.")
+        api_key = os.environ.get("JUDGE_API_KEY", "EMPTY")
+        log.info("HTTP judge → %s model=%s  (skipping local vLLM load)",
+                 url, judge_model_name)
+        if adapter_path is not None:
+            log.warning("--judge-adapter is ignored in HTTP mode; the server's "
+                        "registered adapter/model is used instead.")
+        t0 = time.time()
+        raw = _http_judge_generate(
+            all_msgs, url, judge_model_name, api_key,
+            max_new_tokens=args.max_new_tokens,
+        )
+        elapsed = time.time() - t0
+    else:
+        # vLLM with optional judge LoRA.
+        enable_lora = adapter_path is not None
+        model = load_judge_model(
+            model_id=args.base_model,
+            tensor_parallel_size=args.tensor_parallel_size,
+            max_model_len=args.max_model_len,
+            gpu_memory_utilization=args.gpu_memory_utilization,
+            enable_lora=enable_lora,
+            max_lora_rank=max(lora_rank, 16) if enable_lora else None,
+            max_loras=1 if enable_lora else None,
+        )
+        lora_request = (
+            LoRARequest(
+                lora_name=adapter_path.name,
+                lora_int_id=1,
+                lora_path=str(adapter_path),
+            )
+            if enable_lora
+            else None
+        )
+
+        t0 = time.time()
+        raw = generate_batch(
+            model, all_msgs,
+            batch_size=args.batch_size,
+            max_new_tokens=args.max_new_tokens,
+            lora_request=lora_request,
+        )
+        elapsed = time.time() - t0
     n_eval = len(messages_a)
     raw_a = raw[:n_eval]
     raw_b = raw[n_eval:]
@@ -238,12 +290,20 @@ def main() -> None:
     metrics["coverage_rate"] = n_eval / len(df) if len(df) else 0.0
     metrics["parse_rate"] = float(df_eval["checklist_parsed"].mean())
     metrics["tie_delta"] = args.tie_delta
-    metrics["judge_adapter"] = str(adapter_path) if adapter_path else "base"
+    if judge_mode == "http":
+        metrics["judge_adapter"] = f"http:{os.environ.get('JUDGE_MODEL')}"
+        metrics["judge_mode"] = "http"
+    else:
+        metrics["judge_adapter"] = str(adapter_path) if adapter_path else "base"
+        metrics["judge_mode"] = "local"
     metrics["base_model"] = args.base_model
     metrics["generated_source"] = str(Path(args.generated))
 
     split_tag = args.subset or args.eval_split
-    adapter_tag = adapter_path.name if adapter_path else "base"
+    if judge_mode == "http":
+        adapter_tag = f"httpjudge_{os.environ.get('JUDGE_MODEL', 'unknown')}"
+    else:
+        adapter_tag = adapter_path.name if adapter_path else "base"
     exp_name = f"pipeline_judge_{adapter_tag}_{split_tag}_{args.experiment_suffix}"
     save_results(df_eval, metrics, exp_name)
     log.info("Done.")

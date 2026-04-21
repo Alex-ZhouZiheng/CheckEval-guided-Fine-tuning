@@ -326,7 +326,7 @@ class PipelineEvalCallback(TrainerCallback):
     """
 
     def __init__(self, args, trainer) -> None:
-        super().__init__()
+        super().__init__(args, trainer)
         self.trainer = trainer
         self.args = args
         self.every = int(os.environ.get("PIPELINE_EVAL_STEPS", "100"))
@@ -391,12 +391,36 @@ class PipelineEvalCallback(TrainerCallback):
                   "MASTER_PORT", "LOCAL_WORLD_SIZE"):
             env.pop(k, None)
 
+        # Put the colocate rollout vLLM to sleep so the eval subprocess can
+        # allocate its own generator vLLM on the same GPU. Judge is served by
+        # the external HTTP server, so eval only needs one vLLM worth of memory.
+        rollout_engine = None
+        for attr in ("engine", "vllm_engine", "llm_engine"):
+            rollout_engine = getattr(self.trainer, attr, None)
+            if rollout_engine is not None:
+                break
+        slept = False
+        if rollout_engine is not None and hasattr(rollout_engine, "sleep"):
+            try:
+                rollout_engine.sleep(level=2)
+                slept = True
+                log.info("[pipeline_eval] rollout vLLM sleeping (level=2)")
+            except Exception as e:
+                log.warning("[pipeline_eval] rollout sleep failed: %s", e)
+
         log.info("[pipeline_eval] step=%d  launching: %s", step, " ".join(cmd))
         import subprocess
         try:
             subprocess.run(cmd, check=True, env=env)
         except subprocess.CalledProcessError as e:
             log.warning("[pipeline_eval] step=%d failed (rc=%s)", step, e.returncode)
+        finally:
+            if slept:
+                try:
+                    rollout_engine.wake_up()
+                    log.info("[pipeline_eval] rollout vLLM woken up")
+                except Exception as e:
+                    log.warning("[pipeline_eval] rollout wake_up failed: %s", e)
 
 
 callbacks_map["pipeline_eval"] = PipelineEvalCallback

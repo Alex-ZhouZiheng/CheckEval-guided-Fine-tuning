@@ -76,10 +76,12 @@ export PIPELINE_EVAL_SUBSET="${PIPELINE_EVAL_SUBSET:-dev_600}"
 export PIPELINE_EVAL_SPLIT="${PIPELINE_EVAL_SPLIT:-dev}"
 export PIPELINE_EVAL_BATCH_SIZE="${PIPELINE_EVAL_BATCH_SIZE:-16}"
 export PIPELINE_EVAL_TIE_DELTA="${PIPELINE_EVAL_TIE_DELTA:-0.0}"
-# The eval subprocess spawns its own vLLM for generator + judge. With 2 GPUs,
-# keep training on one card and set PIPELINE_EVAL_CUDA_DEVICES to the other.
-export PIPELINE_EVAL_CUDA_DEVICES="${PIPELINE_EVAL_CUDA_DEVICES:-}"
-# Optional: judge final_adapter to wrap around the judge base during eval.
+# Eval's generator vLLM runs on the SAME GPU as training (the colocate
+# rollout engine is put to sleep during eval). Eval's judge is reused from
+# the already-running judge HTTP server on its own GPU — no extra vLLM.
+export PIPELINE_EVAL_CUDA_DEVICES="${PIPELINE_EVAL_CUDA_DEVICES:-${CUDA_VISIBLE_DEVICES:-0}}"
+# Tell run_judge_eval.py to call the HTTP judge instead of loading its own vLLM.
+# (JUDGE_MODE / JUDGE_URL / JUDGE_MODEL already exported above.)
 export PIPELINE_EVAL_JUDGE_ADAPTER="${PIPELINE_EVAL_JUDGE_ADAPTER:-}"
 
 [[ -f "${DATASET_PATH}" ]] || {
