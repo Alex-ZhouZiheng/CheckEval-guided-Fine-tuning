@@ -192,10 +192,24 @@ class PairwiseEvalCallback(TrainerCallback):
         self._labels: list[int] = []
         for ex in self.dev_ds:
             msgs = ex["messages"][:-1]  # drop assistant
-            ids = tokenizer.apply_chat_template(
-                msgs, add_generation_prompt=True, return_tensors="pt",
-                chat_template_kwargs={"enable_thinking": False},
-            )[0]
+            # Pass enable_thinking directly; chat_template_kwargs is not
+            # supported in older transformers and breaks return_tensors.
+            try:
+                raw = tokenizer.apply_chat_template(
+                    msgs, add_generation_prompt=True,
+                    return_tensors="pt", enable_thinking=False,
+                )
+            except TypeError:
+                raw = tokenizer.apply_chat_template(
+                    msgs, add_generation_prompt=True, return_tensors="pt",
+                )
+            # apply_chat_template may return a 2-D tensor [1, L] or 1-D [L]
+            if isinstance(raw, torch.Tensor):
+                ids = raw[0] if raw.dim() == 2 else raw
+            else:
+                # fallback: Encoding object or list
+                token_ids = raw.ids if hasattr(raw, "ids") else list(raw)
+                ids = torch.tensor(token_ids, dtype=torch.long)
             if ids.numel() > max_length:
                 ids = ids[-max_length:]
             self._prompts.append(ids)
