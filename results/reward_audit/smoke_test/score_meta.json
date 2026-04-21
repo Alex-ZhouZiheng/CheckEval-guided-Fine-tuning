@@ -1,7 +1,7 @@
 {
   "replay_pool": "/root/autodl-tmp/Thesis/results/reward_audit/smoke_test/replay_pool.parquet",
-  "n_rows": 200,
-  "n_scored_rows": 200,
+  "n_rows": 80,
+  "n_scored_rows": 80,
   "judge_mode": "http",
   "judge_model": "judge",
   "judge_adapter": "base",

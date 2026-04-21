@@ -1,10 +1,11 @@
 {
-  "subset": "dev_600",
-  "n_rows": 50,
+  "subset": "tier_10k",
+  "n_rows": 20,
   "k": 4,
-  "n_completions": 200,
+  "n_completions": 80,
+  "source_path": "/root/autodl-tmp/Thesis/data/generator_sft/grpo_tier_10k.jsonl",
   "generator_model": "/root/autodl-tmp/Thesis/models/Qwen3.5-4B",
-  "generator_adapter": "/root/autodl-tmp/Thesis/results/checkpoints/generator_sft_debug_5k_r16_lr2e-05/final_adapter",
+  "generator_adapter": "/root/autodl-tmp/Thesis/checkpoints/grpo_final_merged_tier_5k_judge_rl_lr1e-6/v8-20260421-185013/checkpoint-100",
   "temperature": 1.0,
   "max_new_tokens": 1024,
   "seeds": [

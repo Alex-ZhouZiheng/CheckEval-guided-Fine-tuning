@@ -1,39 +1,39 @@
 {
   "format_only": {
-    "count": 200,
+    "count": 80,
     "reward_delta": {
-      "mean": -0.005,
+      "mean": 0.0125,
       "median": 0.0,
       "p25": 0.0,
       "p75": 0.0,
-      "min": -1.0,
+      "min": 0.0,
       "max": 1.0
     },
-    "parse_rate": 0.98
+    "parse_rate": 1.0
   },
   "length_only": {
-    "count": 200,
+    "count": 80,
     "reward_delta": {
-      "mean": -0.03,
+      "mean": 0.025,
       "median": 0.0,
       "p25": 0.0,
       "p75": 0.0,
-      "min": -1.0,
+      "min": 0.0,
       "max": 1.0
     },
-    "parse_rate": 0.98
+    "parse_rate": 1.0
   },
   "content_damage": {
-    "count": 200,
+    "count": 80,
     "reward_delta": {
-      "mean": 0.055,
+      "mean": 0.0375,
       "median": 0.0,
       "p25": 0.0,
       "p75": 0.0,
       "min": -1.0,
       "max": 1.0
     },
-    "parse_rate": 0.995
+    "parse_rate": 1.0
   },
   "length_only_warning": false
 }
