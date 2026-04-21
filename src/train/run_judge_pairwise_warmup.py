@@ -194,12 +194,18 @@ class PairwiseEvalCallback(TrainerCallback):
             msgs = ex["messages"][:-1]  # drop assistant
             # Pass enable_thinking directly; chat_template_kwargs is not
             # supported in older transformers and breaks return_tensors.
-            raw = tokenizer.apply_chat_template(
-                msgs, add_generation_prompt=True, tokenize=True,
+            # Some tokenizer configs ignore tokenize=True and always return a
+            # string. Force two-step: render → encode.
+            text = tokenizer.apply_chat_template(
+                msgs, add_generation_prompt=True, tokenize=False,
                 enable_thinking=False,
             )
-            # returns list[int] when tokenize=True, regardless of transformers version
-            ids = torch.tensor(raw, dtype=torch.long)
+            if not isinstance(text, str):
+                # fall back in case a version returns token ids here
+                token_ids = text if isinstance(text, list) else list(text)
+            else:
+                token_ids = tokenizer(text, add_special_tokens=False)["input_ids"]
+            ids = torch.tensor(token_ids, dtype=torch.long)
             if ids.numel() > max_length:
                 ids = ids[-max_length:]
             self._prompts.append(ids)
