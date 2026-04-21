@@ -195,7 +195,7 @@ def direction_reward(
             return 1.0 if abs(delta) <= 1e-12 else 0.0
         return max(0.0, 1.0 - abs(delta) / tie_delta)
     scale = max(dir_scale, 1e-12)
-    aligned = delta * p
+    aligned = effective_aligned_delta(delta, p, tie_delta)
     return max(-1.0, min(1.0, aligned / scale))
 
 
@@ -211,16 +211,28 @@ def winner_from_signed_delta(delta: float, tie_delta: float) -> str:
 def margin_shaping(
     delta: float,
     p: int,
+    tie_delta: float,
     margin_weight: float,
     margin_cap: float,
 ) -> float:
     """Symmetric linear shaping so wrong-direction examples get negative signal."""
     if p == 0:
         return 0.0
-    aligned = delta * p
+    aligned = effective_aligned_delta(delta, p, tie_delta)
     shaped = margin_weight * aligned
     cap = max(margin_cap, 0.0)
     return max(-cap, min(cap, shaped))
+
+
+def effective_aligned_delta(delta: float, p: int, tie_delta: float) -> float:
+    """Apply a tie dead-zone so false ties do not receive positive reward."""
+    if p == 0:
+        return 0.0
+    raw_aligned = delta * p
+    signed_mag = abs(delta) - max(tie_delta, 0.0)
+    if signed_mag <= 0.0:
+        return 0.0
+    return signed_mag if raw_aligned > 0 else -signed_mag
 
 
 def compute_reward_components(
@@ -240,11 +252,12 @@ def compute_reward_components(
     delta = s_b - s_a
     checklist_says_tie = abs(delta) <= tie_delta
     human_says_tie = (p == 0)
+    effective_aligned = effective_aligned_delta(delta, p, tie_delta)
     direction_correct = bool(human_says_tie and checklist_says_tie) or bool(
         (not human_says_tie) and (not checklist_says_tie) and (delta * p > 0)
     )
     r_dir = direction_reward(delta, p, tie_delta, dir_scale)
-    r_margin = margin_shaping(delta, p, margin_weight, margin_cap)
+    r_margin = margin_shaping(delta, p, tie_delta, margin_weight, margin_cap)
     cov_pen = 1.0 if min(c_a, c_b) < coverage_threshold else 0.0
     reward_total = (
         r_dir
@@ -254,6 +267,7 @@ def compute_reward_components(
     return {
         "delta": delta,
         "aligned": delta * p if p != 0 else 0.0,
+        "effective_aligned": effective_aligned,
         "r_dir": r_dir,
         "r_margin": r_margin,
         "cov_pen": cov_pen,
