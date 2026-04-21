@@ -28,6 +28,7 @@ from rich.console import Console
 from rich.table import Table
 
 import config as cfg
+from utils import build_vanilla_prompt
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s  %(message)s")
 log = logging.getLogger(__name__)
@@ -38,31 +39,14 @@ DPO_DIR.mkdir(parents=True, exist_ok=True)
 
 
 # ────────────────────────── conversion ──────────────────────────
-def _parse_context(context_text: str) -> list[dict]:
-    """Parse serialised context back into a chat message list.
-
-    The context field is produced by prepare_data.context_to_text() in the
-    format:  [role]\\ncontent\\n\\n[role]\\ncontent ...
-    """
-    import re
-
-    messages = []
-    blocks = re.split(r"\n\n(?=\[(?:user|assistant)\]\n)", context_text)
-    for block in blocks:
-        block = block.strip()
-        if not block:
-            continue
-        match = re.match(r"^\[(user|assistant)\]\n", block)
-        if match:
-            role = match.group(1)
-            content = block[match.end():]
-            messages.append({"role": role, "content": content})
-        else:
-            messages.append({"role": "user", "content": block})
-    return messages
-
 def pairwise_to_dpo(df: pd.DataFrame, chat_template: bool = False) -> pd.DataFrame:
-    """Convert pairwise judge format to DPO triplets.
+    """Convert pairwise judge data to DPO triplets for training a *judge* model.
+
+    The judge is trained to emit a verdict ("A" or "B") given the full
+    VANILLA_JUDGE_PROMPT (context + response_a + response_b). So:
+        prompt   = formatted judge prompt
+        chosen   = correct verdict letter
+        rejected = incorrect verdict letter
 
     Input columns:  context, response_a, response_b, winner, domain,
                     prompt_id, preference_strength
@@ -74,31 +58,29 @@ def pairwise_to_dpo(df: pd.DataFrame, chat_template: bool = False) -> pd.DataFra
     df : pd.DataFrame
         Pairwise data produced by prepare_data.py.
     chat_template : bool
-        If True, output prompt/chosen/rejected as chat message lists,
+        If True, wrap prompt/chosen/rejected as chat message lists
         compatible with trl DPOTrainer's chat template mode.
     """
     records = []
     for _, row in df.iterrows():
-        context = row["context"]
         winner = row["winner"]
-
         if winner == "A":
-            chosen = row["response_a"]
-            rejected = row["response_b"]
+            chosen_letter, rejected_letter = "A", "B"
         elif winner == "B":
-            chosen = row["response_b"]
-            rejected = row["response_a"]
+            chosen_letter, rejected_letter = "B", "A"
         else:
             continue
 
+        judge_prompt = build_vanilla_prompt(row)
+
         if chat_template:
-            prompt_val = _parse_context(context)
-            chosen_val = [{"role": "assistant", "content": chosen}]
-            rejected_val = [{"role": "assistant", "content": rejected}]
+            prompt_val = [{"role": "user", "content": judge_prompt}]
+            chosen_val = [{"role": "assistant", "content": chosen_letter}]
+            rejected_val = [{"role": "assistant", "content": rejected_letter}]
         else:
-            prompt_val = context
-            chosen_val = chosen
-            rejected_val = rejected
+            prompt_val = judge_prompt
+            chosen_val = chosen_letter
+            rejected_val = rejected_letter
 
         records.append(
             {

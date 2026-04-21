@@ -284,6 +284,9 @@ def load_base(model_id: str, qlora: bool):
     tok = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True, padding_side="right")
     if tok.pad_token is None:
         tok.pad_token = tok.eos_token
+    # Left-truncate so the assistant "A"/"B" at the tail is always preserved;
+    # otherwise over-long samples lose their label and loss goes nan.
+    tok.truncation_side = "left"
 
     kwargs = dict(trust_remote_code=True)
     if qlora:
