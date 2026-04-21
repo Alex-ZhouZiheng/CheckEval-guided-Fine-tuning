@@ -5,10 +5,17 @@
 #   1. JSONL dataset exists:
 #        python -m src.data_process.prepare_grpo_pairwise --tier tier_10k
 #   2. Judge deployment:
-#        JUDGE_MODE=http (default):
-#          bash src/train/run_judge_vllm_serve.sh
-#        JUDGE_MODE=hf (same card, slow, smoke-test only):
+#        JUDGE_MODE=http (default, required for pipeline_eval):
+#          CUDA_VISIBLE_DEVICES=1 bash src/train/run_judge_vllm_serve.sh
+#        JUDGE_MODE=hf (same card, slow, smoke-test only, no pipeline_eval):
 #          export JUDGE_MODE=hf JUDGE_MODEL_PATH=... JUDGE_ADAPTER_PATH=...
+#
+# Expected GPU topology (single-node, 2 cards):
+#   GPU 0: training (HF) + colocate rollout vLLM. During pipeline_eval the
+#          rollout engine sleeps (level>=1) and GPU 0 hosts the eval
+#          generator vLLM.
+#   GPU 1: resident judge vLLM server. Both training-time reward and
+#          pipeline_eval reach it over HTTP via JUDGE_URL.
 #
 # Usage:
 #   bash src/train/run_grpo_generator.sh
@@ -64,7 +71,7 @@ export CHECKEVAL_TIE_DELTA="${CHECKEVAL_TIE_DELTA:-0.05}"
 export CHECKEVAL_MARGIN_SIGMA="${CHECKEVAL_MARGIN_SIGMA:-0.25}"
 export CHECKEVAL_MARGIN_WEIGHT="${CHECKEVAL_MARGIN_WEIGHT:-0.2}"
 export CHECKEVAL_COV_PEN_WEIGHT="${CHECKEVAL_COV_PEN_WEIGHT:-0.3}"
-export CHECKEVAL_SAFE_TIE_CREDIT="${CHECKEVAL_SAFE_TIE_CREDIT:-0.3}"
+export CHECKEVAL_SAFE_TIE_CREDIT="${CHECKEVAL_SAFE_TIE_CREDIT:-0.15}"
 
 # Periodic pipeline-eval (dev_600) via PipelineEvalCallback.
 export PIPELINE_EVAL_STEPS="${PIPELINE_EVAL_STEPS:-100}"

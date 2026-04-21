@@ -54,7 +54,7 @@ def get_r1_reward_config() -> dict[str, float]:
         "margin_sigma": _env_float("CHECKEVAL_MARGIN_SIGMA", "0.25"),
         "margin_weight": _env_float("CHECKEVAL_MARGIN_WEIGHT", "0.2"),
         "coverage_penalty_weight": _env_float("CHECKEVAL_COV_PEN_WEIGHT", "0.3"),
-        "safe_tie_credit": _env_float("CHECKEVAL_SAFE_TIE_CREDIT", "0.3"),
+        "safe_tie_credit": _env_float("CHECKEVAL_SAFE_TIE_CREDIT", "0.15"),
     }
 
 
@@ -235,7 +235,11 @@ def compute_reward_components(
     direction_correct = bool(human_says_tie and checklist_says_tie) or bool(
         (not human_says_tie) and (not checklist_says_tie) and (delta * p > 0)
     )
-    r_dir = direction_reward(delta, p, tie_delta, safe_tie_credit)
+    # Only pay the "safe tie" credit when the checklist was actually answered;
+    # otherwise the generator learns to dodge by producing unanswerable items.
+    coverage_ok = min(c_a, c_b) >= coverage_threshold
+    effective_safe_tie_credit = safe_tie_credit if coverage_ok else 0.0
+    r_dir = direction_reward(delta, p, tie_delta, effective_safe_tie_credit)
     r_margin = margin_shaping(delta, p, margin_sigma)
     cov_pen = 1.0 if min(c_a, c_b) < coverage_threshold else 0.0
     reward_total = (
@@ -614,6 +618,18 @@ class PipelineEvalCallback(TrainerCallback):
             cmd += ["--judge-adapter", self.judge_adapter]
 
         env = os.environ.copy()
+        # Always drive pipeline-eval through the resident judge HTTP server so
+        # the eval subprocess only needs one card for the generator vLLM.
+        # (The colocate rollout engine is sleeping at level>=1 while this runs,
+        # so GPU 0 has room for the generator; the judge lives on its own card.)
+        env["JUDGE_MODE"] = "http"
+        env.setdefault("JUDGE_URL", os.environ.get("JUDGE_URL", "http://127.0.0.1:8000/v1"))
+        if not env.get("JUDGE_MODEL"):
+            log.warning(
+                "[pipeline_eval] JUDGE_MODEL not set; run_judge_eval.py will exit."
+                " Export JUDGE_MODEL to the model name registered at %s.",
+                env["JUDGE_URL"],
+            )
         if self.eval_cuda:
             env["CUDA_VISIBLE_DEVICES"] = self.eval_cuda
         for key in (
