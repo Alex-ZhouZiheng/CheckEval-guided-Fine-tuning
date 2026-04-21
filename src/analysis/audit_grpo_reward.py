@@ -36,7 +36,7 @@ from data_process.prepare_generator_sft import (
     build_generator_messages,
     format_checklist_target,
 )
-from evaluation.run_generator_infer import load_eval_data, parse_generated_checklist
+from evaluation.run_generator_infer import parse_generated_checklist
 from evaluation.run_judge_eval import _http_judge_generate
 from train.plugin.checkeval_reward import (
     compute_reward_components,
@@ -92,20 +92,130 @@ def _sanitize_name(value: str) -> str:
 
 
 def _default_subset(eval_split: str) -> str:
-    preferred = [f"{eval_split}_600", "dev_600", eval_split, "dev"]
+    preferred = [f"grpo_{eval_split}_600.jsonl", "grpo_dev_600.jsonl", f"grpo_{eval_split}.jsonl"]
     for name in preferred:
-        if (cfg.WITH_REASON_DIR / f"{name}_reasoning.parquet").exists():
-            return name
-    candidates = sorted(cfg.WITH_REASON_DIR.glob("*_reasoning.parquet"))
+        if (cfg.GENERATOR_SFT_DIR / name).exists():
+            return name.removeprefix("grpo_").removesuffix(".jsonl")
+    candidates = sorted(cfg.GENERATOR_SFT_DIR.glob("grpo_*.jsonl"))
     if not candidates:
         raise FileNotFoundError(
-            f"No reasoning parquet found under {cfg.WITH_REASON_DIR}."
+            f"No GRPO source file found under {cfg.GENERATOR_SFT_DIR}."
         )
-    return candidates[0].name.replace("_reasoning.parquet", "")
+    return candidates[0].name.removeprefix("grpo_").removesuffix(".jsonl")
 
 
 def _resolve_subset(eval_split: str, subset: str | None) -> str:
     return subset or _default_subset(eval_split)
+
+
+def _candidate_generator_source_paths(
+    base_dir: Path,
+    eval_split: str,
+    subset: str,
+) -> list[Path]:
+    tags: list[str] = []
+    for tag in [subset, eval_split, f"{eval_split}_600", "dev_600", "dev"]:
+        if tag and tag not in tags:
+            tags.append(tag)
+
+    candidates: list[Path] = []
+    seen: set[Path] = set()
+    for tag in tags:
+        for name in (
+            f"grpo_{tag}.jsonl",
+            f"{tag}.jsonl",
+            f"{tag}.parquet",
+            f"train_{tag}.parquet",
+        ):
+            path = base_dir / name
+            if path not in seen:
+                seen.add(path)
+                candidates.append(path)
+    return candidates
+
+
+def _load_jsonl_records(path: Path) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    with path.open("r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            rows.append(json.loads(line))
+    return rows
+
+
+def _normalize_source_rows(
+    rows: list[dict[str, Any]],
+    source_path: Path,
+) -> list[dict[str, Any]]:
+    normalized: list[dict[str, Any]] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            raise ValueError(f"{source_path} contains a non-dict record: {type(row)!r}")
+        normalized.append(dict(row))
+
+    if not normalized:
+        return normalized
+
+    has_messages = any(row.get("messages") is not None for row in normalized)
+    has_context = any(row.get("context") is not None for row in normalized)
+    has_responses = all(("response_a" in row and "response_b" in row) for row in normalized)
+    if not (has_messages or has_context):
+        raise ValueError(
+            f"{source_path} must provide either a 'messages' field or raw 'context' text."
+        )
+    if not has_responses:
+        raise ValueError(
+            f"{source_path} must include 'response_a' and 'response_b' for reward scoring."
+        )
+    return normalized
+
+
+def _load_generator_source_rows(
+    eval_split: str,
+    subset: str,
+    max_samples: int | None,
+    generator_data_dir: str | None,
+) -> tuple[list[dict[str, Any]], Path]:
+    base_dir = Path(generator_data_dir).resolve() if generator_data_dir else cfg.GENERATOR_SFT_DIR
+    candidate_paths = _candidate_generator_source_paths(base_dir, eval_split, subset)
+    source_path = next((path for path in candidate_paths if path.exists()), None)
+    if source_path is None:
+        searched = "\n".join(str(path) for path in candidate_paths)
+        raise FileNotFoundError(
+            "No generator-source file found. Tried:\n"
+            f"{searched}"
+        )
+
+    if source_path.suffix == ".jsonl":
+        rows = _load_jsonl_records(source_path)
+    elif source_path.suffix == ".parquet":
+        rows = pd.read_parquet(source_path).to_dict(orient="records")
+    else:
+        raise ValueError(f"Unsupported source format: {source_path}")
+
+    rows = _normalize_source_rows(rows, source_path)
+    if max_samples:
+        rows = rows[:max_samples]
+    return rows, source_path
+
+
+def _messages_from_row(row: dict[str, Any]) -> list[dict[str, str]]:
+    raw_messages = row.get("messages")
+    if raw_messages is not None:
+        parsed = raw_messages
+        if isinstance(raw_messages, str):
+            try:
+                parsed = json.loads(raw_messages)
+            except json.JSONDecodeError:
+                parsed = None
+        if isinstance(parsed, list) and parsed:
+            return parsed
+
+    if row.get("context") is None:
+        raise ValueError("Source row is missing both 'messages' and 'context'.")
+    return build_generator_messages(row)
 
 
 def _resolve_run_dir(
@@ -224,18 +334,25 @@ class JudgeRunner:
         )
 
 
-def _load_eval_rows(eval_split: str, subset: str, max_samples: int | None) -> list[dict[str, Any]]:
-    df = load_eval_data(eval_split, subset)
-    if max_samples:
-        df = df.head(max_samples).reset_index(drop=True)
-    return [row.to_dict() for _, row in df.iterrows()]
+def _load_eval_rows(
+    eval_split: str,
+    subset: str,
+    max_samples: int | None,
+    generator_data_dir: str | None,
+) -> tuple[list[dict[str, Any]], Path]:
+    return _load_generator_source_rows(eval_split, subset, max_samples, generator_data_dir)
 
 
 def replay_pool_command(args) -> Path:
     subset = _resolve_subset(args.eval_split, args.subset)
     run_name = args.run_name or f"{subset}_k{args.k}"
     run_dir = _resolve_run_dir(args.output_dir, run_name)
-    rows = _load_eval_rows(args.eval_split, subset, args.max_samples)
+    rows, source_path = _load_eval_rows(
+        args.eval_split,
+        subset,
+        args.max_samples,
+        args.generator_data_dir,
+    )
     adapter_path = _path_or_none(args.generator_adapter)
     model = _load_generator_model(
         args.generator_base,
@@ -245,13 +362,13 @@ def replay_pool_command(args) -> Path:
         gpu_memory_utilization=args.gpu_memory_utilization,
     )
     lora_request = _make_lora_request(adapter_path)
-    messages_list = [build_generator_messages(row) for row in rows]
+    messages_list = [_messages_from_row(row) for row in rows]
     records: list[dict[str, Any]] = []
     seeds = []
 
     log.info(
-        "Building replay pool: subset=%s rows=%d k=%d temp=%.2f",
-        subset, len(rows), args.k, args.temperature,
+        "Building replay pool: subset=%s rows=%d k=%d temp=%.2f source=%s",
+        subset, len(rows), args.k, args.temperature, source_path,
     )
     for k_idx in range(args.k):
         seed_value = (args.seed + k_idx) if args.seed is not None else None
@@ -324,6 +441,7 @@ def replay_pool_command(args) -> Path:
             "n_rows": len(rows),
             "k": args.k,
             "n_completions": len(records),
+            "source_path": str(source_path),
             "generator_model": args.generator_base,
             "generator_adapter": str(adapter_path) if adapter_path else "base",
             "temperature": args.temperature,
@@ -841,6 +959,7 @@ def build_parser() -> argparse.ArgumentParser:
     replay = subparsers.add_parser("replay_pool")
     replay.add_argument("--eval-split", type=str, default="dev")
     replay.add_argument("--subset", type=str, default=None)
+    replay.add_argument("--generator-data-dir", type=str, default=str(cfg.GENERATOR_SFT_DIR))
     replay.add_argument("--max-samples", type=int, default=None)
     replay.add_argument("--generator-base", type=str, default=str(cfg.GENERATOR_MODEL_ID))
     replay.add_argument("--generator-adapter", type=str, default=None)
@@ -886,6 +1005,7 @@ def build_parser() -> argparse.ArgumentParser:
     run_all = subparsers.add_parser("run_all")
     run_all.add_argument("--eval-split", type=str, default="dev")
     run_all.add_argument("--subset", type=str, default=None)
+    run_all.add_argument("--generator-data-dir", type=str, default=str(cfg.GENERATOR_SFT_DIR))
     run_all.add_argument("--max-samples", type=int, default=None)
     run_all.add_argument("--generator-base", type=str, default=str(cfg.GENERATOR_MODEL_ID))
     run_all.add_argument("--generator-adapter", type=str, default=None)
