@@ -71,13 +71,9 @@ checkpoints/
 # Raw + processed datasets should live outside git.
 data/
 datasets/
-*.parquet
-*.feather
-*.arrow
-*.tsv
-*.jsonl
+data/*.csv
+data/*.parquet
 # Large CSVs but keep small config-ish ones if needed:
-*.csv
 !src/**/schema*.csv
 
 # ────────────────────────── Training artefacts ───────────────
@@ -90,10 +86,12 @@ results/**/*.parquet
 results/**/*_predictions*/
 results/**/*_audit/
 results/**/*_na_debug/
+results/*.csv
 
 # Keep the metrics JSONs so you have a record of what ran:
 !results/**/*_metrics.json
-
+!results/reward_audit/
+!results/reward_audit/smoke_test/*.parquet
 # ────────────────────────── W&B / TB ─────────────────────────
 src/wandb/
 tb_logs/

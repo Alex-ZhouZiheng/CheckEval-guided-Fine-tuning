@@ -1,0 +1,16 @@
+{
+  "subset": "dev_600",
+  "n_rows": 50,
+  "k": 4,
+  "n_completions": 200,
+  "generator_model": "/root/autodl-tmp/Thesis/models/Qwen3.5-4B",
+  "generator_adapter": "/root/autodl-tmp/Thesis/results/checkpoints/generator_sft_debug_5k_r16_lr2e-05/final_adapter",
+  "temperature": 1.0,
+  "max_new_tokens": 1024,
+  "seeds": [
+    1234,
+    1235,
+    1236,
+    1237
+  ]
+}
