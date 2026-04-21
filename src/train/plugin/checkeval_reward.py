@@ -51,10 +51,10 @@ def _env_float(name: str, default: str) -> float:
 def get_r1_reward_config() -> dict[str, float]:
     return {
         "tie_delta": _env_float("CHECKEVAL_TIE_DELTA", "0.05"),
-        "margin_sigma": _env_float("CHECKEVAL_MARGIN_SIGMA", "0.25"),
+        "dir_scale": _env_float("CHECKEVAL_DIR_SCALE", "0.2"),
         "margin_weight": _env_float("CHECKEVAL_MARGIN_WEIGHT", "0.2"),
+        "margin_cap": _env_float("CHECKEVAL_MARGIN_CAP", "0.2"),
         "coverage_penalty_weight": _env_float("CHECKEVAL_COV_PEN_WEIGHT", "0.3"),
-        "safe_tie_credit": _env_float("CHECKEVAL_SAFE_TIE_CREDIT", "0.15"),
     }
 
 
@@ -187,32 +187,40 @@ def direction_reward(
     delta: float,
     p: int,
     tie_delta: float,
-    safe_tie_credit: float,
+    dir_scale: float,
 ) -> float:
-    """Verifiable pairwise-direction reward."""
-    checklist_says_tie = abs(delta) <= tie_delta
-    human_says_tie = (p == 0)
+    """Smooth direction reward with explicit tie handling."""
+    if p == 0:
+        if tie_delta <= 0.0:
+            return 1.0 if abs(delta) <= 1e-12 else 0.0
+        return max(0.0, 1.0 - abs(delta) / tie_delta)
+    scale = max(dir_scale, 1e-12)
+    aligned = delta * p
+    return max(-1.0, min(1.0, aligned / scale))
 
-    if human_says_tie and checklist_says_tie:
-        return 1.0
-    if human_says_tie and not checklist_says_tie:
-        return 0.0
-    if checklist_says_tie:
-        return safe_tie_credit
-    return 1.0 if (delta * p > 0) else 0.0
+
+def winner_from_signed_delta(delta: float, tie_delta: float) -> str:
+    """Map score_b - score_a onto the same tie threshold used by reward."""
+    if delta > tie_delta:
+        return "B"
+    if delta < -tie_delta:
+        return "A"
+    return "Tie"
 
 
 def margin_shaping(
     delta: float,
     p: int,
-    margin_sigma: float,
+    margin_weight: float,
+    margin_cap: float,
 ) -> float:
-    """Light shaping that only fires when direction is already correct."""
-    if p == 0 or delta * p <= 0:
+    """Symmetric linear shaping so wrong-direction examples get negative signal."""
+    if p == 0:
         return 0.0
-    target = abs(p) / 3.0
-    diff = abs(delta) - target
-    return math.exp(-(diff * diff) / (margin_sigma * margin_sigma))
+    aligned = delta * p
+    shaped = margin_weight * aligned
+    cap = max(margin_cap, 0.0)
+    return max(-cap, min(cap, shaped))
 
 
 def compute_reward_components(
@@ -224,10 +232,10 @@ def compute_reward_components(
     coverage_threshold: float,
     *,
     tie_delta: float,
-    margin_sigma: float,
+    dir_scale: float,
     margin_weight: float,
+    margin_cap: float,
     coverage_penalty_weight: float,
-    safe_tie_credit: float,
 ) -> dict[str, float | bool]:
     delta = s_b - s_a
     checklist_says_tie = abs(delta) <= tie_delta
@@ -235,20 +243,17 @@ def compute_reward_components(
     direction_correct = bool(human_says_tie and checklist_says_tie) or bool(
         (not human_says_tie) and (not checklist_says_tie) and (delta * p > 0)
     )
-    # Only pay the "safe tie" credit when the checklist was actually answered;
-    # otherwise the generator learns to dodge by producing unanswerable items.
-    coverage_ok = min(c_a, c_b) >= coverage_threshold
-    effective_safe_tie_credit = safe_tie_credit if coverage_ok else 0.0
-    r_dir = direction_reward(delta, p, tie_delta, effective_safe_tie_credit)
-    r_margin = margin_shaping(delta, p, margin_sigma)
+    r_dir = direction_reward(delta, p, tie_delta, dir_scale)
+    r_margin = margin_shaping(delta, p, margin_weight, margin_cap)
     cov_pen = 1.0 if min(c_a, c_b) < coverage_threshold else 0.0
     reward_total = (
         r_dir
-        + margin_weight * r_margin
+        + r_margin
         - coverage_penalty_weight * cov_pen
     )
     return {
         "delta": delta,
+        "aligned": delta * p if p != 0 else 0.0,
         "r_dir": r_dir,
         "r_margin": r_margin,
         "cov_pen": cov_pen,
@@ -268,10 +273,10 @@ def compute_reward(
     coverage_threshold: float,
     *,
     tie_delta: float,
-    margin_sigma: float,
+    dir_scale: float,
     margin_weight: float,
+    margin_cap: float,
     coverage_penalty_weight: float,
-    safe_tie_credit: float,
 ) -> float:
     return float(
         compute_reward_components(
@@ -282,10 +287,10 @@ def compute_reward(
             p,
             coverage_threshold,
             tie_delta=tie_delta,
-            margin_sigma=margin_sigma,
+            dir_scale=dir_scale,
             margin_weight=margin_weight,
+            margin_cap=margin_cap,
             coverage_penalty_weight=coverage_penalty_weight,
-            safe_tie_credit=safe_tie_credit,
         )["reward_total"]
     )
 
@@ -376,13 +381,14 @@ def summarize_judge_pair(
     score_b = float(agg_b["score"])
     coverage_a = float(agg_a.get("coverage") or 0.0)
     coverage_b = float(agg_b.get("coverage") or 0.0)
+    signed_delta = score_b - score_a
+    pred_winner = winner_from_signed_delta(signed_delta, tie_delta)
     cmp = compare_checklists_pairwise(
         parsed_a,
         parsed_b,
         expected_n=expected_n,
         tie_delta=tie_delta,
     )
-    signed_delta = score_b - score_a
     summary.update(
         {
             "parse_ok": True,
@@ -396,7 +402,9 @@ def summarize_judge_pair(
             "na_count_b": int(agg_b.get("n_na", 0) or 0),
             "signed_delta": signed_delta,
             "abs_delta": abs(signed_delta),
-            "pred_winner": cmp["winner"] if cmp is not None else None,
+            # Keep pairwise comparison for alignment diagnostics only; the
+            # predicted winner should match the reward-side delta thresholding.
+            "pred_winner": pred_winner,
             "n_aligned": int(cmp.get("n_aligned", 0) if cmp is not None else 0),
         }
     )
@@ -499,7 +507,7 @@ class CheckEvalPairwiseContinuousLegacy(_BaseCheckEvalPairwise):
 
 
 class CheckEvalPairwiseR1(_BaseCheckEvalPairwise):
-    """Direction-first R1-style reward with light margin shaping."""
+    """Direction-first reward with smooth direction and signed margin shaping."""
 
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
@@ -514,10 +522,10 @@ class CheckEvalPairwiseR1(_BaseCheckEvalPairwise):
             preference,
             self.coverage_threshold,
             tie_delta=float(self.r1_cfg["tie_delta"]),
-            margin_sigma=float(self.r1_cfg["margin_sigma"]),
+            dir_scale=float(self.r1_cfg["dir_scale"]),
             margin_weight=float(self.r1_cfg["margin_weight"]),
+            margin_cap=float(self.r1_cfg["margin_cap"]),
             coverage_penalty_weight=float(self.r1_cfg["coverage_penalty_weight"]),
-            safe_tie_credit=float(self.r1_cfg["safe_tie_credit"]),
         )
 
 
@@ -557,7 +565,7 @@ class PipelineEvalCallback(TrainerCallback):
       PIPELINE_EVAL_CUDA_DEVICES  optional; overrides CUDA_VISIBLE_DEVICES
                                    for the eval subprocess (e.g. "1")
       PIPELINE_EVAL_BATCH_SIZE    default 16
-      PIPELINE_EVAL_TIE_DELTA     default 0.0
+      PIPELINE_EVAL_TIE_DELTA     default 0.05
     """
 
     def __init__(self, args, trainer) -> None:
@@ -570,7 +578,10 @@ class PipelineEvalCallback(TrainerCallback):
         self.judge_adapter = os.environ.get("PIPELINE_EVAL_JUDGE_ADAPTER") or None
         self.eval_cuda = os.environ.get("PIPELINE_EVAL_CUDA_DEVICES") or None
         self.batch_size = os.environ.get("PIPELINE_EVAL_BATCH_SIZE", "16")
-        self.tie_delta = os.environ.get("PIPELINE_EVAL_TIE_DELTA", "0.0")
+        self.tie_delta = os.environ.get(
+            "PIPELINE_EVAL_TIE_DELTA",
+            str(get_r1_reward_config()["tie_delta"]),
+        )
         self.generator_base = os.environ.get(
             "PIPELINE_EVAL_GENERATOR_BASE", str(cfg.GENERATOR_MODEL_ID)
         )

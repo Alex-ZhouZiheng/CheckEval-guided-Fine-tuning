@@ -49,7 +49,7 @@ def main() -> None:
     parser.add_argument("--subset", type=str, default=None)
     parser.add_argument("--batch-size", type=int, default=16)
     parser.add_argument("--max-samples", type=int, default=None)
-    parser.add_argument("--tie-delta", type=float, default=0.0)
+    parser.add_argument("--tie-delta", type=float, default=0.05)
     parser.add_argument("--skip-generator", action="store_true",
                         help="Reuse existing generated_checklists parquet")
     parser.add_argument("--experiment-suffix",type=str,default=None)

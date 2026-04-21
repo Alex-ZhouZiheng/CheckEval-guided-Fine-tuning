@@ -8,7 +8,8 @@ Pipeline per sample:
   2. Build two pointwise CheckEval prompts (side A, side B) over the same
      flattened question list.
   3. Batch-generate with the judge adapter.
-  4. Parse Yes/No/N/A, pairwise-aggregate with ``compare_checklists_pairwise``.
+  4. Parse Yes/No/N/A, aggregate per-side scores, and derive the winner from
+     ``signed_delta`` with the configured tie threshold.
   5. Compute accuracy / macro-F1 / per-domain metrics, persist results.
 
 Usage:
@@ -39,6 +40,7 @@ import config as cfg
 from data_process.prepare_judge_sft import build_pointwise_prompt
 from run_generator_infer import parse_generated_checklist
 from utils import (
+    aggregate_checklist_score,
     compare_checklists_pairwise,
     compute_metrics,
     generate_batch,
@@ -51,7 +53,17 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s  %(message)s")
 log = logging.getLogger(__name__)
 
 
-TIE_DELTA = 0.0
+TIE_DELTA = 0.05
+NA_POLICY = os.environ.get("CHECKEVAL_NA_POLICY", "as_no")
+COVERAGE_THRESHOLD = float(os.environ.get("CHECKEVAL_COVERAGE_THRESHOLD", "0.8"))
+
+
+def winner_from_signed_delta(delta: float, tie_delta: float) -> str:
+    if delta > tie_delta:
+        return "B"
+    if delta < -tie_delta:
+        return "A"
+    return "Tie"
 
 
 def _http_judge_generate(
@@ -250,6 +262,7 @@ def main() -> None:
     kept_n = [expected_ns[i] for i in keep_idx]
 
     predicted_winners: list[str | None] = []
+    signed_deltas: list[float | None] = []
     margins: list[float | None] = []
     parse_ok: list[bool] = []
     raw_a_keep: list[str] = []
@@ -258,23 +271,39 @@ def main() -> None:
     for ra, rb, n_q in tqdm(zip(raw_a, raw_b, kept_n), total=n_eval, desc="Judge parse"):
         parsed_a = parse_checkeval_output(ra, expected_n=n_q)
         parsed_b = parse_checkeval_output(rb, expected_n=n_q)
+        agg_a = aggregate_checklist_score(
+            parsed_a,
+            na_policy=NA_POLICY,
+            coverage_threshold=COVERAGE_THRESHOLD,
+            expected_n=n_q,
+        )
+        agg_b = aggregate_checklist_score(
+            parsed_b,
+            na_policy=NA_POLICY,
+            coverage_threshold=COVERAGE_THRESHOLD,
+            expected_n=n_q,
+        )
         cmp = compare_checklists_pairwise(parsed_a, parsed_b,
                                           expected_n=n_q,
                                           tie_delta=args.tie_delta)
         raw_a_keep.append(ra)
         raw_b_keep.append(rb)
-        if cmp is None:
+        if agg_a is None or agg_b is None:
             predicted_winners.append(None)
+            signed_deltas.append(None)
             margins.append(None)
             parse_ok.append(False)
         else:
-            predicted_winners.append(cmp["winner"])
-            margins.append(cmp["margin"])
+            signed_delta = float(agg_b["score"]) - float(agg_a["score"])
+            predicted_winners.append(winner_from_signed_delta(signed_delta, args.tie_delta))
+            signed_deltas.append(signed_delta)
+            margins.append(cmp["margin"] if cmp is not None else None)
             parse_ok.append(True)
 
     df_eval["raw_output_a"] = raw_a_keep
     df_eval["raw_output_b"] = raw_b_keep
     df_eval["expected_n"] = kept_n
+    df_eval["signed_delta"] = signed_deltas
     df_eval["margin"] = margins
     df_eval["predicted_winner"] = predicted_winners
     df_eval["checklist_parsed"] = parse_ok
@@ -290,6 +319,8 @@ def main() -> None:
     metrics["coverage_rate"] = n_eval / len(df) if len(df) else 0.0
     metrics["parse_rate"] = float(df_eval["checklist_parsed"].mean())
     metrics["tie_delta"] = args.tie_delta
+    metrics["na_policy"] = NA_POLICY
+    metrics["coverage_threshold"] = COVERAGE_THRESHOLD
     if judge_mode == "http":
         metrics["judge_adapter"] = f"http:{os.environ.get('JUDGE_MODEL')}"
         metrics["judge_mode"] = "http"

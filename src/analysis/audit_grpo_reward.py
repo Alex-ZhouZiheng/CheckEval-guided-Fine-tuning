@@ -575,10 +575,10 @@ def score_pool_df(df: pd.DataFrame, args) -> pd.DataFrame:
                         preference,
                         float(os.environ.get("CHECKEVAL_COVERAGE_THRESHOLD", "0.8")),
                         tie_delta=float(reward_cfg["tie_delta"]),
-                        margin_sigma=float(reward_cfg["margin_sigma"]),
+                        dir_scale=float(reward_cfg["dir_scale"]),
                         margin_weight=float(reward_cfg["margin_weight"]),
+                        margin_cap=float(reward_cfg["margin_cap"]),
                         coverage_penalty_weight=float(reward_cfg["coverage_penalty_weight"]),
-                        safe_tie_credit=float(reward_cfg["safe_tie_credit"]),
                     )
                     record["r_dir"] = float(reward_parts["r_dir"])
                     record["r_margin"] = float(reward_parts["r_margin"])
