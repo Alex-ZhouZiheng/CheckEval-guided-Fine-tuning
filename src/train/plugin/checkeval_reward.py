@@ -1,36 +1,15 @@
 """
 CheckEval judge-in-the-loop reward plugin for ms-swift GRPO.
 
-The generator being trained produces a checklist; a FROZEN judge (base Qwen3.5
-+ optional LoRA adapter) answers that checklist pointwise for side A and side
-B; `compare_checklists_pairwise` aggregates into a predicted winner; reward is
-1.0 if the predicted winner matches the ground-truth winner, else 0.0. A
-second ORM provides a small format reward so cold-start generators that emit
-no valid sections get a gradient signal.
+The generator being trained produces a checklist; a frozen judge answers that
+checklist pointwise for side A and side B; rewards are computed from the
+aggregated per-side scores.
 
-Two judge deployment modes, selectable via env var ``JUDGE_MODE``:
-
-  * ``http`` (default) — judge runs as an OpenAI-compatible vLLM server; we
-    call ``/v1/chat/completions``. Zero GPU contention with the colocate
-    generator vLLM. See ``src/train/run_judge_vllm_serve.sh``.
-      Env: JUDGE_URL (default http://127.0.0.1:8000/v1)
-           JUDGE_MODEL  (model name registered at server start; adapter name
-                         if you passed --lora-modules)
-           JUDGE_API_KEY (default "EMPTY")
-
-  * ``hf`` — same-process HuggingFace transformers. Simple but slow; good for
-    smoke tests on a single GPU.
-      Env: JUDGE_MODEL_PATH   (default: cfg.JUDGE_MODEL_ID)
-           JUDGE_ADAPTER_PATH (optional PEFT adapter dir)
-
-Common env:
-  JUDGE_MAX_NEW_TOKENS  (default 512)
-  JUDGE_TEMPERATURE     (default 0.0)
-  TIE_DELTA             (default 0.0)
-
-This plugin registers two reward functions with ms-swift's `orms`:
-  * ``checkeval_pairwise`` — 0/1 judge-agreement reward
-  * ``checklist_format``   — 0/1 any-domain-parsed reward
+Registered reward functions:
+  * ``checkeval_pairwise`` - compatibility alias to the legacy continuous reward
+  * ``checkeval_pairwise_continuous_legacy`` - prior continuous reward
+  * ``checkeval_pairwise_r1`` - direction-first R1-style reward
+  * ``checklist_format`` - 0.5 if a completion parses into any non-empty domain
 """
 from __future__ import annotations
 
@@ -51,21 +30,32 @@ if str(_SRC_DIR / "data_process") not in sys.path:
 if str(_SRC_DIR / "eval") not in sys.path:
     sys.path.insert(0, str(_SRC_DIR / "eval"))
 
-import config as cfg 
+import config as cfg
 from data_process.prepare_judge_sft import build_pointwise_prompt
 from evaluation.run_generator_infer import parse_generated_checklist
+from swift.callbacks import TrainerCallback, callbacks_map  # noqa: E402
+from swift.rewards import ORM, orms  # noqa: E402
 from utils import (
     aggregate_checklist_score,
+    compare_checklists_pairwise,
     parse_checkeval_output,
 )
-
-from swift.rewards import ORM, orms  # noqa: E402
-from swift.callbacks import TrainerCallback, callbacks_map  # noqa: E402
 
 log = logging.getLogger(__name__)
 
 
-# ─────────────────────────── judge backends ───────────────────────────
+def _env_float(name: str, default: str) -> float:
+    return float(os.environ.get(name, default))
+
+
+def get_r1_reward_config() -> dict[str, float]:
+    return {
+        "tie_delta": _env_float("CHECKEVAL_TIE_DELTA", "0.05"),
+        "margin_sigma": _env_float("CHECKEVAL_MARGIN_SIGMA", "0.25"),
+        "margin_weight": _env_float("CHECKEVAL_MARGIN_WEIGHT", "0.2"),
+        "coverage_penalty_weight": _env_float("CHECKEVAL_COV_PEN_WEIGHT", "0.3"),
+        "safe_tie_credit": _env_float("CHECKEVAL_SAFE_TIE_CREDIT", "0.3"),
+    }
 
 
 class _HttpJudge:
@@ -75,19 +65,19 @@ class _HttpJudge:
         from openai import OpenAI
 
         self.url = os.environ.get("JUDGE_URL", "http://127.0.0.1:8000/v1")
-        self.model = os.environ["JUDGE_MODEL"]  # must be set
+        self.model = os.environ["JUDGE_MODEL"]
         self.api_key = os.environ.get("JUDGE_API_KEY", "EMPTY")
         self.max_new_tokens = int(os.environ.get("JUDGE_MAX_NEW_TOKENS", "512"))
         self.temperature = float(os.environ.get("JUDGE_TEMPERATURE", "0.0"))
         self.client = OpenAI(base_url=self.url, api_key=self.api_key)
-        log.info("HttpJudge → %s  model=%s", self.url, self.model)
+        log.info("HttpJudge -> %s model=%s", self.url, self.model)
 
     def generate(self, prompts: List[str]) -> List[str]:
         out: List[str] = []
-        for p in prompts:
+        for prompt in prompts:
             resp = self.client.chat.completions.create(
                 model=self.model,
-                messages=[{"role": "user", "content": p}],
+                messages=[{"role": "user", "content": prompt}],
                 temperature=self.temperature,
                 max_tokens=self.max_new_tokens,
                 extra_body={"chat_template_kwargs": {"enable_thinking": False}},
@@ -118,6 +108,7 @@ class _HfJudge:
         )
         if adapter_path:
             from peft import PeftModel
+
             self.model = PeftModel.from_pretrained(self.model, adapter_path)
         self.model.eval()
 
@@ -125,8 +116,8 @@ class _HfJudge:
         import torch
 
         out: List[str] = []
-        for p in prompts:
-            msgs = [{"role": "user", "content": p}]
+        for prompt in prompts:
+            msgs = [{"role": "user", "content": prompt}]
             text = self.tokenizer.apply_chat_template(
                 msgs,
                 tokenize=False,
@@ -163,49 +154,260 @@ def _get_judge() -> Any:
     return _JUDGE_SINGLETON
 
 
-# ─────────────────────────── reward functions ─────────────────────────
-
-
-def _continuous_reward(s_a: float, s_b: float, c_a: float, c_b: float, p: int) -> float:
-    """HelpSteer3-aware reward combining direction / magnitude / coverage / co-tie penalty.
-
-    Inputs:
-      s_a, s_b ∈ [0, 1]  per-side checklist scores from aggregate_checklist_score
-      c_a, c_b ∈ [0, 1]  per-side coverage (n_answered / expected_n)
-      p ∈ {-3,…,3}       overall_preference (neg → A wins, pos → B wins, 0 → tie)
-
-    Design notes:
-      * Non-tie weights (0.333 / 0.500 / 0.167) sum to 1.0, so the non-tie
-        branch can reach the same upper bound as the tie branch.
-      * ``direction`` is clipped at 0, so ``delta = 0`` (no judgment) scores
-        the same as the wrong direction — removes the hedging safe-default.
-      * ``co_tie`` depends on ``(1 − |delta|)`` instead of the mean score, so
-        "both low" is penalized just as heavily as "both high" when ``p ≠ 0``.
-    """
+def compute_continuous_reward(
+    s_a: float,
+    s_b: float,
+    c_a: float,
+    c_b: float,
+    p: int,
+) -> float:
+    """Legacy HelpSteer3-aware reward kept for compatibility."""
     delta = s_b - s_a
-    c = min(c_a, c_b)
+    coverage = min(c_a, c_b)
     if p == 0:
-        return 0.80 * math.exp(-(delta * delta) / 0.05) + 0.20 * c
-    t = p / 3.0
-    sign_t = 1.0 if t > 0 else -1.0
+        return 0.80 * math.exp(-(delta * delta) / 0.05) + 0.20 * coverage
+    target = p / 3.0
+    sign_t = 1.0 if target > 0 else -1.0
     direction = 0.333 * max(0.0, sign_t * delta)
-    magnitude = 0.500 * math.exp(-((delta - t) ** 2) / 0.15)
-    if delta * t < 0:
+    magnitude = 0.500 * math.exp(-((delta - target) ** 2) / 0.15)
+    if delta * target < 0:
         magnitude *= 0.5
-    coverage = 0.167 * c
-    co_tie = 0.20 * abs(t) * (1.0 - abs(delta)) * math.exp(-(delta * delta) / (0.12 ** 2))
-    r = direction + magnitude + coverage - co_tie
-    return max(0.0, min(1.0, r))
+    coverage_term = 0.167 * coverage
+    co_tie = (
+        0.20
+        * abs(target)
+        * (1.0 - abs(delta))
+        * math.exp(-(delta * delta) / (0.12 ** 2))
+    )
+    reward = direction + magnitude + coverage_term - co_tie
+    return max(0.0, min(1.0, reward))
 
 
-class CheckEvalPairwise(ORM):
-    """Continuous HelpSteer3-aware reward based on per-side CheckEval scores."""
+def direction_reward(
+    delta: float,
+    p: int,
+    tie_delta: float,
+    safe_tie_credit: float,
+) -> float:
+    """Verifiable pairwise-direction reward."""
+    checklist_says_tie = abs(delta) <= tie_delta
+    human_says_tie = (p == 0)
 
+    if human_says_tie and checklist_says_tie:
+        return 1.0
+    if human_says_tie and not checklist_says_tie:
+        return 0.0
+    if checklist_says_tie:
+        return safe_tie_credit
+    return 1.0 if (delta * p > 0) else 0.0
+
+
+def margin_shaping(
+    delta: float,
+    p: int,
+    margin_sigma: float,
+) -> float:
+    """Light shaping that only fires when direction is already correct."""
+    if p == 0 or delta * p <= 0:
+        return 0.0
+    target = abs(p) / 3.0
+    diff = abs(delta) - target
+    return math.exp(-(diff * diff) / (margin_sigma * margin_sigma))
+
+
+def compute_reward_components(
+    s_a: float,
+    s_b: float,
+    c_a: float,
+    c_b: float,
+    p: int,
+    coverage_threshold: float,
+    *,
+    tie_delta: float,
+    margin_sigma: float,
+    margin_weight: float,
+    coverage_penalty_weight: float,
+    safe_tie_credit: float,
+) -> dict[str, float | bool]:
+    delta = s_b - s_a
+    checklist_says_tie = abs(delta) <= tie_delta
+    human_says_tie = (p == 0)
+    direction_correct = bool(human_says_tie and checklist_says_tie) or bool(
+        (not human_says_tie) and (not checklist_says_tie) and (delta * p > 0)
+    )
+    r_dir = direction_reward(delta, p, tie_delta, safe_tie_credit)
+    r_margin = margin_shaping(delta, p, margin_sigma)
+    cov_pen = 1.0 if min(c_a, c_b) < coverage_threshold else 0.0
+    reward_total = (
+        r_dir
+        + margin_weight * r_margin
+        - coverage_penalty_weight * cov_pen
+    )
+    return {
+        "delta": delta,
+        "r_dir": r_dir,
+        "r_margin": r_margin,
+        "cov_pen": cov_pen,
+        "reward_total": reward_total,
+        "checklist_says_tie": checklist_says_tie,
+        "human_says_tie": human_says_tie,
+        "direction_correct": direction_correct,
+    }
+
+
+def compute_reward(
+    s_a: float,
+    s_b: float,
+    c_a: float,
+    c_b: float,
+    p: int,
+    coverage_threshold: float,
+    *,
+    tie_delta: float,
+    margin_sigma: float,
+    margin_weight: float,
+    coverage_penalty_weight: float,
+    safe_tie_credit: float,
+) -> float:
+    return float(
+        compute_reward_components(
+            s_a,
+            s_b,
+            c_a,
+            c_b,
+            p,
+            coverage_threshold,
+            tie_delta=tie_delta,
+            margin_sigma=margin_sigma,
+            margin_weight=margin_weight,
+            coverage_penalty_weight=coverage_penalty_weight,
+            safe_tie_credit=safe_tie_credit,
+        )["reward_total"]
+    )
+
+
+def gold_winner_from_preference(p: int) -> str:
+    if p > 0:
+        return "B"
+    if p < 0:
+        return "A"
+    return "Tie"
+
+
+def prepare_completion_pointwise_prompts(
+    completion: str,
+    row: dict[str, Any],
+) -> dict[str, Any] | None:
+    per_domain = parse_generated_checklist(completion or "")
+    if not any(per_domain.values()):
+        return None
+    prompt_a, n_q = build_pointwise_prompt(row, per_domain, "A")
+    prompt_b, _ = build_pointwise_prompt(row, per_domain, "B")
+    if n_q == 0:
+        return None
+    return {
+        "prompt_a": prompt_a,
+        "prompt_b": prompt_b,
+        "expected_n": n_q,
+        "per_domain": per_domain,
+        "format_valid": True,
+        "n_questions": sum(len(v) for v in per_domain.values()),
+    }
+
+
+def summarize_judge_pair(
+    raw_a: str,
+    raw_b: str,
+    *,
+    expected_n: int,
+    na_policy: str,
+    coverage_threshold: float,
+    tie_delta: float,
+) -> dict[str, Any]:
+    parsed_a = parse_checkeval_output(raw_a, expected_n=expected_n)
+    parsed_b = parse_checkeval_output(raw_b, expected_n=expected_n)
+    agg_a = aggregate_checklist_score(
+        parsed_a,
+        na_policy=na_policy,
+        coverage_threshold=coverage_threshold,
+        expected_n=expected_n,
+    )
+    agg_b = aggregate_checklist_score(
+        parsed_b,
+        na_policy=na_policy,
+        coverage_threshold=coverage_threshold,
+        expected_n=expected_n,
+    )
+    coverage_a = (
+        float(parsed_a.get("n_questions_parsed", 0)) / expected_n
+        if expected_n > 0 else 0.0
+    )
+    coverage_b = (
+        float(parsed_b.get("n_questions_parsed", 0)) / expected_n
+        if expected_n > 0 else 0.0
+    )
+    summary: dict[str, Any] = {
+        "parse_ok": False,
+        "parsed_a": parsed_a,
+        "parsed_b": parsed_b,
+        "agg_a": agg_a,
+        "agg_b": agg_b,
+        "score_a": None,
+        "score_b": None,
+        "coverage_a": coverage_a,
+        "coverage_b": coverage_b,
+        "n_answered_a": int(parsed_a.get("n_questions_parsed", 0) or 0),
+        "n_answered_b": int(parsed_b.get("n_questions_parsed", 0) or 0),
+        "na_count_a": int(parsed_a.get("n_na", 0) or 0),
+        "na_count_b": int(parsed_b.get("n_na", 0) or 0),
+        "signed_delta": None,
+        "abs_delta": None,
+        "pred_winner": None,
+        "n_aligned": 0,
+    }
+    if agg_a is None or agg_b is None:
+        return summary
+
+    score_a = float(agg_a["score"])
+    score_b = float(agg_b["score"])
+    coverage_a = float(agg_a.get("coverage") or 0.0)
+    coverage_b = float(agg_b.get("coverage") or 0.0)
+    cmp = compare_checklists_pairwise(
+        parsed_a,
+        parsed_b,
+        expected_n=expected_n,
+        tie_delta=tie_delta,
+    )
+    signed_delta = score_b - score_a
+    summary.update(
+        {
+            "parse_ok": True,
+            "score_a": score_a,
+            "score_b": score_b,
+            "coverage_a": coverage_a,
+            "coverage_b": coverage_b,
+            "n_answered_a": int(agg_a.get("n_answered", 0) or 0),
+            "n_answered_b": int(agg_b.get("n_answered", 0) or 0),
+            "na_count_a": int(agg_a.get("n_na", 0) or 0),
+            "na_count_b": int(agg_b.get("n_na", 0) or 0),
+            "signed_delta": signed_delta,
+            "abs_delta": abs(signed_delta),
+            "pred_winner": cmp["winner"] if cmp is not None else None,
+            "n_aligned": int(cmp.get("n_aligned", 0) if cmp is not None else 0),
+        }
+    )
+    return summary
+
+
+class _BaseCheckEvalPairwise(ORM):
     def __init__(self, *args, **kwargs) -> None:
-        self.na_policy = os.environ.get("CHECKEVAL_NA_POLICY", "strict")
+        self.na_policy = os.environ.get("CHECKEVAL_NA_POLICY", "as_no")
         self.coverage_threshold = float(
             os.environ.get("CHECKEVAL_COVERAGE_THRESHOLD", "0.8")
         )
+
+    def score_summary(self, summary: dict[str, Any], preference: int) -> float:
+        raise NotImplementedError
 
     def __call__(
         self,
@@ -229,78 +431,98 @@ class CheckEvalPairwise(ORM):
                 "overall_preference columns. Rebuild with prepare_grpo_pairwise.py."
             )
 
-        # 1) Parse checklists; keep track of which completions have non-empty ones.
         pointwise_prompts: List[str] = []
-        meta: List[tuple[int, int] | None] = []  # (idx, expected_n) or None if skipped
+        meta: List[tuple[int, int] | None] = []
         for i, comp in enumerate(completions):
-            per_domain = parse_generated_checklist(comp or "")
-            if not any(per_domain.values()):
-                meta.append(None)
-                continue
             row = {
                 "context": context[i],
                 "response_a": response_a[i],
                 "response_b": response_b[i],
             }
-            prompt_a, n_q = build_pointwise_prompt(row, per_domain, "A")
-            prompt_b, _ = build_pointwise_prompt(row, per_domain, "B")
-            if n_q == 0:
+            prepared = prepare_completion_pointwise_prompts(comp or "", row)
+            if prepared is None:
                 meta.append(None)
                 continue
-            pointwise_prompts.append(prompt_a)
-            pointwise_prompts.append(prompt_b)
-            meta.append((i, n_q))
+            pointwise_prompts.append(prepared["prompt_a"])
+            pointwise_prompts.append(prepared["prompt_b"])
+            meta.append((i, int(prepared["expected_n"])))
 
-        # 2) Single batched judge call (both sides concatenated).
         rewards = [0.0] * len(completions)
         if not pointwise_prompts:
             return rewards
 
         judge = _get_judge()
         raw = judge.generate(pointwise_prompts)
+        tie_delta = get_r1_reward_config()["tie_delta"]
 
-        # 3) Parse pairwise verdicts, compute 0/1 reward.
         cursor = 0
         for m in meta:
             if m is None:
                 continue
-            i, n_q = m
-            ra = raw[cursor]
-            rb = raw[cursor + 1]
+            i, expected_n = m
+            raw_a = raw[cursor]
+            raw_b = raw[cursor + 1]
             cursor += 2
-            parsed_a = parse_checkeval_output(ra, expected_n=n_q)
-            parsed_b = parse_checkeval_output(rb, expected_n=n_q)
-            agg_a = aggregate_checklist_score(
-                parsed_a,
+            summary = summarize_judge_pair(
+                raw_a,
+                raw_b,
+                expected_n=expected_n,
                 na_policy=self.na_policy,
                 coverage_threshold=self.coverage_threshold,
-                expected_n=n_q,
+                tie_delta=tie_delta,
             )
-            agg_b = aggregate_checklist_score(
-                parsed_b,
-                na_policy=self.na_policy,
-                coverage_threshold=self.coverage_threshold,
-                expected_n=n_q,
-            )
-            if agg_a is None or agg_b is None:
+            if not summary["parse_ok"]:
                 continue
-            s_a = float(agg_a["score"])
-            s_b = float(agg_b["score"])
-            c_a = float(agg_a.get("coverage") or 0.0)
-            c_b = float(agg_b.get("coverage") or 0.0)
             try:
-                p = int(overall_preference[i])
+                preference = int(overall_preference[i])
             except (TypeError, ValueError):
                 continue
-            rewards[i] = _continuous_reward(s_a, s_b, c_a, c_b, p)
+            rewards[i] = self.score_summary(summary, preference)
         return rewards
+
+
+class CheckEvalPairwiseContinuousLegacy(_BaseCheckEvalPairwise):
+    """Legacy continuous HelpSteer3-aware reward based on per-side CheckEval scores."""
+
+    def score_summary(self, summary: dict[str, Any], preference: int) -> float:
+        return compute_continuous_reward(
+            float(summary["score_a"]),
+            float(summary["score_b"]),
+            float(summary["coverage_a"]),
+            float(summary["coverage_b"]),
+            preference,
+        )
+
+
+class CheckEvalPairwiseR1(_BaseCheckEvalPairwise):
+    """Direction-first R1-style reward with light margin shaping."""
+
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self.r1_cfg = get_r1_reward_config()
+
+    def score_summary(self, summary: dict[str, Any], preference: int) -> float:
+        return compute_reward(
+            float(summary["score_a"]),
+            float(summary["score_b"]),
+            float(summary["coverage_a"]),
+            float(summary["coverage_b"]),
+            preference,
+            self.coverage_threshold,
+            tie_delta=float(self.r1_cfg["tie_delta"]),
+            margin_sigma=float(self.r1_cfg["margin_sigma"]),
+            margin_weight=float(self.r1_cfg["margin_weight"]),
+            coverage_penalty_weight=float(self.r1_cfg["coverage_penalty_weight"]),
+            safe_tie_credit=float(self.r1_cfg["safe_tie_credit"]),
+        )
 
 
 class ChecklistFormat(ORM):
     """0.5 if the completion parses into at least one non-empty domain section."""
+
     def __init__(self, *args, **kwargs) -> None:
         pass
-    
+
     def __call__(self, completions: List[str], **kwargs) -> List[float]:
         out: List[float] = []
         for comp in completions:
@@ -309,11 +531,13 @@ class ChecklistFormat(ORM):
         return out
 
 
-orms["checkeval_pairwise"] = CheckEvalPairwise
+CheckEvalPairwise = CheckEvalPairwiseContinuousLegacy
+
+
+orms["checkeval_pairwise"] = CheckEvalPairwiseContinuousLegacy
+orms["checkeval_pairwise_continuous_legacy"] = CheckEvalPairwiseContinuousLegacy
+orms["checkeval_pairwise_r1"] = CheckEvalPairwiseR1
 orms["checklist_format"] = ChecklistFormat
-
-
-# ─────────────────────── periodic pipeline-eval callback ──────────────────────
 
 
 class PipelineEvalCallback(TrainerCallback):
@@ -333,7 +557,7 @@ class PipelineEvalCallback(TrainerCallback):
     """
 
     def __init__(self, args, trainer) -> None:
-        super().__init__(args,trainer)
+        super().__init__(args, trainer)
         self.trainer = trainer
         self.args = args
         self.every = int(os.environ.get("PIPELINE_EVAL_STEPS", "100"))
@@ -359,7 +583,6 @@ class PipelineEvalCallback(TrainerCallback):
             return
         if state.global_step % self.every != 0:
             return
-        # Only main process.
         try:
             if not self.trainer.is_world_process_zero():
                 return
@@ -370,8 +593,8 @@ class PipelineEvalCallback(TrainerCallback):
         out_dir = Path(args.output_dir) / f"pipeline_eval_adapter_step_{step}"
         try:
             self.trainer.save_model(str(out_dir))
-        except Exception as e:
-            log.warning("[pipeline_eval] save_model failed at step %d: %s", step, e)
+        except Exception as exc:
+            log.warning("[pipeline_eval] save_model failed at step %d: %s", step, exc)
             return
 
         project_root = Path(__file__).resolve().parents[3]
@@ -393,14 +616,16 @@ class PipelineEvalCallback(TrainerCallback):
         env = os.environ.copy()
         if self.eval_cuda:
             env["CUDA_VISIBLE_DEVICES"] = self.eval_cuda
-        # Avoid the child reusing parent's distributed-training env.
-        for k in ("RANK", "LOCAL_RANK", "WORLD_SIZE", "MASTER_ADDR",
-                  "MASTER_PORT", "LOCAL_WORLD_SIZE"):
-            env.pop(k, None)
+        for key in (
+            "RANK",
+            "LOCAL_RANK",
+            "WORLD_SIZE",
+            "MASTER_ADDR",
+            "MASTER_PORT",
+            "LOCAL_WORLD_SIZE",
+        ):
+            env.pop(key, None)
 
-        # Put the colocate rollout vLLM to sleep so the eval subprocess can
-        # allocate its own generator vLLM on the same GPU. Judge is served by
-        # the external HTTP server, so eval only needs one vLLM worth of memory.
         rollout_engine = None
         for attr in ("engine", "vllm_engine", "llm_engine"):
             rollout_engine = getattr(self.trainer, attr, None)
@@ -412,22 +637,23 @@ class PipelineEvalCallback(TrainerCallback):
                 rollout_engine.sleep(level=2)
                 slept = True
                 log.info("[pipeline_eval] rollout vLLM sleeping (level=2)")
-            except Exception as e:
-                log.warning("[pipeline_eval] rollout sleep failed: %s", e)
+            except Exception as exc:
+                log.warning("[pipeline_eval] rollout sleep failed: %s", exc)
 
-        log.info("[pipeline_eval] step=%d  launching: %s", step, " ".join(cmd))
+        log.info("[pipeline_eval] step=%d launching: %s", step, " ".join(cmd))
         import subprocess
+
         try:
-            subprocess.run(cmd, check=True, env=env)
-        except subprocess.CalledProcessError as e:
-            log.warning("[pipeline_eval] step=%d failed (rc=%s)", step, e.returncode)
+            subprocess.run(cmd, check=True, env=env, cwd=str(project_root))
+        except Exception as exc:
+            log.warning("[pipeline_eval] eval failed at step %d: %s", step, exc)
         finally:
-            if slept:
+            if slept and rollout_engine is not None and hasattr(rollout_engine, "wake_up"):
                 try:
                     rollout_engine.wake_up()
                     log.info("[pipeline_eval] rollout vLLM woken up")
-                except Exception as e:
-                    log.warning("[pipeline_eval] rollout wake_up failed: %s", e)
+                except Exception as exc:
+                    log.warning("[pipeline_eval] rollout wake_up failed: %s", exc)
 
 
 callbacks_map["pipeline_eval"] = PipelineEvalCallback
