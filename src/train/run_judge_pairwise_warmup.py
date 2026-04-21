@@ -22,8 +22,14 @@ Early stopping signals (checked each eval step):
     All three must hold for N consecutive evals (--patience) to stop.
 
 Usage:
+    # single GPU
     python run_judge_pairwise_warmup.py --tier tier_10k
-    python run_judge_pairwise_warmup.py --tier tier_10k \\
+
+    # 2-GPU DDP (recommended on the 2x-GPU server)
+    torchrun --nproc_per_node=2 run_judge_pairwise_warmup.py --tier tier_10k
+
+    # resume from a prior SFT adapter
+    torchrun --nproc_per_node=2 run_judge_pairwise_warmup.py --tier tier_10k \\
         --resume-adapter results/checkpoints/judge_sft_tier_10k_r16_lr1e-05/final_adapter
 """
 from __future__ import annotations
@@ -59,6 +65,12 @@ from train.run_judge_sft import _AssistantOnlyCollator, _apply_liger
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s  %(message)s")
 log = logging.getLogger(__name__)
+
+_LOCAL_RANK = int(os.environ.get("LOCAL_RANK", "0"))
+_WORLD_SIZE = int(os.environ.get("WORLD_SIZE", "1"))
+_IS_MAIN = _LOCAL_RANK == 0
+if not _IS_MAIN:
+    log.setLevel(logging.WARNING)
 
 _apply_liger()
 
@@ -197,14 +209,17 @@ class PairwiseEvalCallback(TrainerCallback):
         model = kwargs.get("model")
         if model is None:
             return
+        # All ranks run the same forward on the same dev prompts so DDP's
+        # forward-pass collectives stay in sync; only rank 0 logs/decides.
         m = self._eval(model)
-        log.info(
-            "[warmup-eval step=%d] acc=%.4f  macro_f1=%.4f  frac_pred_A=%.3f  p(A)=%.3f",
-            state.global_step, m["pairwise_acc"], m["macro_f1"],
-            m["frac_pred_A"], m["mean_prob_A"],
-        )
-        if state.log_history is not None:
-            state.log_history.append({"step": state.global_step, **{f"eval_{k}": v for k, v in m.items()}})
+        if _IS_MAIN:
+            log.info(
+                "[warmup-eval step=%d] acc=%.4f  macro_f1=%.4f  frac_pred_A=%.3f  p(A)=%.3f",
+                state.global_step, m["pairwise_acc"], m["macro_f1"],
+                m["frac_pred_A"], m["mean_prob_A"],
+            )
+            if state.log_history is not None:
+                state.log_history.append({"step": state.global_step, **{f"eval_{k}": v for k, v in m.items()}})
 
         ok = (
             m["pairwise_acc"] > self.acc_th
@@ -213,7 +228,8 @@ class PairwiseEvalCallback(TrainerCallback):
         )
         self._hits = self._hits + 1 if ok else 0
         if self._hits >= self.patience:
-            log.info("Early-stop: thresholds held for %d consecutive evals.", self._hits)
+            if _IS_MAIN:
+                log.info("Early-stop: thresholds held for %d consecutive evals.", self._hits)
             control.should_training_stop = True
         return control
 
@@ -371,6 +387,8 @@ def main():
         seed=cfg.SEED,
         dataloader_num_workers=2,
         remove_unused_columns=False,
+        ddp_find_unused_parameters=False,
+        ddp_backend="nccl" if _WORLD_SIZE > 1 else None,
     )
 
     # NOTE: SFTTrainer's built-in eval_loss is cheap but does not report accuracy;
@@ -404,7 +422,11 @@ def main():
 
     final_dir = output_dir / "final_adapter"
     trainer.save_model(str(final_dir))
-    tok.save_pretrained(str(final_dir))
+    if _IS_MAIN:
+        tok.save_pretrained(str(final_dir))
+
+    if not _IS_MAIN:
+        return
 
     meta = {
         "tier": args.tier, "model_id": args.model_id,
