@@ -332,7 +332,7 @@ def main():
     # eval / early-stop
     p.add_argument("--eval-every", type=int, default=100, help="Eval every N optimizer steps.")
     p.add_argument("--max-eval-samples", type=int, default=500)
-    p.add_argument("--acc-threshold", type=float, default=0.70,
+    p.add_argument("--acc-threshold", type=float, default=0.78,
                    help="Prompt-only baseline on dev is ~0.66-0.70; set above yours.")
     p.add_argument("--f1-threshold", type=float, default=0.65)
     p.add_argument("--balance-tol", type=float, default=0.12,
