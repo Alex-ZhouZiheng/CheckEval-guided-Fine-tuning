@@ -25,10 +25,10 @@ python run_dpo_train.py --tier tier_10k --lora-rank 32 --lora-alpha 64
 python run_dpo_train.py --tier tier_10k --model-id /path/to/your/model
 
 """
-
+from __future__ import annotations
 import os as _os, sys as _sys
 _sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
-from __future__ import annotations
+
 
 import argparse
 import json
