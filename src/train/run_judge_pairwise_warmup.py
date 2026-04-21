@@ -75,6 +75,40 @@ if not _IS_MAIN:
 _apply_liger()
 
 
+# ───────────────────────── adapter loading ──────────────
+def _load_adapter_with_patched_targets(
+    model, adapter_path: str, is_trainable: bool = True
+):
+    """Load a LoRA adapter, overriding target_modules if the saved config
+    contains a stale / wrong regex (e.g. from a VLM checkpoint that has a
+    'model.language_model' prefix that doesn't exist in a pure-LM base)."""
+    import json, shutil, tempfile
+
+    cfg_file = Path(adapter_path) / "adapter_config.json"
+    with open(cfg_file, encoding="utf-8") as f:
+        adapter_cfg = json.load(f)
+
+    saved_targets = adapter_cfg.get("target_modules", [])
+    needs_patch = isinstance(saved_targets, str) or (
+        isinstance(saved_targets, list)
+        and any("language_model" in str(t) for t in saved_targets)
+    )
+
+    if needs_patch:
+        log.info(
+            "Patching adapter target_modules: %s  →  %s",
+            saved_targets, cfg.LORA_TARGET_MODULES,
+        )
+        adapter_cfg["target_modules"] = list(cfg.LORA_TARGET_MODULES)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            shutil.copytree(adapter_path, tmpdir, dirs_exist_ok=True)
+            with open(Path(tmpdir) / "adapter_config.json", "w", encoding="utf-8") as f:
+                json.dump(adapter_cfg, f, indent=2)
+            return PeftModel.from_pretrained(model, tmpdir, is_trainable=is_trainable)
+    else:
+        return PeftModel.from_pretrained(model, adapter_path, is_trainable=is_trainable)
+
+
 # ───────────────────────── data ─────────────────────────
 def _build_messages(row: pd.Series, swap: bool) -> list[dict]:
     """Build chat messages. If swap=True, swap A/B to reduce position bias."""
@@ -334,7 +368,9 @@ def main():
 
     if args.resume_adapter:
         log.info("Resuming from adapter: %s (merge=%s)", args.resume_adapter, args.merge_resume)
-        model = PeftModel.from_pretrained(model, args.resume_adapter, is_trainable=not args.merge_resume)
+        model = _load_adapter_with_patched_targets(
+            model, args.resume_adapter, is_trainable=not args.merge_resume,
+        )
         if args.merge_resume:
             model = model.merge_and_unload()
             log.info("  Merged prior adapter into base; fresh LoRA will be attached by SFTTrainer.")
