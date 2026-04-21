@@ -17,10 +17,10 @@ Usage:
         --adapter-path results/checkpoints/dpo_debug_5k_.../final_adapter \\
         --eval-mode both --batch-size 16
 """
-
+from __future__ import annotations
 import os as _os, sys as _sys
 _sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
-from __future__ import annotations
+
 
 import argparse
 import json
@@ -240,6 +240,11 @@ def main():
         default=TIE_DELTA,
         help="Margin threshold for Tie in pairwise checklist scoring (|margin| <= tie_delta → Tie).",
     )
+    parser.add_argument(
+        "--run-name",
+        type=str,
+        default=None
+    )   
     args = parser.parse_args()
 
     adapter_path = Path(args.adapter_path).resolve()
@@ -343,7 +348,10 @@ def main():
 
         time_now = date.today()
 
-        experiment_name = f"finetuned_checkeval_{adapter_name}_{split_tag}_{time_now}"
+        if args.run_name:
+            experiment_name = f"finetuned_checkeval_{adapter_name}_{split_tag}_{args.run_name}_{time_now}"
+        else:
+            experiment_name = f"finetuned_checkeval_{adapter_name}_{split_tag}_{time_now}"
         save_results(results, metrics, experiment_name)
 
     log.info("Done.")
