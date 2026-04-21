@@ -167,27 +167,34 @@ def _get_judge() -> Any:
 
 
 def _continuous_reward(s_a: float, s_b: float, c_a: float, c_b: float, p: int) -> float:
-    """HelpSteer3-aware reward combining direction / magnitude / coverage / co-high penalty.
+    """HelpSteer3-aware reward combining direction / magnitude / coverage / co-tie penalty.
 
     Inputs:
       s_a, s_b ∈ [0, 1]  per-side checklist scores from aggregate_checklist_score
       c_a, c_b ∈ [0, 1]  per-side coverage (n_answered / expected_n)
       p ∈ {-3,…,3}       overall_preference (neg → A wins, pos → B wins, 0 → tie)
+
+    Design notes:
+      * Non-tie weights (0.333 / 0.500 / 0.167) sum to 1.0, so the non-tie
+        branch can reach the same upper bound as the tie branch.
+      * ``direction`` is clipped at 0, so ``delta = 0`` (no judgment) scores
+        the same as the wrong direction — removes the hedging safe-default.
+      * ``co_tie`` depends on ``(1 − |delta|)`` instead of the mean score, so
+        "both low" is penalized just as heavily as "both high" when ``p ≠ 0``.
     """
     delta = s_b - s_a
     c = min(c_a, c_b)
-    m = 0.5 * (s_a + s_b)
     if p == 0:
         return 0.80 * math.exp(-(delta * delta) / 0.05) + 0.20 * c
     t = p / 3.0
     sign_t = 1.0 if t > 0 else -1.0
-    direction = 0.30 * 0.5 * (1.0 + sign_t * delta)
-    magnitude = 0.45 * math.exp(-((delta - t) ** 2) / 0.15)
+    direction = 0.333 * max(0.0, sign_t * delta)
+    magnitude = 0.500 * math.exp(-((delta - t) ** 2) / 0.15)
     if delta * t < 0:
         magnitude *= 0.5
-    coverage = 0.15 * c
-    co_high = 0.20 * abs(t) * m * math.exp(-(delta * delta) / (0.12 ** 2))
-    r=direction + magnitude + coverage - co_high
+    coverage = 0.167 * c
+    co_tie = 0.20 * abs(t) * (1.0 - abs(delta)) * math.exp(-(delta * delta) / (0.12 ** 2))
+    r = direction + magnitude + coverage - co_tie
     return max(0.0, min(1.0, r))
 
 
