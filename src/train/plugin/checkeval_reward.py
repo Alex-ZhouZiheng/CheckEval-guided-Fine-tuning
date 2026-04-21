@@ -333,7 +333,7 @@ class PipelineEvalCallback(TrainerCallback):
     """
 
     def __init__(self, args, trainer) -> None:
-        super().__init__()
+        super().__init__(args,trainer)
         self.trainer = trainer
         self.args = args
         self.every = int(os.environ.get("PIPELINE_EVAL_STEPS", "100"))
