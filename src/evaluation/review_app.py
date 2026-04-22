@@ -1,0 +1,271 @@
+"""
+Streamlit review app for teacher-model CheckEval outputs.
+
+Launch:
+    streamlit run src/evaluation/review_app.py -- \\
+        --results results/teacher_review_dev_n100_review_samples.parquet
+"""
+
+import argparse
+import json
+import sys
+from pathlib import Path
+
+import pandas as pd
+import streamlit as st
+
+# ── CLI arg for parquet path ──────────────────────────────────────────────────
+def _parse_args() -> Path:
+    # Streamlit forwards args after "--" to the script
+    raw = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else sys.argv[1:]
+    p = argparse.ArgumentParser(add_help=False)
+    p.add_argument("--results", type=Path, required=True)
+    args, _ = p.parse_known_args(raw)
+    return args.results
+
+
+# ── helpers ───────────────────────────────────────────────────────────────────
+
+def _verdict_badge(winner: str, predicted: str) -> str:
+    correct = winner == predicted
+    icon = "✅" if correct else "❌"
+    return f"{icon} True: **{winner}** | Predicted: **{predicted}**"
+
+
+def _render_parsed(parsed: dict) -> str:
+    if parsed.get("_raw_fallback"):
+        return f"**(parse failure)**\n\n```\n{parsed.get('raw_text', '')[:500]}\n```"
+    lines = []
+    for a in parsed.get("answers", []):
+        lines.append(f"Q{a['q']}: {a['answer']}")
+    for a in parsed.get("na_answers", []):
+        lines.append(f"Q{a['q']}: N/A")
+    lines_sorted = sorted(lines, key=lambda x: int(x.split(":")[0][1:]))
+    meta = (
+        f"score={parsed.get('score', '?'):.3f}  "
+        f"yes={parsed.get('n_yes')}  no={parsed.get('n_no')}  "
+        f"na={parsed.get('n_na')}  answered={parsed.get('n_questions_parsed')}"
+    )
+    return meta + "\n\n" + "\n".join(lines_sorted)
+
+
+# ── page config ───────────────────────────────────────────────────────────────
+
+st.set_page_config(
+    page_title="Teacher Review",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
+
+# ── load data ─────────────────────────────────────────────────────────────────
+
+@st.cache_data
+def load_data(path: Path, mtime: float) -> pd.DataFrame:  # mtime busts cache on file change
+    df = pd.read_parquet(path)
+    # ensure list columns are lists not strings
+    for col in ("na_qnums_a", "na_qnums_b"):
+        if col in df.columns and df[col].dtype == object:
+            df[col] = df[col].apply(
+                lambda x: json.loads(x) if isinstance(x, str) else x
+            )
+    return df
+
+
+results_path = _parse_args()
+if not results_path.exists():
+    st.error(f"File not found: {results_path}")
+    st.stop()
+
+df = load_data(results_path, results_path.stat().st_mtime)
+
+# ── sidebar ───────────────────────────────────────────────────────────────────
+
+with st.sidebar:
+    st.title("Teacher Review")
+    st.caption(f"`{results_path.name}`")
+    st.markdown(f"**{len(df)} examples** loaded")
+
+    split_filter = st.radio(
+        "Show",
+        ["All", "Wrong predictions", "Correct predictions"],
+        index=0,
+    )
+
+    domain_options = ["All"] + sorted(df["domain"].unique().tolist())
+    domain_filter = st.selectbox("Domain", domain_options)
+
+    show_prompt = st.checkbox("Show full prompts", value=False)
+    show_raw = st.checkbox("Show raw model output", value=True)
+    show_parsed = st.checkbox("Show parsed answers", value=True)
+
+# ── filter ────────────────────────────────────────────────────────────────────
+
+view = df.copy()
+if split_filter == "Wrong predictions":
+    view = view[view["_review_split"] == "wrong"]
+elif split_filter == "Correct predictions":
+    view = view[view["_review_split"] == "correct"]
+if domain_filter != "All":
+    view = view[view["domain"] == domain_filter]
+
+st.markdown(f"### Showing **{len(view)}** examples")
+
+if len(view) == 0:
+    st.info("No examples match the current filter.")
+    st.stop()
+
+# ── summary stats ─────────────────────────────────────────────────────────────
+
+n_wrong = (view["_review_split"] == "wrong").sum()
+n_correct = (view["_review_split"] == "correct").sum()
+cols = st.columns(4)
+cols[0].metric("Wrong", n_wrong)
+cols[1].metric("Correct", n_correct)
+cols[2].metric(
+    "Avg score A",
+    f"{view['score_a'].dropna().mean():.3f}" if "score_a" in view else "—",
+)
+cols[3].metric(
+    "Avg score B",
+    f"{view['score_b'].dropna().mean():.3f}" if "score_b" in view else "—",
+)
+
+st.divider()
+
+# ── example cards ─────────────────────────────────────────────────────────────
+
+for i, (_, row) in enumerate(view.iterrows()):
+    winner = str(row.get("winner", "?"))
+    predicted = str(row.get("predicted_winner", "?"))
+    domain = str(row.get("domain", "?"))
+    review_split = str(row.get("_review_split", "?"))
+    score_a = row.get("score_a")
+    score_b = row.get("score_b")
+    margin = row.get("pairwise_margin")
+
+    header_color = "🔴" if review_split == "wrong" else "🟢"
+    header = (
+        f"{header_color} **Example {i + 1}** &nbsp;|&nbsp; "
+        f"domain: `{domain}` &nbsp;|&nbsp; "
+        f"{_verdict_badge(winner, predicted)}"
+    )
+    if score_a is not None and score_b is not None:
+        header += (
+            f" &nbsp;|&nbsp; score A: `{score_a:.3f}` B: `{score_b:.3f}`"
+        )
+    if margin is not None:
+        header += f" &nbsp;|&nbsp; margin: `{margin:+.3f}`"
+
+    with st.expander(header, expanded=False):
+        # ── context / conversation ──
+        st.markdown("#### Conversation Context")
+        st.text_area(
+            "context",
+            value=str(row.get("context", "")),
+            height=200,
+            key=f"ctx_{i}",
+            label_visibility="collapsed",
+        )
+
+        left, right = st.columns(2)
+
+        with left:
+            st.markdown(f"#### Response A  (true winner: **{winner}**)")
+            st.text_area(
+                "response_a",
+                value=str(row.get("response_a", "")),
+                height=300,
+                key=f"ra_{i}",
+                label_visibility="collapsed",
+            )
+
+        with right:
+            st.markdown(f"#### Response B")
+            st.text_area(
+                "response_b",
+                value=str(row.get("response_b", "")),
+                height=300,
+                key=f"rb_{i}",
+                label_visibility="collapsed",
+            )
+
+        # ── prompts ──
+        if show_prompt and "prompt_a" in row and "prompt_b" in row:
+            st.markdown("---")
+            pl, pr = st.columns(2)
+            with pl:
+                st.markdown("**Prompt A (sent to judge)**")
+                st.text_area(
+                    "prompt_a",
+                    value=str(row.get("prompt_a", "")),
+                    height=400,
+                    key=f"pa_{i}",
+                    label_visibility="collapsed",
+                )
+            with pr:
+                st.markdown("**Prompt B (sent to judge)**")
+                st.text_area(
+                    "prompt_b",
+                    value=str(row.get("prompt_b", "")),
+                    height=400,
+                    key=f"pb_{i}",
+                    label_visibility="collapsed",
+                )
+
+        # ── raw outputs ──
+        if show_raw:
+            st.markdown("---")
+            rl, rr = st.columns(2)
+            with rl:
+                st.markdown("**Raw output A**")
+                st.text_area(
+                    "raw_a",
+                    value=str(row.get("raw_output_a", "")),
+                    height=300,
+                    key=f"raw_a_{i}",
+                    label_visibility="collapsed",
+                )
+            with rr:
+                st.markdown("**Raw output B**")
+                st.text_area(
+                    "raw_b",
+                    value=str(row.get("raw_output_b", "")),
+                    height=300,
+                    key=f"raw_b_{i}",
+                    label_visibility="collapsed",
+                )
+
+        # ── parsed answers ──
+        if show_parsed:
+            st.markdown("---")
+            parsed_a = json.loads(row["parsed_a_json"]) if "parsed_a_json" in row else {}
+            parsed_b = json.loads(row["parsed_b_json"]) if "parsed_b_json" in row else {}
+            dl, dr = st.columns(2)
+            with dl:
+                st.markdown("**Parsed answers A**")
+                st.text_area(
+                    "parsed_a",
+                    value=_render_parsed(parsed_a),
+                    height=300,
+                    key=f"pars_a_{i}",
+                    label_visibility="collapsed",
+                )
+            with dr:
+                st.markdown("**Parsed answers B**")
+                st.text_area(
+                    "parsed_b",
+                    value=_render_parsed(parsed_b),
+                    height=300,
+                    key=f"pars_b_{i}",
+                    label_visibility="collapsed",
+                )
+
+        # ── diagnostics row ──
+        st.markdown("---")
+        diag_cols = st.columns(6)
+        diag_cols[0].metric("n_yes A", row.get("n_yes_a", "—"))
+        diag_cols[1].metric("n_yes B", row.get("n_yes_b", "—"))
+        diag_cols[2].metric("n_na A", row.get("n_na_a", "—"))
+        diag_cols[3].metric("n_na B", row.get("n_na_b", "—"))
+        diag_cols[4].metric("expected Q", row.get("expected_n_questions", "—"))
+        diag_cols[5].metric("error_cat", str(row.get("error_category", "—")))
