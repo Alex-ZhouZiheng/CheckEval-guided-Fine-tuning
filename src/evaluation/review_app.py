@@ -79,6 +79,7 @@ with st.sidebar:
     show_prompt = st.checkbox("Show full prompts", value=False)
     show_raw = st.checkbox("Show raw model output", value=True)
     show_parsed = st.checkbox("Show parsed answers", value=True)
+    show_diff = st.checkbox("Show differing questions", value=True)
 
 # ── filter ────────────────────────────────────────────────────────────────────
 
@@ -241,6 +242,28 @@ for i, (_, row) in enumerate(view.iterrows()):
                     key=f"pars_b_{i}",
                     label_visibility="collapsed",
                 )
+
+        # ── differing questions ──
+        if show_diff and "parsed_a_json" in row and "parsed_b_json" in row:
+            st.markdown("---")
+            _parsed_a = json.loads(row["parsed_a_json"])
+            _parsed_b = json.loads(row["parsed_b_json"])
+            diffs = _diff_answers(_parsed_a, _parsed_b)
+            st.markdown(f"**Differing Questions ({len(diffs)})**")
+            if not diffs:
+                st.info("No differing answers between A and B.")
+            else:
+                q_texts = _extract_questions(str(row.get("prompt_a", "")))
+                table_rows = [
+                    f"| Q{q} | {q_texts.get(q, '_unknown_')} | {ans_a} | {ans_b} |"
+                    for q, ans_a, ans_b in diffs
+                ]
+                table = (
+                    "| Q# | Question | A | B |\n"
+                    "|-----|----------|---|---|\n"
+                    + "\n".join(table_rows)
+                )
+                st.markdown(table)
 
         # ── diagnostics row ──
         st.markdown("---")
