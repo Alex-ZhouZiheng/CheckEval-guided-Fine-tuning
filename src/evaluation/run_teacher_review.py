@@ -132,8 +132,19 @@ def main():
     log.info("Loaded %d dimensions, %d total questions", len(checklists), total_q)
 
     df = load_eval_data(args.eval_split, args.subset)
-    df = df.head(args.max_samples)
-    log.info("Using %d samples", len(df))
+    if len(df) > args.max_samples:
+        # Stratified sample by domain so all domains are represented
+        df = (
+            df.groupby("domain", group_keys=False)
+            .apply(lambda g: g.sample(
+                n=max(1, round(args.max_samples * len(g) / len(df))),
+                random_state=args.seed,
+            ))
+            .sample(frac=1, random_state=args.seed)  # shuffle
+            .head(args.max_samples)
+            .reset_index(drop=True)
+        )
+    log.info("Using %d samples (domains: %s)", len(df), df["domain"].value_counts().to_dict())
 
     model = load_judge_model(
         model_id=args.model_id,
