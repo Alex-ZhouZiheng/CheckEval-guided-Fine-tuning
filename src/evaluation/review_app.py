@@ -61,8 +61,13 @@ def load_data(path: Path, mtime: float) -> pd.DataFrame:  # mtime busts cache on
 
 results_path = _parse_args()
 if results_path is None:
-    st.error("No results file. Pass `--results /path/to/file.parquet` or set `REVIEW_RESULTS=/path/to/file.parquet`.")
-    st.stop()
+    with st.sidebar:
+        st.title("Teacher Review")
+        _input = st.text_input("Results parquet path", placeholder="/path/to/file.parquet")
+    if not _input:
+        st.info("Enter path to results parquet in the sidebar.")
+        st.stop()
+    results_path = Path(_input)
 if not results_path.exists():
     st.error(f"File not found: {results_path}")
     st.stop()
