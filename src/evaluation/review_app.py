@@ -22,12 +22,18 @@ from review_helpers import (
 )
 
 # ── CLI arg for parquet path ──────────────────────────────────────────────────
-def _parse_args() -> Path:
-    # Streamlit forwards args after "--" to the script
+def _parse_args() -> Path | None:
+    import os
+    # env var takes priority (useful when Streamlit swallows CLI args)
+    if env := os.environ.get("REVIEW_RESULTS"):
+        return Path(env)
     raw = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else sys.argv[1:]
-    p = argparse.ArgumentParser(add_help=False)
-    p.add_argument("--results", type=Path, required=True)
-    args, _ = p.parse_known_args(raw)
+    p = argparse.ArgumentParser(add_help=False, exit_on_error=False)
+    p.add_argument("--results", type=Path)
+    try:
+        args, _ = p.parse_known_args(raw)
+    except argparse.ArgumentError:
+        return None
     return args.results
 
 
@@ -54,6 +60,9 @@ def load_data(path: Path, mtime: float) -> pd.DataFrame:  # mtime busts cache on
 
 
 results_path = _parse_args()
+if results_path is None:
+    st.error("No results file. Pass `--results /path/to/file.parquet` or set `REVIEW_RESULTS=/path/to/file.parquet`.")
+    st.stop()
 if not results_path.exists():
     st.error(f"File not found: {results_path}")
     st.stop()
