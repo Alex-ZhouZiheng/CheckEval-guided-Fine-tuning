@@ -14,6 +14,13 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
+from review_helpers import (
+    _diff_answers,
+    _extract_questions,
+    _render_parsed,
+    _verdict_badge,
+)
+
 # ── CLI arg for parquet path ──────────────────────────────────────────────────
 def _parse_args() -> Path:
     # Streamlit forwards args after "--" to the script
@@ -22,31 +29,6 @@ def _parse_args() -> Path:
     p.add_argument("--results", type=Path, required=True)
     args, _ = p.parse_known_args(raw)
     return args.results
-
-
-# ── helpers ───────────────────────────────────────────────────────────────────
-
-def _verdict_badge(winner: str, predicted: str) -> str:
-    correct = winner == predicted
-    icon = "✅" if correct else "❌"
-    return f"{icon} True: **{winner}** | Predicted: **{predicted}**"
-
-
-def _render_parsed(parsed: dict) -> str:
-    if parsed.get("_raw_fallback"):
-        return f"**(parse failure)**\n\n```\n{parsed.get('raw_text', '')[:500]}\n```"
-    lines = []
-    for a in parsed.get("answers", []):
-        lines.append(f"Q{a['q']}: {a['answer']}")
-    for a in parsed.get("na_answers", []):
-        lines.append(f"Q{a['q']}: N/A")
-    lines_sorted = sorted(lines, key=lambda x: int(x.split(":")[0][1:]))
-    meta = (
-        f"score={parsed.get('score', '?'):.3f}  "
-        f"yes={parsed.get('n_yes')}  no={parsed.get('n_no')}  "
-        f"na={parsed.get('n_na')}  answered={parsed.get('n_questions_parsed')}"
-    )
-    return meta + "\n\n" + "\n".join(lines_sorted)
 
 
 # ── page config ───────────────────────────────────────────────────────────────
