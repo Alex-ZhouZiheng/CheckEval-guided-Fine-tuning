@@ -78,6 +78,7 @@ def load_judge_model(
     max_loras: int | None = None,
     quantization: str | None = None,
     load_format: str | None = None,
+    reasoning_parser: str | None = None,
 ) -> LLM:
     """Load the judge LLM through vLLM."""
     from vllm import LLM
@@ -106,6 +107,9 @@ def load_judge_model(
             engine_kwargs["max_lora_rank"] = max_lora_rank
         if max_loras is not None:
             engine_kwargs["max_loras"] = max_loras
+
+    if reasoning_parser is not None:
+        engine_kwargs["reasoning_parser"] = reasoning_parser
 
     if num_gpu_blocks_override is None:
         engine_kwargs.pop("num_gpu_blocks_override", None)

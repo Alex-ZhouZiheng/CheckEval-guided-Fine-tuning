@@ -107,6 +107,8 @@ def main():
     )
     parser.add_argument("--enable-prefix-caching", action="store_true")
     parser.add_argument("--max-num-batched-tokens", type=int, default=16384)
+    parser.add_argument("--reasoning-parser", type=str, default=None,
+                        help="vLLM reasoning parser (e.g. 'qwen3' for Qwen3 thinking models)")
     parser.add_argument("--tie-delta", type=float, default=TIE_DELTA)
     parser.add_argument(
         "--na-policy",
@@ -155,6 +157,7 @@ def main():
         max_num_seqs=args.max_num_seqs,
         enable_prefix_caching=args.enable_prefix_caching,
         max_num_batched_tokens=args.max_num_batched_tokens,
+        reasoning_parser=args.reasoning_parser,
     )
 
     t0 = time.time()
@@ -205,6 +208,34 @@ def main():
     metrics["na_policy"] = args.na_policy
     metrics["tie_delta"] = args.tie_delta
     save_results(results, metrics, experiment_name)
+
+    # ── join individual_preference from raw HelpSteer3 ──
+    if "individual_preference" not in results.columns:
+        import hashlib as _hashlib
+
+        def _ctx_to_text(ctx) -> str:
+            return "\n\n".join(f"[{t['role']}]\n{t['content']}" for t in ctx)
+
+        def _pid(text: str) -> str:
+            return _hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
+
+        needed = set(results["prompt_id"].dropna())
+        raw_dir = cfg.DATA_DIR / "raw"
+        for fname in ("helpsteer3_train.parquet", "helpsteer3_test.parquet"):
+            fpath = raw_dir / fname
+            if not fpath.exists():
+                continue
+            raw = pd.read_parquet(fpath, columns=["context", "individual_preference"])
+            if "individual_preference" not in raw.columns:
+                continue
+            raw_pids = raw["context"].apply(lambda c: _pid(_ctx_to_text(c)))
+            mask = raw_pids.isin(needed)
+            lookup = dict(zip(raw_pids[mask], raw.loc[mask, "individual_preference"]))
+            results["individual_preference"] = results["prompt_id"].map(lookup)
+            filled = results["individual_preference"].notna().sum()
+            log.info("Joined individual_preference: %d/%d rows filled from %s", filled, len(results), fname)
+            if filled == len(results):
+                break
 
     # ── select review subset ──
     review = select_review_samples(
