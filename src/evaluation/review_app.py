@@ -69,21 +69,26 @@ def _make_prompt_id(text: str) -> str:
 
 
 @st.cache_data
-def _build_individual_pref_lookup(raw_dir: Path) -> dict:
-    """Build a prompt_id -> list[dict] lookup from raw HelpSteer3 parquet files."""
+def _build_individual_pref_lookup(raw_dir: Path, needed_ids: frozenset) -> dict:
+    """Build a prompt_id -> list[dict] lookup from raw HelpSteer3 parquet files.
+
+    Only processes rows whose computed prompt_id is in needed_ids.
+    """
     lookup: dict = {}
     for fname in ("helpsteer3_train.parquet", "helpsteer3_test.parquet"):
         fpath = raw_dir / fname
         if not fpath.exists():
             continue
-        raw = pd.read_parquet(fpath)
+        raw = pd.read_parquet(fpath, columns=["context", "individual_preference"])
         if "individual_preference" not in raw.columns:
             continue
-        for _, row in raw.iterrows():
-            ctx_text = _context_to_text(row["context"])
-            pid = _make_prompt_id(ctx_text)
+        pids = raw["context"].apply(lambda c: _make_prompt_id(_context_to_text(c)))
+        mask = pids.isin(needed_ids)
+        for pid, pref in zip(pids[mask], raw.loc[mask, "individual_preference"]):
             if pid not in lookup:
-                lookup[pid] = list(row["individual_preference"])
+                lookup[pid] = list(pref)
+        if len(lookup) == len(needed_ids):
+            break
     return lookup
 
 
@@ -97,8 +102,9 @@ df = load_data(results_path, results_path.stat().st_mtime)
 # Attempt to enrich with individual_preference from the raw HelpSteer3 files.
 # The raw files live two levels up from results, under data/raw/.
 _raw_dir = results_path.parent.parent / "data" / "raw"
-if "individual_preference" not in df.columns and _raw_dir.exists():
-    _pref_lookup = _build_individual_pref_lookup(_raw_dir)
+if "individual_preference" not in df.columns and _raw_dir.exists() and "prompt_id" in df.columns:
+    _needed = frozenset(df["prompt_id"].dropna().tolist())
+    _pref_lookup = _build_individual_pref_lookup(_raw_dir, _needed)
     if _pref_lookup:
         df["individual_preference"] = df["prompt_id"].map(_pref_lookup)
 
