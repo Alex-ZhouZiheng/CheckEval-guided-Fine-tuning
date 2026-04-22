@@ -80,6 +80,12 @@ with st.sidebar:
     st.title("Teacher Review")
     st.caption(f"`{results_path.name}`")
     st.markdown(f"**{len(df)} examples** loaded")
+    if "individual_preference" not in df.columns:
+        st.warning(
+            "This file does not include `individual_preference`, so Human Reasoning "
+            "cannot be shown. If this came from `run_teacher_review.py`, prefer the "
+            "`*_review_samples.parquet` file or rerun after preparing raw/with_reason data."
+        )
 
     split_filter = st.radio(
         "Show",

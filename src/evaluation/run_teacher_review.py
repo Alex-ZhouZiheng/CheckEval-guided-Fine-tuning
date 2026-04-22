@@ -15,6 +15,7 @@ import json
 import logging
 import random
 import time
+import math
 from pathlib import Path
 
 import pandas as pd
@@ -37,6 +38,170 @@ from run_checkeval_judge import run_checkeval_judge, TIE_DELTA
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s  %(message)s")
 log = logging.getLogger(__name__)
+
+
+def stratified_sample_by_domain(
+    df: pd.DataFrame,
+    max_samples: int,
+    seed: int,
+) -> pd.DataFrame:
+    """Sample exactly ``max_samples`` rows while preserving domain mix.
+
+    This avoids the brittle ``groupby.apply(...).reset_index(...)`` pattern,
+    which can drop grouping columns on some pandas versions.
+    """
+    if len(df) <= max_samples:
+        return df.copy().reset_index(drop=True)
+
+    rng = random.Random(seed)
+    domain_counts = df["domain"].value_counts()
+    total = len(df)
+
+    base_alloc: dict[str, int] = {}
+    remainders: list[tuple[float, str]] = []
+    for domain_name, count in domain_counts.items():
+        exact = max_samples * count / total
+        take = min(count, max(1, math.floor(exact)))
+        base_alloc[domain_name] = take
+        remainders.append((exact - math.floor(exact), domain_name))
+
+    allocated = sum(base_alloc.values())
+    if allocated > max_samples:
+        for _, domain_name in sorted(remainders):
+            if allocated <= max_samples:
+                break
+            if base_alloc[domain_name] > 1:
+                base_alloc[domain_name] -= 1
+                allocated -= 1
+    elif allocated < max_samples:
+        for _, domain_name in sorted(remainders, reverse=True):
+            if allocated >= max_samples:
+                break
+            available = int(domain_counts[domain_name]) - base_alloc[domain_name]
+            if available > 0:
+                base_alloc[domain_name] += 1
+                allocated += 1
+
+    sampled_parts: list[pd.DataFrame] = []
+    for domain_name, take in base_alloc.items():
+        domain_df = df[df["domain"] == domain_name]
+        sampled_parts.append(domain_df.sample(n=take, random_state=seed))
+
+    sampled = pd.concat(sampled_parts, ignore_index=True)
+    shuffle_seed = rng.randint(0, 10**9)
+    sampled = sampled.sample(frac=1, random_state=shuffle_seed).reset_index(drop=True)
+    return sampled
+
+
+def _attach_individual_preference_from_raw(results: pd.DataFrame) -> tuple[pd.DataFrame, int, str | None]:
+    """Attach raw HelpSteer3 ``individual_preference`` if raw parquets exist."""
+    import hashlib as _hashlib
+
+    def _ctx_to_text(ctx) -> str:
+        return "\n\n".join(f"[{t['role']}]\n{t['content']}" for t in ctx)
+
+    def _pid(text: str) -> str:
+        return _hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
+
+    needed = set(results["prompt_id"].dropna())
+    raw_dir = cfg.DATA_DIR / "raw"
+    best_source = None
+    best_filled = 0
+    out = results.copy()
+
+    for fname in ("helpsteer3_train.parquet", "helpsteer3_test.parquet"):
+        fpath = raw_dir / fname
+        if not fpath.exists():
+            continue
+        raw = pd.read_parquet(fpath, columns=["context", "individual_preference"])
+        if "individual_preference" not in raw.columns:
+            continue
+        raw_pids = raw["context"].apply(lambda c: _pid(_ctx_to_text(c)))
+        mask = raw_pids.isin(needed)
+        lookup = dict(zip(raw_pids[mask], raw.loc[mask, "individual_preference"]))
+        candidate = out["prompt_id"].map(lookup)
+        filled = int(candidate.notna().sum())
+        if filled > best_filled:
+            out["individual_preference"] = candidate
+            best_filled = filled
+            best_source = fname
+        if filled == len(out):
+            break
+
+    return out, best_filled, best_source
+
+
+def _attach_individual_preference_from_reasoning_slice(
+    results: pd.DataFrame,
+    split_tag: str,
+) -> tuple[pd.DataFrame, int, str | None]:
+    """Fallback: synthesize a single reviewer record from with_reason parquet."""
+    candidates = [
+        cfg.WITH_REASON_DIR / f"{split_tag}_reasoning.parquet",
+    ]
+    if split_tag != "dev":
+        candidates.append(cfg.WITH_REASON_DIR / "dev_reasoning.parquet")
+
+    out = results.copy()
+    join_cols = ["domain", "context", "response_a", "response_b", "winner"]
+
+    for path in candidates:
+        if not path.exists():
+            continue
+        reason_df = pd.read_parquet(path)
+        if "swap_flag" in reason_df.columns:
+            reason_df = reason_df[reason_df["swap_flag"] == False].copy()
+        required = set(join_cols) | {"reasoning_text", "feedback_a_text", "feedback_b_text"}
+        if not required.issubset(reason_df.columns):
+            continue
+
+        synth = reason_df[list(join_cols) + ["reasoning_text", "feedback_a_text", "feedback_b_text"]].copy()
+        synth["individual_preference"] = synth.apply(
+            lambda row: json.dumps(
+                [{
+                    "score": None,
+                    "reasoning": row.get("reasoning_text", ""),
+                    "feedback1": row.get("feedback_a_text", ""),
+                    "feedback2": row.get("feedback_b_text", ""),
+                }],
+                ensure_ascii=False,
+            ),
+            axis=1,
+        )
+        synth = synth[join_cols + ["individual_preference"]].drop_duplicates(subset=join_cols, keep="first")
+        merged = out.merge(synth, on=join_cols, how="left", suffixes=("", "_reason"))
+        filled = int(merged["individual_preference"].notna().sum())
+        if filled:
+            return merged, filled, path.name
+
+    return out, 0, None
+
+
+def attach_human_reasoning(results: pd.DataFrame, split_tag: str) -> pd.DataFrame:
+    """Attach ``individual_preference`` from the best available local source."""
+    if "individual_preference" in results.columns:
+        return results
+
+    enriched, filled, source = _attach_individual_preference_from_raw(results)
+    if filled:
+        log.info("Joined individual_preference: %d/%d rows filled from %s", filled, len(results), source)
+        return enriched
+
+    enriched, filled, source = _attach_individual_preference_from_reasoning_slice(results, split_tag)
+    if filled:
+        log.info(
+            "Joined synthetic human reasoning: %d/%d rows filled from %s",
+            filled, len(results), source,
+        )
+        return enriched
+
+    log.warning(
+        "No individual_preference data found. Looked for raw HelpSteer3 parquets in %s "
+        "and reasoning slices in %s.",
+        cfg.RAW_DIR,
+        cfg.WITH_REASON_DIR,
+    )
+    return results
 
 
 def select_review_samples(
@@ -135,17 +300,7 @@ def main():
 
     df = load_eval_data(args.eval_split, args.subset)
     if len(df) > args.max_samples:
-        # Stratified sample by domain so all domains are represented
-        df = (
-            df.groupby("domain", group_keys=False)
-            .apply(lambda g: g.sample(
-                n=max(1, round(args.max_samples * len(g) / len(df))),
-                random_state=args.seed,
-            ))
-            .sample(frac=1, random_state=args.seed)  # shuffle
-            .head(args.max_samples)
-            .reset_index(drop=True)
-        )
+        df = stratified_sample_by_domain(df, args.max_samples, args.seed)
     log.info("Using %d samples (domains: %s)", len(df), df["domain"].value_counts().to_dict())
 
     model = load_judge_model(
@@ -207,35 +362,8 @@ def main():
     metrics["model_id"] = str(args.model_id)
     metrics["na_policy"] = args.na_policy
     metrics["tie_delta"] = args.tie_delta
+    results = attach_human_reasoning(results, split_tag)
     save_results(results, metrics, experiment_name)
-
-    # ── join individual_preference from raw HelpSteer3 ──
-    if "individual_preference" not in results.columns:
-        import hashlib as _hashlib
-
-        def _ctx_to_text(ctx) -> str:
-            return "\n\n".join(f"[{t['role']}]\n{t['content']}" for t in ctx)
-
-        def _pid(text: str) -> str:
-            return _hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
-
-        needed = set(results["prompt_id"].dropna())
-        raw_dir = cfg.DATA_DIR / "raw"
-        for fname in ("helpsteer3_train.parquet", "helpsteer3_test.parquet"):
-            fpath = raw_dir / fname
-            if not fpath.exists():
-                continue
-            raw = pd.read_parquet(fpath, columns=["context", "individual_preference"])
-            if "individual_preference" not in raw.columns:
-                continue
-            raw_pids = raw["context"].apply(lambda c: _pid(_ctx_to_text(c)))
-            mask = raw_pids.isin(needed)
-            lookup = dict(zip(raw_pids[mask], raw.loc[mask, "individual_preference"]))
-            results["individual_preference"] = results["prompt_id"].map(lookup)
-            filled = results["individual_preference"].notna().sum()
-            log.info("Joined individual_preference: %d/%d rows filled from %s", filled, len(results), fname)
-            if filled == len(results):
-                break
 
     # ── select review subset ──
     review = select_review_samples(
