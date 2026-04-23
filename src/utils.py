@@ -387,6 +387,7 @@ _SHARED_DIMS = frozenset({
     "clarity_and_communication",
     "correctness_and_completeness",
     "helpfulness_and_usefulness",
+    "relevance_instruction_following",
 })
 _CODE_DIMS = frozenset({"coding_communication_conditional"})
 

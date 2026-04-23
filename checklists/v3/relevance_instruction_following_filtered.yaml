@@ -1,0 +1,29 @@
+definition: This module evaluates whether the response follows explicit instructions, format requirements, scope constraints, and requested transformations in the prompt.
+  Many questions here are condition-triggered and should be used when the prompt contains the relevant instruction.
+dimension: relevance_instruction_following
+sub_aspects:
+  Task Adherence:
+    filtered_questions:
+    - Does the response cover each explicit request or sub-task in the user's prompt rather than answering only part of it?
+    - Does the response perform the task the user actually asked for, producing the type of output requested rather than a different kind of answer?
+    - Does the response deliver the specific artifact or action the user requested, for example an explanation, summary, translation, code snippet, or list, rather than substituting a different output format?
+    - Does the response stay focused on completing the user's requested task instead of mainly offering adjacent commentary, background information, or advice?
+    - Does the response avoid replacing the requested answer with only meta-commentary, refusal without basis, or unrelated advice?
+    original_count: 7
+    removed_count: 2
+    seed_question: Does the response perform the task the user actually asked for, producing the type of output requested rather than a different kind of answer?
+  Format and Constraint Compliance:
+    filtered_questions:
+    - If the user specifies constraints on the requested output, does the response carry out the task within those constraints rather than answering in a more generic way?
+    - Does the response follow the requested format or structure when one is explicitly specified?
+    - Does the response account for constraints mentioned in the prompt, such as time, budget, tools, or other limitations, when giving recommendations?
+    original_count: 6
+    removed_count: 3
+    seed_question: Does the response follow the requested format or structure when one is explicitly specified?
+  Source-Grounded Transformation:
+    filtered_questions:
+    - If the user requested an action on given content, does the response actually transform or use that content as requested?
+    - Does the response incorporate details explicitly provided by the user to make its guidance more relevant to the user's stated goal or problem?
+    original_count: 6
+    removed_count: 4
+    seed_question: If the user requested an action on given content, does the response actually transform or use that content as requested?
