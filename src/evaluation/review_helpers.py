@@ -1,6 +1,7 @@
 """Pure helper functions for review_app — no Streamlit dependency."""
 
 import re
+from pathlib import Path
 
 _Q_LINE_RE = re.compile(r"^Q(\d+):\s+(.+)$", re.MULTILINE)
 
@@ -31,6 +32,22 @@ def _render_parsed(parsed: dict) -> str:
 def _extract_questions(prompt: str) -> dict[int, str]:
     """Return {q_num: question_text} parsed from a CheckEval prompt string."""
     return {int(m.group(1)): m.group(2).strip() for m in _Q_LINE_RE.finditer(prompt)}
+
+
+def _load_question_meta(checklists_dir: Path | None = None) -> dict[str, tuple[str, str]]:
+    """Return {question_text: (dimension, sub_aspect)} from YAML checklist files."""
+    import yaml
+    if checklists_dir is None:
+        checklists_dir = Path(__file__).parent.parent.parent / "checklists" / "filtered"
+    meta: dict[str, tuple[str, str]] = {}
+    for yaml_path in sorted(checklists_dir.glob("*_filtered.yaml")):
+        with open(yaml_path, "r", encoding="utf-8") as f:
+            data = yaml.safe_load(f)
+        dim_name = data.get("dimension", yaml_path.stem)
+        for sub_name, sub_data in data.get("sub_aspects", {}).items():
+            for q in sub_data.get("filtered_questions", []):
+                meta[q.strip()] = (dim_name, sub_name)
+    return meta
 
 
 def _diff_answers(

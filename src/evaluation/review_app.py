@@ -17,6 +17,7 @@ import streamlit as st
 from review_helpers import (
     _diff_answers,
     _extract_questions,
+    _load_question_meta,
     _render_parsed,
     _verdict_badge,
 )
@@ -48,6 +49,11 @@ st.set_page_config(
 # ── load data ─────────────────────────────────────────────────────────────────
 
 @st.cache_data
+def _cached_question_meta() -> dict:
+    return _load_question_meta()
+
+
+@st.cache_data
 def load_data(path: Path, mtime: float) -> pd.DataFrame:  # mtime busts cache on file change
     df = pd.read_parquet(path)
     # ensure list columns are lists not strings
@@ -73,6 +79,7 @@ if not results_path.exists():
     st.stop()
 
 df = load_data(results_path, results_path.stat().st_mtime)
+q_meta = _cached_question_meta()
 
 # ── sidebar ───────────────────────────────────────────────────────────────────
 
@@ -270,18 +277,34 @@ for i, (_, row) in enumerate(view.iterrows()):
             _parsed_a = json.loads(row["parsed_a_json"])
             _parsed_b = json.loads(row["parsed_b_json"])
             diffs = _diff_answers(_parsed_a, _parsed_b)
-            st.markdown(f"**Differing Questions ({len(diffs)})**")
             if not diffs:
+                st.markdown("**Differing Questions (0)**")
                 st.info("No differing answers between A and B.")
             else:
                 q_texts = _extract_questions(str(row.get("prompt_a", "")))
-                table_rows = [
-                    f"| Q{q} | {q_texts.get(q, '_unknown_')} | {ans_a} | {ans_b} |"
-                    for q, ans_a, ans_b in diffs
-                ]
+                table_rows = []
+                n_flagged = 0
+                for q, ans_a, ans_b in diffs:
+                    q_text = q_texts.get(q, "_unknown_")
+                    dim, sub = q_meta.get(q_text, ("?", "?"))
+                    if winner == "A":
+                        flagged = ans_a.lower() == "no" and ans_b.lower() in ("yes", "n/a")
+                    else:
+                        flagged = ans_b.lower() == "no" and ans_a.lower() in ("yes", "n/a")
+                    if flagged:
+                        n_flagged += 1
+                    flag = "⚠️" if flagged else ""
+                    table_rows.append(
+                        f"| {flag} | Q{q} | {q_text} | {ans_a} | {ans_b} | {dim} | {sub} |"
+                    )
+                st.markdown(
+                    f"**Differing Questions ({len(diffs)}"
+                    + (f", ⚠️ {n_flagged} bad for winner" if n_flagged else "")
+                    + ")**"
+                )
                 table = (
-                    "| Q# | Question | A | B |\n"
-                    "|-----|----------|---|---|\n"
+                    "| | Q# | Question | A | B | Domain | Sub-aspect |\n"
+                    "|---|-----|----------|---|---|--------|------------|\n"
                     + "\n".join(table_rows)
                 )
                 st.markdown(table)

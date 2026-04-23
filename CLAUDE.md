@@ -89,3 +89,22 @@ All scripts read paths and model IDs from `src/config.py`. Experiment tracking u
 ## Domains
 
 Five evaluation domains defined in `config.py`: `correctness_completeness`, `clarity_communication`, `helpfulness_usefulness`, `coding_communication_conditional`, `relevance_instruction_following`.
+
+## HelpSteer3 Data Structure
+
+`individual_preference` is **NOT** in results parquets — stripped during `prepare_data.py`. Lives only in:
+- `data/raw/helpsteer3_train.parquet`
+- `data/raw/helpsteer3_test.parquet`
+
+Type: `numpy.ndarray` of dicts, ~3 annotators per example. Keys per dict:
+```
+score       int   e.g. -2, -1, 0, 1, 2
+reasoning   str   "@Response 1 is better because..."
+feedback1   str   per-response feedback for Response A
+feedback2   str   per-response feedback for Response B
+```
+
+Join key: `prompt_id` in results = `hashlib.sha256(context_text.encode()).hexdigest()[:16]`
+where `context_text = "\n\n".join(f"[{turn['role']}]\n{turn['content']}" for turn in context)`
+
+Review app (`src/evaluation/review_app.py`) rebuilds this join at startup via `_build_individual_pref_lookup()` scanning raw parquets.
