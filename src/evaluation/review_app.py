@@ -15,9 +15,12 @@ import pandas as pd
 import streamlit as st
 
 from review_helpers import (
+    _answer_map,
     _diff_answers,
     _extract_questions,
     _load_question_meta,
+    _load_question_meta_by_qid,
+    _parse_qid_list,
     _render_parsed,
     _verdict_badge,
 )
@@ -54,14 +57,22 @@ def _cached_question_meta() -> dict:
 
 
 @st.cache_data
+def _cached_question_meta_by_qid() -> dict:
+    return _load_question_meta_by_qid()
+
+
+@st.cache_data
 def load_data(path: Path, mtime: float) -> pd.DataFrame:  # mtime busts cache on file change
     df = pd.read_parquet(path)
     # ensure list columns are lists not strings
-    for col in ("na_qnums_a", "na_qnums_b"):
+    for col in ("na_qnums_a", "na_qnums_b", "selected_qids", "asked_qids"):
         if col in df.columns and df[col].dtype == object:
-            df[col] = df[col].apply(
-                lambda x: json.loads(x) if isinstance(x, str) else x
-            )
+            if col in {"selected_qids", "asked_qids"}:
+                df[col] = df[col].apply(_parse_qid_list)
+            else:
+                df[col] = df[col].apply(
+                    lambda x: json.loads(x) if isinstance(x, str) else x
+                )
     return df
 
 
@@ -80,6 +91,7 @@ if not results_path.exists():
 
 df = load_data(results_path, results_path.stat().st_mtime)
 q_meta = _cached_question_meta()
+q_meta_by_qid = _cached_question_meta_by_qid()
 
 # ── sidebar ───────────────────────────────────────────────────────────────────
 
@@ -106,6 +118,7 @@ with st.sidebar:
     show_prompt = st.checkbox("Show full prompts", value=False)
     show_raw = st.checkbox("Show raw model output", value=True)
     show_parsed = st.checkbox("Show parsed answers", value=True)
+    show_selector = st.checkbox("Show selector questions", value=True)
     show_diff = st.checkbox("Show differing questions", value=True)
     show_human = st.checkbox("Show human reasoning", value=True)
 
@@ -270,6 +283,63 @@ for i, (_, row) in enumerate(view.iterrows()):
                     key=f"pars_b_{i}",
                     label_visibility="collapsed",
                 )
+
+        # ── selector questions ──
+        if show_selector and ("asked_qids" in row or "selected_qids" in row):
+            st.markdown("---")
+            asked_qids = _parse_qid_list(row.get("asked_qids"))
+            selected_qids = _parse_qid_list(row.get("selected_qids"))
+            if not asked_qids:
+                asked_qids = selected_qids
+            selected_set = set(selected_qids)
+            parsed_a_for_selector = json.loads(row["parsed_a_json"]) if "parsed_a_json" in row else {}
+            parsed_b_for_selector = json.loads(row["parsed_b_json"]) if "parsed_b_json" in row else {}
+            ans_a_map = _answer_map(parsed_a_for_selector)
+            ans_b_map = _answer_map(parsed_b_for_selector)
+
+            if not asked_qids:
+                st.info("No selector qids saved for this example.")
+            else:
+                st.markdown(f"**Selector Questions ({len(asked_qids)})**")
+                table_rows = []
+                for local_q, global_qid in enumerate(asked_qids, start=1):
+                    meta = q_meta_by_qid.get(int(global_qid), {})
+                    q_text = meta.get("question_text", "_unknown_")
+                    dim = meta.get("dimension", "?")
+                    sub = meta.get("sub_aspect", "?")
+                    ans_a = ans_a_map.get(local_q, "-")
+                    ans_b = ans_b_map.get(local_q, "-")
+                    differs = ans_a != ans_b
+                    if winner == "A":
+                        bad_for_winner = ans_a.lower() == "no" and ans_b.lower() in ("yes", "n/a")
+                    else:
+                        bad_for_winner = ans_b.lower() == "no" and ans_a.lower() in ("yes", "n/a")
+                    stage = "initial" if int(global_qid) in selected_set or not selected_set else "added"
+                    flag = "bad_for_winner" if bad_for_winner else ("diff" if differs else "")
+                    table_rows.append(
+                        "| "
+                        + " | ".join(
+                            [
+                                str(local_q),
+                                str(global_qid),
+                                stage,
+                                q_text.replace("|", "\\|"),
+                                str(ans_a),
+                                str(ans_b),
+                                dim.replace("|", "\\|"),
+                                sub.replace("|", "\\|"),
+                                flag,
+                            ]
+                        )
+                        + " |"
+                    )
+
+                table = (
+                    "| Local Q | Global qid | Stage | Question | A | B | Dimension | Sub-aspect | Flag |\n"
+                    "|---:|---:|---|---|---|---|---|---|---|\n"
+                    + "\n".join(table_rows)
+                )
+                st.markdown(table)
 
         # ── differing questions ──
         if show_diff and "parsed_a_json" in row and "parsed_b_json" in row:
