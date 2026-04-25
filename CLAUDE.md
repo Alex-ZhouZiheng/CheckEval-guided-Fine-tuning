@@ -175,11 +175,13 @@ python src/train/convert_to_gguf.py lora \
     --base models/Qwen3.5-9B \
     --out models/gguf/adapters/<run>.gguf
 
-# Start llama-server (port 8080, parallel=16, ctx=16384)
+# Start llama-server (port 8080)
 bash scripts/start_llamacpp_server.sh \
     models/gguf/Qwen3.5-9B.Q4_K_M.gguf \
     models/gguf/adapters/<run>.gguf
 ```
+
+llama-server `--ctx-size` is **total** context, split across `--parallel` slots → per-slot = ctx / parallel. `start_llamacpp_server.sh` accepts `CTX_PER_SLOT` (default 16384) and `PARALLEL` (default 4) env vars; pass per-slot value, script multiplies. Symptom of misconfiguration: `exceed_context_size_error, n_ctx=1024` on 5k-token prompts.
 
 Eval scripts (`run_zeroshot.py`, `run_checkeval_judge.py`, `run_judge_eval.py`, `run_eval_finetuned.py`, `run_generator_infer.py`, `run_dynamic_eval.py`, `run_ablation.py`, `run_teacher_review.py`, `run_warmup_swap_eval.py`) accept `--backend llamacpp|vllm`. Default reads `cfg.INFERENCE_BACKEND`.
 
@@ -188,3 +190,11 @@ Server lifecycle: launch `start_llamacpp_server.sh` BEFORE running any eval. LoR
 Backend toggle precedence: `--backend` CLI flag wins over `INFERENCE_BACKEND` env var; env wins over `cfg.INFERENCE_BACKEND` default.
 
 Quant baseline: Q4_K_M (≈ AWQ-4bit). Q5_K_M ≈ 19 GB fits 5090 too. Training stays on HF/transformers (untouched).
+
+## Oracle Metrics & judge-mode Flag
+
+`build_oracle_labels.py --judge-mode local` dispatches via `load_judge_model` → `cfg.INFERENCE_BACKEND` (default llamacpp HTTP, **not** in-process). For real in-process vLLM use `INFERENCE_BACKEND=vllm`. `--judge-mode http` uses script's own OpenAI client with `--http-concurrency` (typically faster).
+
+Oracle reports both `oracle_agreement_rate_valid` (excl Tie/null, baseline-comparable) and `_total` (Tie counted as wrong). Compare `_valid` against `results/checkeval_pairwise_naaware_dev_600_v3_q9b_metrics.json` `accuracy` (baseline 0.7705 on n_valid=427). 9B Q4 GGUF reproduces baseline within ±1pp; 27B Q6 ≈ +5pp.
+
+`--review-out` only dumps samples where the true winner received 0 "yes" answers (judge missed winner entirely), not all wrong predictions. Schema differs from `*_sample.parquet` — `review_app.py` requires the review parquet (has `_review_split` column).
