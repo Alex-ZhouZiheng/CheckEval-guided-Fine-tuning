@@ -20,6 +20,7 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+import config as cfg  # noqa: E402
 from utils import (  # noqa: E402
     aggregate_checklist_score,
     build_pointwise_prompt_from_qids,
@@ -122,6 +123,107 @@ def _attach_source_fields(
         input_path,
     )
     return out
+
+
+def _attach_individual_preference_from_raw(results: pd.DataFrame) -> tuple[pd.DataFrame, int, str | None]:
+    """Attach raw HelpSteer3 individual_preference if raw parquets exist."""
+    import hashlib
+
+    def _ctx_to_text(ctx) -> str:
+        return "\n\n".join(f"[{t['role']}]\n{t['content']}" for t in ctx)
+
+    def _pid(text: str) -> str:
+        return hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
+
+    if "prompt_id" not in results.columns:
+        return results, 0, None
+
+    needed = set(results["prompt_id"].dropna().astype(str))
+    raw_dir = cfg.DATA_DIR / "raw"
+    best_source = None
+    best_filled = 0
+    out = results.copy()
+
+    for fname in ("helpsteer3_train.parquet", "helpsteer3_test.parquet"):
+        fpath = raw_dir / fname
+        if not fpath.exists():
+            continue
+        raw = pd.read_parquet(fpath, columns=["context", "individual_preference"])
+        if "individual_preference" not in raw.columns:
+            continue
+        raw_pids = raw["context"].apply(lambda c: _pid(_ctx_to_text(c))).astype(str)
+        mask = raw_pids.isin(needed)
+        lookup = dict(zip(raw_pids[mask], raw.loc[mask, "individual_preference"]))
+        candidate = out["prompt_id"].astype(str).map(lookup)
+        filled = int(candidate.notna().sum())
+        if filled > best_filled:
+            out["individual_preference"] = candidate
+            best_filled = filled
+            best_source = fname
+        if filled == len(out):
+            break
+
+    return out, best_filled, best_source
+
+
+def _attach_individual_preference_from_reasoning_slice(
+    results: pd.DataFrame,
+    split_tag: str,
+) -> tuple[pd.DataFrame, int, str | None]:
+    """Fallback: synthesize review-app human reasoning from with_reason parquet."""
+    candidates = [cfg.WITH_REASON_DIR / f"{split_tag}_reasoning.parquet"]
+    if split_tag != "dev":
+        candidates.append(cfg.WITH_REASON_DIR / "dev_reasoning.parquet")
+
+    out = results.copy()
+    join_cols = ["domain", "context", "response_a", "response_b", "winner"]
+
+    for path in candidates:
+        if not path.exists():
+            continue
+        reason_df = pd.read_parquet(path)
+        if "swap_flag" in reason_df.columns:
+            reason_df = reason_df[reason_df["swap_flag"] == False].copy()
+        required = set(join_cols) | {"reasoning_text", "feedback_a_text", "feedback_b_text"}
+        if not required.issubset(reason_df.columns):
+            continue
+
+        synth = reason_df[list(join_cols) + ["reasoning_text", "feedback_a_text", "feedback_b_text"]].copy()
+        synth["individual_preference"] = synth.apply(
+            lambda row: json.dumps(
+                [
+                    {
+                        "score": None,
+                        "reasoning": row.get("reasoning_text", ""),
+                        "feedback1": row.get("feedback_a_text", ""),
+                        "feedback2": row.get("feedback_b_text", ""),
+                    }
+                ],
+                ensure_ascii=False,
+            ),
+            axis=1,
+        )
+        synth = synth[join_cols + ["individual_preference"]].drop_duplicates(
+            subset=join_cols,
+            keep="first",
+        )
+        merged = out.merge(synth, on=join_cols, how="left", suffixes=("", "_reason"))
+        filled = int(merged["individual_preference"].notna().sum())
+        if filled:
+            return merged, filled, path.name
+
+    return out, 0, None
+
+
+def _attach_human_reasoning(results: pd.DataFrame, split_tag: str) -> tuple[pd.DataFrame, int, str | None]:
+    if "individual_preference" in results.columns and results["individual_preference"].notna().any():
+        return results, int(results["individual_preference"].notna().sum()), "existing"
+
+    enriched, filled, source = _attach_individual_preference_from_raw(results)
+    if filled:
+        return enriched, filled, source
+
+    return _attach_individual_preference_from_reasoning_slice(results, split_tag)
 
 
 def _first_text(row: pd.Series, names: list[str]) -> str | None:
@@ -294,6 +396,11 @@ def main() -> None:
     parser.add_argument("--n-tie", type=int, default=20)
     parser.add_argument("--n-correct", type=int, default=20)
     parser.add_argument("--include-all-wrong", action="store_true")
+    parser.add_argument(
+        "--no-human-reasoning",
+        action="store_true",
+        help="Do not attempt to attach individual_preference for review_app.",
+    )
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument(
         "--na-policy",
@@ -351,6 +458,25 @@ def main() -> None:
     ]
     review = pd.DataFrame(rows)
 
+    human_filled = 0
+    human_source = None
+    if not args.no_human_reasoning and len(review):
+        split_tag = args.subset or args.split
+        review, human_filled, human_source = _attach_human_reasoning(review, split_tag)
+        if human_filled:
+            log.info(
+                "Joined individual_preference: %d/%d rows from %s",
+                human_filled,
+                len(review),
+                human_source,
+            )
+        else:
+            log.warning(
+                "individual_preference not attached. Looked in %s and %s.",
+                cfg.DATA_DIR / "raw",
+                cfg.WITH_REASON_DIR,
+            )
+
     out_path = args.out.resolve()
     out_path.parent.mkdir(parents=True, exist_ok=True)
     review.to_parquet(out_path, index=False)
@@ -366,6 +492,8 @@ def main() -> None:
         "n_wrong": int((review["error_category"] == "wrong_winner").sum()) if len(review) else 0,
         "n_tie": int((review["error_category"] == "tie").sum()) if len(review) else 0,
         "n_correct": int((review["error_category"] == "correct").sum()) if len(review) else 0,
+        "human_reasoning_rows": human_filled,
+        "human_reasoning_source": human_source,
         "na_policy": args.na_policy,
     }
     with out_path.with_suffix(".meta.json").open("w", encoding="utf-8") as f:
