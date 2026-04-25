@@ -24,7 +24,7 @@ RAW_DIR = DATA_DIR / "raw"
 SPLITS_DIR = DATA_DIR / "splits"
 WITH_REASON_DIR = DATA_DIR / "with_reason"
 RESULTS_DIR = PROJECT_ROOT / "results"
-CHECKLISTS_DIR = PROJECT_ROOT/ "checklists" / "filtered"
+CHECKLISTS_DIR = PROJECT_ROOT / "checklists" / "v4_frozen"
 
 for _dir in [DATA_DIR, RAW_DIR, SPLITS_DIR, WITH_REASON_DIR, RESULTS_DIR]:
     _dir.mkdir(parents=True, exist_ok=True)
@@ -164,51 +164,51 @@ DEEPSPEED_CONFIG = {
 # Logging
 WANDB_PROJECT = "Thesis"
 
-# ────────────────────────── dynamic checklist domains ────────────────────────────
+# ────────────────────────── dynamic checklist dimensions ────────────────────────────
 
-DOMAINS = [
-    "correctness_completeness",
-    "clarity_communication",
-    "helpfulness_usefulness",
+CHECKLIST_DIMENSIONS = [
+    "clarity_and_communication",
     "coding_communication_conditional",
-    'relevance_instruction_following'
+    "correctness_and_completeness",
+    "helpfulness_and_usefulness",
+    "relevance_instruction_following",
 ]
 
-DOMAIN_DESCRIPTIONS = {
-    "correctness_completeness": (
-        "Factual accuracy, logical consistency, coverage of the user's request, "
-        "and faithful task execution. Use when the reasoning talks about errors, "
-        "missing information, wrong facts, incomplete answers, or whether the "
-        "response actually does what was asked."
-    ),
-    "clarity_communication": (
-        "How clearly the response is written: structure, readability, tone, "
-        "conciseness, formatting, absence of confusing or ambiguous phrasing. "
-        "Use when the reasoning talks about wording, explanation quality, "
-        "organization, verbosity, or style."
-    ),
-    "helpfulness_usefulness": (
-        "Whether the response is genuinely useful and actionable for the user, "
-        "including relevance, depth, practical value, safety of advice, and "
-        "whether it anticipates the user's real need. Use when the reasoning "
-        "discusses how useful, relevant, or on-point the answer is."
+CHECKLIST_DIMENSION_DESCRIPTIONS = {
+    "clarity_and_communication": (
+        "The response communicates its content clearly enough that the user can "
+        "extract the answer, understand the reasoning, and act on the result. "
+        "In v4, this includes conditional structural effectiveness plus tone, "
+        "style, register, persona, role-play, and narrative continuity signals."
     ),
     "coding_communication_conditional": (
-        "Code-specific quality criteria that only apply when the response "
-        "contains code: syntax correctness, runnable examples, consistent "
-        "variable/import usage, avoidance of placeholder/pseudo-code, and "
-        "clear code comments/explanations. Use ONLY when the reasoning "
-        "references code behavior, snippets, syntax, or implementation details."
+        "Code-specific quality criteria that apply only when the response "
+        "contains code, commands, configuration, APIs, syntax, or implementation "
+        "details. Evaluate code accuracy, runnable completeness, API validity, "
+        "context integration, explainability, and readability. Use NA for this "
+        "dimension when no code or implementation detail is present."
     ),
-    "relevance_instruction_following":(
-        "This category evaluates the extent to which the model response directly "
-        "addresses the user's query and strictly adheres to all explicit and implicit instructions in the prompt."
-        "It assesses whether the content remains fully on-topic, fulfills specific requirements "
-        "(such as format, length, style, tone, scope, constraints, or target keywords), and avoids including any irrelevant, extraneous, or off-topic"
+    "correctness_and_completeness": (
+        "The response is factually accurate, logically sound, and sufficiently "
+        "complete to answer the user's actual question. In v4, this also covers "
+        "ambiguity handling, false-premise correction, temporal awareness for "
+        "time-sensitive facts, and avoiding unsupported certainty."
     ),
-    "coherence_logic":(
-        "This category assesses the internal logical consistency, structural organization, and smooth progression of ideas within the response. "
-        "It examines whether the content flows logically from one idea to the next, maintains internal consistency without contradictions, "
-        "uses appropriate transitions, and presents arguments or information in a clear, well-structured, and easy-to-follow manner."
-    )
+    "helpfulness_and_usefulness": (
+        "The response provides substantive value beyond basic correctness by "
+        "offering tailored guidance, actionable specifics, useful depth, "
+        "relevant trade-offs, and an appropriate next step without drifting into "
+        "generic or tangential material."
+    ),
+    "relevance_instruction_following": (
+        "The response follows explicit instructions, requested output type, "
+        "scope, format, numeric constraints, and source-grounded transformations. "
+        "Use this dimension for task adherence, concrete format or length "
+        "requirements, and whether given content is actually used or transformed "
+        "as requested."
+    ),
 }
+
+# Backward-compatible names used by existing generator / extractor scripts.
+DOMAINS = CHECKLIST_DIMENSIONS
+DOMAIN_DESCRIPTIONS = CHECKLIST_DIMENSION_DESCRIPTIONS

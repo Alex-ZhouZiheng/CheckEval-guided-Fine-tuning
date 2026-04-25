@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
 """
-Extract domain-tagged checklist questions from HelpSteer3 reasoning text.
+Extract checklist-dimension-tagged questions from HelpSteer3 reasoning text.
 
 For each row in a reasoning-augmented pairwise parquet (produced by
 `prepare_data_reasoning.py`), prompt an LLM to convert the free-form
 individual-preference `reasoning_text` into a list of Yes/No checklist
-questions, each assigned to exactly one of the four evaluation domains:
+questions, each assigned to exactly one checklist dimension:
 
-    - correctness_completeness
-    - clarity_communication
-    - helpfulness_usefulness
+    - clarity_and_communication
+    - helpfulness_and_usefulness
+    - correctness_and_completeness
     - coding_communication_conditional
+    - relevance_instruction_following
 
 Output columns (one row per extracted question):
     sample_id
@@ -78,7 +79,7 @@ be asked about ANY response to this kind of user request. The questions must \
 NOT reference "Response A", "Response B", or the specific content of either \
 response; they must be reusable evaluation questions.
 
-Each question must be tagged with exactly one of these four domains:
+Each question must be tagged with exactly one of these checklist dimensions:
 
 {domain_block}
 
@@ -86,7 +87,7 @@ Rules:
 - Only produce questions that are actually implied by the reasoning. Do not \
 invent criteria that the reasoning does not discuss.
 - Phrase every question so that "Yes" is the desirable answer.
-- Use the `coding_communication_conditional` domain ONLY when the reasoning \
+- Use the `coding_communication_conditional` dimension ONLY when the reasoning \
 explicitly discusses code, syntax, or implementation details.
 - If the reasoning is empty or produces no usable criteria, return `[]`.
 - Output ONLY a JSON array of objects, each with keys `domain` and `question`.
