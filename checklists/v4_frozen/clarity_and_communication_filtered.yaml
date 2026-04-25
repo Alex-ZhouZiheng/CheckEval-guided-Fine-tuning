@@ -1,0 +1,38 @@
+definition: The response communicates its content clearly enough that the user can extract the answer, understand the reasoning, and act on the result.
+  v4 changes vs v3 - dropped boilerplate-disclaimer Q (duplicate of filler/repetition Q); rewrote Structural Effectiveness as conditional on response length/section count to reduce surface-format bias; added Tone and Register Match sub-aspect to cover persona/role-play/style continuity (key general-domain failure mode).
+dimension: clarity_and_communication
+sub_aspects:
+  Coherence:
+    filtered_questions:
+    - Can the response be read from start to finish without encountering statements that contradict each other, sections that seem out of place, or transitions that break the logical flow?
+    original_count: 8
+    removed_count: 7
+    seed_question: Can the response be read from start to finish without encountering statements that contradict each other, sections that seem out of place, or transitions that break the logical flow?
+  Explanation Sufficiency:
+    filtered_questions:
+    - Does the response provide enough explanation for the user to act on the answer without leaving important points implicit?
+    - Does the response present enough detail to be useful without overexplaining straightforward points?
+    original_count: 6
+    removed_count: 4
+    seed_question: Does the response provide enough explanation for the user to act on the answer without leaving important points implicit?
+  Information Efficiency:
+    filtered_questions:
+    - Does the response convey its content without unnecessary repetition, filler, or tangential material that dilutes the useful information?
+    - Does the response stay focused on the user's request rather than spending space on loosely related background or side points?
+    original_count: 7
+    removed_count: 5
+    seed_question: Does the response convey its content without unnecessary repetition, filler, or tangential material that dilutes the useful information?
+  Structural Effectiveness:
+    filtered_questions:
+    - If the response contains three or more distinct steps, sections, or items, are they delineated through headings, numbering, or spacing in a way that genuinely aids navigation rather than fragmenting otherwise simple content?
+    - If the response is longer than roughly 200 words, does its structure aid comprehension, rather than imposing bullets or headings on content that would read more naturally as prose?
+    original_count: 7
+    removed_count: 5
+    seed_question: If the response contains three or more distinct steps, sections, or items, are they delineated through headings, numbering, or spacing in a way that genuinely aids navigation rather than fragmenting otherwise simple content?
+  Tone and Register Match:
+    filtered_questions:
+    - Does the response match the tone, style, and register established by the prompt or prior turns, including formality level, technical depth, and conversational stance?
+    - If the prompt is creative writing, role-play, or persona continuation, does the response sustain the established voice, perspective, and narrative continuity rather than breaking character into generic explanatory mode?
+    original_count: 2
+    removed_count: 0
+    seed_question: Does the response match the tone, style, and register established by the prompt or prior turns, including formality level, technical depth, and conversational stance?
