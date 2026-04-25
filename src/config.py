@@ -67,7 +67,7 @@ VLLM_CHAT_KWARGS = {
 # ────────────────────────── llama.cpp backend ────────────────
 # Primary inference backend. "llamacpp" hits a locally-running llama-server
 # via its OpenAI-compatible HTTP API; "vllm" uses the in-process vLLM engine.
-INFERENCE_BACKEND = os.environ.get("INFERENCE_BACKEND", "llamacpp")
+INFERENCE_BACKEND = os.environ.get("INFERENCE_BACKEND", "vllm")
 
 LLAMACPP_SERVER_URL = os.environ.get("LLAMACPP_SERVER_URL", "http://127.0.0.1:8080/v1")
 LLAMACPP_API_KEY = os.environ.get("LLAMACPP_API_KEY", "EMPTY")
