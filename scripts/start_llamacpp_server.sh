@@ -6,8 +6,8 @@
 # Env overrides:
 #   LLAMA_CPP_HOME  - required, root of a built llama.cpp clone
 #   PORT            - HTTP port (default 8080)
-#   CTX_SIZE        - context length (default 16384, matches vLLM max_model_len)
-#   PARALLEL        - concurrent slots (default 16)
+#   CTX_PER_SLOT    - per-slot context length (default 16384, matches vLLM max_model_len)
+#   PARALLEL        - concurrent slots (default 4). Total ctx = CTX_PER_SLOT * PARALLEL.
 
 set -euo pipefail
 
@@ -19,8 +19,9 @@ fi
 MODEL="${1:-models/gguf/Qwen3.5-9B.Q4_K_M.gguf}"
 LORA="${2:-}"
 PORT="${PORT:-8080}"
-CTX_SIZE="${CTX_SIZE:-16384}"
-PARALLEL="${PARALLEL:-16}"
+CTX_PER_SLOT="${CTX_PER_SLOT:-16384}"
+PARALLEL="${PARALLEL:-4}"
+CTX_SIZE=$(( CTX_PER_SLOT * PARALLEL ))
 
 SERVER_BIN="$LLAMA_CPP_HOME/build/bin/llama-server"
 if [[ ! -x "$SERVER_BIN" ]]; then
