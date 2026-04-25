@@ -1,0 +1,32 @@
+definition: The response communicates its content clearly enough that the user can extract the answer, understand the reasoning, and act on the result.
+  Low-signal readability-only questions were removed in v3.
+dimension: clarity_and_communication
+sub_aspects:
+  Coherence:
+    filtered_questions:
+    - Can the response be read from start to finish without encountering statements that contradict each other, sections that seem out of place, or transitions that break the logical flow?
+    original_count: 8
+    removed_count: 7
+    seed_question: Can the response be read from start to finish without encountering statements that contradict each other, sections that seem out of place, or transitions that break the logical flow?
+  Explanation Sufficiency:
+    filtered_questions:
+    - Does the response provide enough explanation for the user to act on the answer without leaving important points implicit?
+    - Does the response present enough detail to be useful without overexplaining straightforward points?
+    original_count: 6
+    removed_count: 4
+    seed_question: Does the response provide enough explanation for the user to act on the answer without leaving important points implicit?
+  Information Efficiency:
+    filtered_questions:
+    - Does the response convey its content without unnecessary repetition, filler, or tangential material that dilutes the useful information?
+    - Does the response stay focused on the user's request rather than spending space on loosely related background or side points?
+    - Does the response minimize boilerplate phrasing or generic disclaimers that do not add meaningful value to the answer?
+    original_count: 7
+    removed_count: 4
+    seed_question: Does the response convey its content without unnecessary repetition, filler, or tangential material that dilutes the useful information?
+  Structural Effectiveness:
+    filtered_questions:
+    - Are headings, labels, or other structural cues used effectively when they would improve navigation?
+    - Are distinct parts of the response separated in a way that makes different ideas, steps, or sections easy to distinguish and follow?
+    original_count: 7
+    removed_count: 5
+    seed_question: Are headings, labels, or other structural cues used effectively when they would improve navigation?

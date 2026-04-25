@@ -1,0 +1,42 @@
+definition: The response provides substantive value beyond basic correctness by offering tailored guidance, actionable specifics, and useful depth for the user's situation.
+dimension: helpfulness_and_usefulness
+sub_aspects:
+  Contextual Precision:
+    filtered_questions:
+    - Does the response tailor its advice to the user's specific situation, constraints, or expertise level rather than providing a generic answer that could apply to anyone?
+    - Does the response incorporate details explicitly provided by the user to make its guidance more relevant to the user's stated goal or problem?
+    - Does the response adjust its level of explanation or terminology to fit the user's apparent background or requested level of expertise?
+    - Does the response avoid assumptions that conflict with information the user already provided?
+    original_count: 6
+    removed_count: 2
+    seed_question: Does the response tailor its advice to the user's specific situation, constraints, or expertise level rather than providing a generic answer that could apply to anyone?
+  Depth of Guidance:
+    filtered_questions:
+    - Does the response go beyond stating what to do and explain why, providing reasoning, trade-offs, or context that helps the user make informed decisions?
+    - Does the response include enough underlying reasoning to help the user adapt the advice to a similar but not identical situation?
+    - Does the response explain the consequences or implications of following the advice?
+    - Does the response describe relevant trade-offs or limitations of the suggested approach that would affect the user's decision-making?
+    original_count: 6
+    removed_count: 2
+    seed_question: Does the response go beyond stating what to do and explain why, providing reasoning, trade-offs, or context that helps the user make informed decisions?
+  Practical Usability:
+    filtered_questions:
+    - Does the response give the user enough concrete information to act on the answer or understand the topic, rather than providing only vague or abstract guidance?
+    - Does the response include specific steps, methods, or procedures that the user could directly follow or apply?
+    - Does the response provide concrete details such as examples, parameters, or decision criteria that make the guidance usable rather than generic?
+    - Does the response supply enough operational detail to help the user carry out the task or make an informed choice without substantial guesswork?
+    - Does the response specify relevant tools, methods, inputs, or resources needed to apply the advice?
+    - Does the response make the next step or takeaway clear enough that the user could reasonably act on it?
+    original_count: 8
+    removed_count: 2
+    seed_question: Does the response give the user enough concrete information to act on the answer or understand the topic, rather than providing only vague or abstract guidance?
+  Relevance to User:
+    filtered_questions:
+    - Does the response focus on what the user actually needs to know, rather than providing information that is related to the topic but not useful for their specific question?
+    - Does the response prioritize information that directly addresses the user's stated goal or problem?
+    - Does the response avoid spending substantial space on background or side information that does not help answer the user's specific request?
+    - Does the response address the main question or request the user asked, rather than shifting to a different issue?
+    - Does the response avoid digressions into loosely related topics that do not help answer the user's question?
+    original_count: 7
+    removed_count: 2
+    seed_question: Does the response focus on what the user actually needs to know, rather than providing information that is related to the topic but not useful for their specific question?

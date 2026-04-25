@@ -38,7 +38,7 @@ ARGS=(
     --ctx-size "$CTX_SIZE"
     --parallel "$PARALLEL"
     --n-gpu-layers -1
-    --flash-attn
+    -fa on
     --cont-batching
     --port "$PORT"
     --api-key EMPTY
