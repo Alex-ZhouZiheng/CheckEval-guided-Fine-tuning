@@ -1,12 +1,10 @@
-Compressing inline — text provided directly, no file path to run script against.
-
 # CLAUDE.md
 
-Guidance for Claude Code.
+Guidance for Claude Code in this repo.
 
 ## Project Overview
 
-CheckEval-guided fine-tuning: two-model pipeline. **Checklist generator** produces structured yes/no eval questions. **Checklist-conditioned judge** answers to pick better response in pairwise LLM comparisons. HelpSteer3; trains Qwen3.5 via DPO, SFT, joint training.
+CheckEval-guided fine-tuning: two-model pipeline. **Checklist generator** produces structured yes/no eval questions. **Checklist-conditioned judge** answers them to pick better response in pairwise LLM comparisons. Built on HelpSteer3; trains Qwen3.5 via DPO, SFT, joint training.
 
 ## Environment Setup
 
@@ -135,7 +133,7 @@ v3 77.05% baseline uses **na-aware** `CHECKEVAL_POINTWISE_PROMPT` (via `build_ch
 
 Canonical bank path post-freeze: `checklists/v3_frozen` (61 Qs). Pass via `--checklists-dir checklists/v3_frozen` to `run_checkeval_judge.py` / `run_ablation.py`.
 
-Shared helper for per-qid subset prompts: `build_pointwise_prompt_from_qids(row, qids, qmeta, side)` in `utils.py`. Oracle, selector-infer, dynamic-eval all route through this to keep prompt parity.
+Shared helper for per-qid subset prompts: `build_pointwise_prompt_from_qids(row, qids, qmeta, side)` in `utils.py`. Oracle, selector-infer, dynamic-eval all route through this to keep prompt parity with baseline.
 
 ## qid Ordering Source-of-Truth
 
@@ -152,13 +150,13 @@ Flat `qid` (1..N global) = `utils.load_checklists(bank_dir)` traversal order:
 
 ## Encoding Gotcha
 
-Some scripts carry UTF-8 BOM. Syntax check: `python -c "import ast, sys; ast.parse(open(sys.argv[1], encoding='utf-8-sig').read())" path.py`.
+Some scaffolded scripts carry UTF-8 BOM. Syntax check: `python -c "import ast, sys; ast.parse(open(sys.argv[1], encoding='utf-8-sig').read())" path.py`.
 
 ## Inference Backend
 
 Default backend: **llama.cpp** (llama-server HTTP). vLLM kept as fallback. Toggle via `INFERENCE_BACKEND=vllm` env or `--backend vllm` CLI flag on eval scripts.
 
-New eval scripts: call `load_judge_model(model_id, backend=args.backend, llamacpp_adapter_path=str(adapter)?, ...)` + `make_lora_handle(adapter_path, backend, name, lora_int_id)` from `utils.py`. Both dispatch internally; downstream code backend-agnostic.
+New eval scripts: call `load_judge_model(model_id, backend=args.backend, llamacpp_adapter_path=str(adapter)?, ...)` + `make_lora_handle(adapter_path, backend, name, lora_int_id)` from `utils.py`. Both helpers dispatch internally; downstream code stays backend-agnostic.
 
 Setup:
 ```bash
@@ -211,9 +209,9 @@ v4 acceptance threshold (27B Q6 oracle on dev_600): `oracle_agreement_rate_valid
 
 Oracle reports both `oracle_agreement_rate_valid` (excl Tie/null, baseline-comparable) and `_total` (Tie counted as wrong). Compare `_valid` against `results/checkeval_pairwise_naaware_dev_600_v3_q9b_metrics.json` `accuracy` (baseline 0.7705 on n_valid=427). 9B Q4 GGUF reproduces baseline within ±1pp; 27B Q6 ≈ +5pp.
 
-`--review-out` only dumps samples where true winner received 0 "yes" answers (judge missed winner entirely), not all wrong predictions. Schema differs from `*_sample.parquet` — `review_app.py` requires review parquet (has `_review_split` column).
+`--review-out` only dumps samples where the true winner received 0 "yes" answers (judge missed winner entirely), not all wrong predictions. Schema differs from `*_sample.parquet` — `review_app.py` requires the review parquet (has `_review_split` column).
 
-Oracle parity flags (must match baseline): `--max-new-tokens 2048` (baseline used 2048, oracle default 1024 — truncation raises parse-fail rate) and `--judge-url http://127.0.0.1:8080/v1` (oracle default port 8000, llama-server default 8080).
+Oracle parity flags (must match baseline): `--max-new-tokens 2048` (baseline used 2048, oracle default 1024 — truncation raises parse-fail rate) and `--judge-url http://127.0.0.1:8080/v1` (oracle default is port 8000, llama-server default is 8080).
 
 Canonical oracle command (v4, 27B, http mode):
 ```bash

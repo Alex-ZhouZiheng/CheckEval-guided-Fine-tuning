@@ -199,6 +199,8 @@ def _generate_local(
     tensor_parallel_size: int,
     max_model_len: int,
     gpu_memory_utilization: float,
+    max_num_seqs: int,
+    max_num_batched_tokens: int,
     prompt_chunk_size: int,
     seed: int | None,
 ) -> tuple[list[str], float]:
@@ -207,6 +209,8 @@ def _generate_local(
         tensor_parallel_size=tensor_parallel_size,
         max_model_len=max_model_len,
         gpu_memory_utilization=gpu_memory_utilization,
+        max_num_seqs=max_num_seqs,
+        max_num_batched_tokens=max_num_batched_tokens,
     )
 
     outputs: list[str] = []
@@ -321,6 +325,18 @@ def main() -> None:
         default=cfg.VLLM_ENGINE_KWARGS["gpu_memory_utilization"],
     )
     parser.add_argument(
+        "--max-num-seqs",
+        type=int,
+        default=cfg.VLLM_ENGINE_KWARGS["max_num_seqs"],
+        help="vLLM max_num_seqs for local judge mode.",
+    )
+    parser.add_argument(
+        "--max-num-batched-tokens",
+        type=int,
+        default=16384,
+        help="vLLM max_num_batched_tokens for local judge mode.",
+    )
+    parser.add_argument(
         "--save-raw-outputs",
         action="store_true",
         help="Include raw judge outputs in the per-sample parquet (large files).",
@@ -418,6 +434,8 @@ def main() -> None:
             tensor_parallel_size=args.tensor_parallel_size,
             max_model_len=args.max_model_len,
             gpu_memory_utilization=args.gpu_memory_utilization,
+            max_num_seqs=args.max_num_seqs,
+            max_num_batched_tokens=args.max_num_batched_tokens,
             prompt_chunk_size=args.prompt_chunk_size,
             seed=args.seed,
         )
