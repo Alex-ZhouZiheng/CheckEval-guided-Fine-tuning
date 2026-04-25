@@ -21,6 +21,7 @@ import sys as _sys
 _sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
 
 import argparse
+import hashlib
 import json
 import logging
 import math
@@ -412,38 +413,79 @@ def _compute_ndcg_recall(
     return out
 
 
+def _make_sample_id(prompt_id: str, response_a: str, response_b: str, winner: str) -> str:
+    payload = json.dumps(
+        {
+            "prompt_id": prompt_id,
+            "response_a": response_a,
+            "response_b": response_b,
+            "winner": winner,
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+    )
+    digest = hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
+    return f"{prompt_id}_{digest}"
+
+
+def _sample_ids_for_leak_check(df: pd.DataFrame, *, winner_col: str) -> set[str] | None:
+    """Return stable sample ids, materializing them for raw split parquets."""
+    if "sample_id" in df.columns:
+        return set(df["sample_id"].dropna().astype(str).tolist())
+
+    required = {"prompt_id", "response_a", "response_b", winner_col}
+    missing = required - set(df.columns)
+    if missing:
+        log.warning(
+            "Cannot run sample_id leakage check; missing columns: %s",
+            sorted(missing),
+        )
+        return None
+
+    return set(
+        df.apply(
+            lambda r: _make_sample_id(
+                prompt_id=str(r["prompt_id"]),
+                response_a=str(r["response_a"]),
+                response_b=str(r["response_b"]),
+                winner=str(r[winner_col]),
+            ),
+            axis=1,
+        ).tolist()
+    )
+
+
 def _assert_no_holdout_leak(s_df: pd.DataFrame, holdout_paths: list[Path]) -> None:
-    """Ensure no holdout split's prompt_id appears in the oracle sample table.
+    """Ensure no exact holdout sample appears in the oracle sample table.
 
     Rationale: the selector must be evaluated on dev_600 / test splits it has
     never seen during training. If someone accidentally builds an oracle parquet
     from a union of train+dev or from the wrong tier, this guard catches it
     before training burns GPU hours.
     """
-    if "prompt_id" not in s_df.columns:
-        log.warning(
-            "Oracle sample parquet has no prompt_id column — cannot run holdout leakage check"
-        )
+    oracle_ids = _sample_ids_for_leak_check(s_df, winner_col="winner_gt")
+    if oracle_ids is None:
         return
-
-    oracle_ids = set(s_df["prompt_id"].astype(str).tolist())
 
     for path in holdout_paths:
         p = Path(path)
         if not p.exists():
             log.warning("Holdout split %s not found — skipping leakage check for this file", p)
             continue
-        holdout_df = pd.read_parquet(p, columns=["prompt_id"])
-        holdout_ids = set(holdout_df["prompt_id"].astype(str).tolist())
+        holdout_df = pd.read_parquet(p)
+        holdout_ids = _sample_ids_for_leak_check(holdout_df, winner_col="winner")
+        if holdout_ids is None:
+            log.warning("Skipping leakage check for %s", p)
+            continue
         overlap = oracle_ids & holdout_ids
         if overlap:
             sample = sorted(overlap)[:5]
             raise AssertionError(
-                f"{len(overlap)} holdout prompt_ids from {p} leak into oracle "
+                f"{len(overlap)} holdout sample_ids from {p} leak into oracle "
                 f"(first 5: {sample}). Rebuild the oracle on train-only data, "
                 f"or pass --allow-holdout-leak to override."
             )
-        log.info("Leakage guard OK: no overlap between oracle and %s", p)
+        log.info("Leakage guard OK: no sample_id overlap between oracle and %s", p)
 
 
 def _split_indices(n: int, val_ratio: float, seed: int) -> tuple[list[int], list[int]]:
@@ -493,7 +535,7 @@ def main() -> None:
         type=Path,
         nargs="*",
         default=[Path("data/splits/dev_600.parquet")],
-        help="Parquet splits whose prompt_ids must NOT appear in the oracle (leakage guard).",
+        help="Parquet splits whose sample_ids must NOT appear in the oracle (leakage guard).",
     )
     parser.add_argument(
         "--allow-holdout-leak",
