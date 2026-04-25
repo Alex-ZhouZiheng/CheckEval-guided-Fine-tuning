@@ -1,0 +1,75 @@
+{
+  "n_total": 600,
+  "n_valid": 478,
+  "n_tie": 122,
+  "n_unparseable": 0,
+  "parse_rate": 0.7966666666666666,
+  "accuracy": 0.7719665271966527,
+  "macro_f1": 0.7716777317644996,
+  "classification_report": {
+    "A": {
+      "precision": 0.7822222222222223,
+      "recall": 0.7457627118644068,
+      "f1-score": 0.7635574837310195,
+      "support": 236.0
+    },
+    "B": {
+      "precision": 0.7628458498023716,
+      "recall": 0.7975206611570248,
+      "f1-score": 0.7797979797979798,
+      "support": 242.0
+    },
+    "accuracy": 0.7719665271966527,
+    "macro avg": {
+      "precision": 0.772534036012297,
+      "recall": 0.7716416865107159,
+      "f1-score": 0.7716777317644996,
+      "support": 478.0
+    },
+    "weighted avg": {
+      "precision": 0.7724124269803733,
+      "recall": 0.7719665271966527,
+      "f1-score": 0.771779659564083,
+      "support": 478.0
+    }
+  },
+  "pred_distribution": {
+    "B": 253,
+    "A": 225,
+    "Tie": 122
+  },
+  "position_bias_A": 0.4707112970711297,
+  "per_domain": {
+    "code": {
+      "n": 141,
+      "accuracy": 0.8156028368794326,
+      "macro_f1": 0.8153706688154714
+    },
+    "general": {
+      "n": 259,
+      "accuracy": 0.7413127413127413,
+      "macro_f1": 0.7410656997478252
+    },
+    "stem": {
+      "n": 78,
+      "accuracy": 0.7948717948717948,
+      "macro_f1": 0.7943309162821358
+    }
+  },
+  "policy": "learned_topk",
+  "k": 15,
+  "tie_delta": 0.05,
+  "tau_escalate": 0.05,
+  "tau_hard": 0.03,
+  "n_min": 8,
+  "avg_k": 15.0,
+  "tie_rate": 0.20333333333333334,
+  "parse_ok_rate": 0.9983333333333333,
+  "selector_inference_time_s": 0.0,
+  "selector_picks": "/root/autodl-tmp/Thesis/results/dynamic_eval/sweep_v4_9b_5k_e2_dev600/selector/dev_600_top15.parquet",
+  "judge_mode": "local",
+  "judge_out_dir": "/root/autodl-tmp/Thesis/results/dynamic_eval/sweep_v4_9b_5k_e2_dev600/judge_runs/learned_topk_k15",
+  "latency_p50_s": 0.4744450290997823,
+  "latency_p90_s": 0.4744450290997823,
+  "samples_per_second_estimate": 2.107725739897438
+}

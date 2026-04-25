@@ -1,0 +1,75 @@
+{
+  "n_total": 600,
+  "n_valid": 465,
+  "n_tie": 135,
+  "n_unparseable": 0,
+  "parse_rate": 0.775,
+  "accuracy": 0.7698924731182796,
+  "macro_f1": 0.7695471535564912,
+  "classification_report": {
+    "A": {
+      "precision": 0.7798165137614679,
+      "recall": 0.74235807860262,
+      "f1-score": 0.7606263982102909,
+      "support": 229.0
+    },
+    "B": {
+      "precision": 0.7611336032388664,
+      "recall": 0.7966101694915254,
+      "f1-score": 0.7784679089026915,
+      "support": 236.0
+    },
+    "accuracy": 0.7698924731182796,
+    "macro avg": {
+      "precision": 0.7704750585001672,
+      "recall": 0.7694841240470727,
+      "f1-score": 0.7695471535564912,
+      "support": 465.0
+    },
+    "weighted avg": {
+      "precision": 0.7703344344424701,
+      "recall": 0.7698924731182796,
+      "f1-score": 0.7696814444971867,
+      "support": 465.0
+    }
+  },
+  "pred_distribution": {
+    "B": 247,
+    "A": 218,
+    "Tie": 135
+  },
+  "position_bias_A": 0.46881720430107526,
+  "per_domain": {
+    "code": {
+      "n": 136,
+      "accuracy": 0.8014705882352942,
+      "macro_f1": 0.8012018840344324
+    },
+    "general": {
+      "n": 259,
+      "accuracy": 0.749034749034749,
+      "macro_f1": 0.7482993197278911
+    },
+    "stem": {
+      "n": 70,
+      "accuracy": 0.7857142857142857,
+      "macro_f1": 0.7856705450091855
+    }
+  },
+  "policy": "learned_topk",
+  "k": 12,
+  "tie_delta": 0.0,
+  "tau_escalate": 0.05,
+  "tau_hard": 0.03,
+  "n_min": 8,
+  "avg_k": 12.0,
+  "tie_rate": 0.225,
+  "parse_ok_rate": 0.9983333333333333,
+  "selector_inference_time_s": 0.0,
+  "selector_picks": "/root/autodl-tmp/Thesis/results/dynamic_eval/sweep_v4_9b_5k_e2_dev600/selector/dev_600_top15.parquet",
+  "judge_mode": "local",
+  "judge_out_dir": "/root/autodl-tmp/Thesis/results/dynamic_eval/sweep_v4_9b_5k_e2_dev600/judge_runs/learned_topk_k12",
+  "latency_p50_s": 0.4137861275672913,
+  "latency_p90_s": 0.4137861275672913,
+  "samples_per_second_estimate": 2.416707408436201
+}

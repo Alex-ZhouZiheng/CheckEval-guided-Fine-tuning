@@ -1,0 +1,10 @@
+{
+  "selector": "/root/autodl-tmp/Thesis/results/checkpoints/selector_v4_9b_5k_no_test_cleanrank_e2",
+  "split": "dev_600",
+  "subset": null,
+  "k": 10,
+  "n_samples": 600,
+  "inference_time_s": 10.020238876342773,
+  "samples_per_second": 59.878812012812055,
+  "dim_quota": true
+}

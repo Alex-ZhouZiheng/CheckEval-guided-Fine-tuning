@@ -1,0 +1,75 @@
+{
+  "n_total": 600,
+  "n_valid": 460,
+  "n_tie": 140,
+  "n_unparseable": 0,
+  "parse_rate": 0.7666666666666667,
+  "accuracy": 0.7760869565217391,
+  "macro_f1": 0.7757042970284844,
+  "classification_report": {
+    "A": {
+      "precision": 0.7824074074074074,
+      "recall": 0.7511111111111111,
+      "f1-score": 0.7664399092970522,
+      "support": 225.0
+    },
+    "B": {
+      "precision": 0.7704918032786885,
+      "recall": 0.8,
+      "f1-score": 0.7849686847599165,
+      "support": 235.0
+    },
+    "accuracy": 0.7760869565217391,
+    "macro avg": {
+      "precision": 0.776449605343048,
+      "recall": 0.7755555555555556,
+      "f1-score": 0.7757042970284844,
+      "support": 460.0
+    },
+    "weighted avg": {
+      "precision": 0.7763200879068662,
+      "recall": 0.7760869565217391,
+      "f1-score": 0.7759056967617765,
+      "support": 460.0
+    }
+  },
+  "pred_distribution": {
+    "B": 244,
+    "A": 216,
+    "Tie": 140
+  },
+  "position_bias_A": 0.46956521739130436,
+  "per_domain": {
+    "code": {
+      "n": 134,
+      "accuracy": 0.8134328358208955,
+      "macro_f1": 0.8131727176398416
+    },
+    "general": {
+      "n": 257,
+      "accuracy": 0.754863813229572,
+      "macro_f1": 0.7541342080087468
+    },
+    "stem": {
+      "n": 69,
+      "accuracy": 0.782608695652174,
+      "macro_f1": 0.782608695652174
+    }
+  },
+  "policy": "learned_topk",
+  "k": 12,
+  "tie_delta": 0.05,
+  "tau_escalate": 0.05,
+  "tau_hard": 0.03,
+  "n_min": 8,
+  "avg_k": 12.0,
+  "tie_rate": 0.23333333333333334,
+  "parse_ok_rate": 0.9983333333333333,
+  "selector_inference_time_s": 0.0,
+  "selector_picks": "/root/autodl-tmp/Thesis/results/dynamic_eval/sweep_v4_9b_5k_e2_dev600/selector/dev_600_top15.parquet",
+  "judge_mode": "local",
+  "judge_out_dir": "/root/autodl-tmp/Thesis/results/dynamic_eval/sweep_v4_9b_5k_e2_dev600/judge_runs/learned_topk_k12",
+  "latency_p50_s": 0.4137861275672913,
+  "latency_p90_s": 0.4137861275672913,
+  "samples_per_second_estimate": 2.416707408436201
+}
