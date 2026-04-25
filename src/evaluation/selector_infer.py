@@ -260,9 +260,10 @@ def score_samples_with_bundle(
 def active_qids_for_domain(bank_df: pd.DataFrame, domain: str) -> list[int]:
     allowed = _select_dimensions(str(domain))
     allowed_lower = {d.lower() for d in allowed}
+    dim_col = "dimension" if "dimension" in bank_df.columns else "dim"
 
     active = bank_df[
-        bank_df["dimension"].map(lambda d: d in allowed or str(d).lower() in allowed_lower)
+        bank_df[dim_col].map(lambda d: d in allowed or str(d).lower() in allowed_lower)
     ]
     if active.empty:
         active = bank_df
@@ -282,10 +283,8 @@ def select_topk_with_quota(
     if not enforce_quota:
         return ranked_active_qids[:k_eff]
 
-    q_to_dim = {
-        int(r["qid"]): str(r["dimension"])
-        for _, r in bank_df[["qid", "dimension"]].iterrows()
-    }
+    dim_col = "dimension" if "dimension" in bank_df.columns else "dim"
+    q_to_dim = {int(r["qid"]): str(r[dim_col]) for _, r in bank_df[["qid", dim_col]].iterrows()}
 
     allowed_dims = []
     seen: set[str] = set()
