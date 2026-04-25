@@ -1,0 +1,27 @@
+definition: This module evaluates whether the response follows explicit instructions, format requirements, scope constraints, and requested transformations in the prompt.
+  v4 changes vs v3 - removed Format and Constraint Compliance sub-aspect entirely (all three Qs had >75% N/A rate from judge, replaced with sharper conditional Qs); removed duplicate Source-Grounded Q that mirrored Contextual Precision Q2; added Explicit Numeric Constraints sub-aspect (2 Qs targeting concrete quantitative or format requirements - word count, JSON, list length, etc.).
+dimension: relevance_instruction_following
+sub_aspects:
+  Task Adherence:
+    filtered_questions:
+    - Does the response cover each explicit request or sub-task in the user's prompt rather than answering only part of it?
+    - Does the response perform the task the user actually asked for, producing the type of output requested rather than a different kind of answer?
+    - Does the response deliver the specific artifact or action the user requested, for example an explanation, summary, translation, code snippet, or list, rather than substituting a different output format?
+    - Does the response stay focused on completing the user's requested task instead of mainly offering adjacent commentary, background information, or advice?
+    - Does the response avoid replacing the requested answer with only meta-commentary, refusal without basis, or unrelated advice?
+    original_count: 7
+    removed_count: 2
+    seed_question: Does the response perform the task the user actually asked for, producing the type of output requested rather than a different kind of answer?
+  Explicit Numeric Constraints:
+    filtered_questions:
+    - If the prompt specifies a numeric constraint such as word count, list length, line count, time budget, or number of options, does the response satisfy that constraint within reasonable tolerance?
+    - If the prompt specifies an explicit output format such as JSON, a table, a bullet list, a code block, or a particular natural language, does the response actually produce that format rather than narrating around it?
+    original_count: 2
+    removed_count: 0
+    seed_question: If the prompt specifies a numeric constraint such as word count, list length, line count, time budget, or number of options, does the response satisfy that constraint within reasonable tolerance?
+  Source-Grounded Transformation:
+    filtered_questions:
+    - If the user requested an action on given content, does the response actually transform or use that content as requested?
+    original_count: 6
+    removed_count: 5
+    seed_question: If the user requested an action on given content, does the response actually transform or use that content as requested?
