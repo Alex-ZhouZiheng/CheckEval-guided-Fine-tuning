@@ -38,7 +38,7 @@ def _load_question_meta(checklists_dir: Path | None = None) -> dict[str, tuple[s
     """Return {question_text: (dimension, sub_aspect)} from YAML checklist files."""
     import yaml
     if checklists_dir is None:
-        checklists_dir = Path(__file__).parent.parent.parent / "checklists" / "filtered"
+        checklists_dir = Path(__file__).parent.parent.parent / "checklists" / "v4_frozen"
     meta: dict[str, tuple[str, str]] = {}
     for yaml_path in sorted(checklists_dir.glob("*_filtered.yaml")):
         with open(yaml_path, "r", encoding="utf-8") as f:

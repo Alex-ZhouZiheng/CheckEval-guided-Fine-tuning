@@ -9,13 +9,13 @@ Given:
    prepare_data_reasoning.py + extract_reasoning_checklist_labels.py)
 
 For each sample (only ``swap_flag == False``), aggregate all Yes/No checklist
-questions by domain and produce a single structured target string:
+questions by checklist dimension and produce a single structured target string:
 
-    ### correctness_completeness
+    ### correctness_and_completeness
     - Does the response ...
     - Are all facts ...
 
-    ### clarity_communication
+    ### clarity_and_communication
     - ...
 
 The generator is trained to map (instruction + response_a + response_b) to this
