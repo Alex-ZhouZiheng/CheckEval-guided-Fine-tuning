@@ -44,7 +44,11 @@
       "Bash(ssh -p 20890 -o StrictHostKeyChecking=no root@connect.bjb2.seetacloud.com \"head -1 /root/autodl-tmp/Thesis/data/generator_sft/grpo_tier_10k.jsonl | head -c 2000\")",
       "Bash(ssh -p 20890 -o StrictHostKeyChecking=no root@connect.bjb2.seetacloud.com \"head -1 /root/autodl-tmp/Thesis/data/generator_sft/grpo_tier_10k.jsonl | tr ',' '\\\\n' | grep -oE '\\\\\"[a-z_]+\\\\\":' | sort -u\")",
       "Bash(ssh -p 20890 -o StrictHostKeyChecking=no root@connect.bjb2.seetacloud.com \"ls /root/autodl-tmp/Thesis/data/splits/ 2>/dev/null; echo ---; python -c 'import pandas as pd; df=pd.read_parquet\\(\\\\\"/root/autodl-tmp/Thesis/data/splits/train_tier_10k.parquet\\\\\"\\); print\\(list\\(df.columns\\)\\)'\")",
-      "Bash(ssh -p 20890 -o StrictHostKeyChecking=no root@connect.bjb2.seetacloud.com \"source /root/autodl-tmp/Thesis/.venvmerge/bin/activate 2>/dev/null; python -c 'import pandas as pd; df=pd.read_parquet\\(\\\\\"/root/autodl-tmp/Thesis/data/splits/train_tier_10k.parquet\\\\\"\\); print\\(list\\(df.columns\\)\\)'\")"
+      "Bash(ssh -p 20890 -o StrictHostKeyChecking=no root@connect.bjb2.seetacloud.com \"source /root/autodl-tmp/Thesis/.venvmerge/bin/activate 2>/dev/null; python -c 'import pandas as pd; df=pd.read_parquet\\(\\\\\"/root/autodl-tmp/Thesis/data/splits/train_tier_10k.parquet\\\\\"\\); print\\(list\\(df.columns\\)\\)'\")",
+      "Bash(xargs grep *)",
+      "Bash(python -c \"import pandas as pd; df = pd.read_parquet\\('D:/CheckEval-guided-Fine-tuning/data/splits/test.parquet'\\); print\\('Columns:', df.columns.tolist\\(\\)\\); print\\('Shape:', df.shape\\); print\\('\\\\nDtypes:'\\); print\\(df.dtypes\\); print\\('\\\\nFirst row:'\\); print\\(df.iloc[0:1]\\)\")",
+      "Bash(python3 *)",
+      "Bash(python *)"
     ]
   }
 }

@@ -12,9 +12,12 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 import time
 from collections import Counter
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from tqdm import tqdm
@@ -30,6 +33,37 @@ if TYPE_CHECKING:
 
 log = logging.getLogger(__name__)
 console = Console()
+
+
+# ────────────────────────── backend clients ──────────────────
+
+
+@dataclass
+class _LlamaCppClient:
+    """Thin wrapper around llama-server's OpenAI-compatible HTTP endpoint.
+
+    Created by `load_judge_model(backend="llamacpp")`. Consumed by
+    `generate_batch` to fan out chat.completions calls concurrently.
+    The actual server process must be started externally (see
+    `scripts/start_llamacpp_server.sh`).
+    """
+
+    model_name: str
+    url: str = field(default_factory=lambda: cfg.LLAMACPP_SERVER_URL)
+    api_key: str = field(default_factory=lambda: cfg.LLAMACPP_API_KEY)
+    lora_path: str | None = None  # informational only; server must be started with --lora
+    concurrency: int = field(default_factory=lambda: cfg.LLAMACPP_HTTP_CONCURRENCY)
+
+    def client(self):
+        from openai import OpenAI
+        return OpenAI(base_url=self.url, api_key=self.api_key)
+
+
+def _resolve_backend(backend: str | None) -> str:
+    b = (backend or cfg.INFERENCE_BACKEND or "llamacpp").lower()
+    if b not in {"llamacpp", "vllm"}:
+        raise ValueError(f"Unknown INFERENCE_BACKEND {b!r}; expected 'llamacpp' or 'vllm'")
+    return b
 
 
 # ────────────────────────── data loading ─────────────────────
@@ -63,6 +97,8 @@ def load_eval_data(eval_split: str = "test", subset: str | None = None) -> pd.Da
 
 def load_judge_model(
     model_id: str = cfg.JUDGE_MODEL_ID,
+    *,
+    backend: str | None = None,
     cache_dir: str | None = None,
     tensor_parallel_size: int | None = None,
     gpu_memory_utilization: float | None = None,
@@ -79,8 +115,86 @@ def load_judge_model(
     quantization: str | None = None,
     load_format: str | None = None,
     reasoning_parser: str | None = None,
+    llamacpp_url: str | None = None,
+    llamacpp_model_name: str | None = None,
+    llamacpp_adapter_path: str | None = None,
+):
+    """Load the judge inference backend.
+
+    Dispatches on `backend` (or `cfg.INFERENCE_BACKEND`). "llamacpp" returns
+    a lightweight HTTP client bound to a running llama-server (no weights
+    loaded in this process); "vllm" loads the in-process vLLM engine.
+    """
+    resolved = _resolve_backend(backend)
+    if resolved == "llamacpp":
+        return _load_llamacpp_client(
+            model_id=model_id,
+            url=llamacpp_url,
+            model_name=llamacpp_model_name,
+            adapter_path=llamacpp_adapter_path,
+        )
+    return _load_vllm_model(
+        model_id=model_id,
+        cache_dir=cache_dir,
+        tensor_parallel_size=tensor_parallel_size,
+        gpu_memory_utilization=gpu_memory_utilization,
+        max_model_len=max_model_len,
+        dtype=dtype,
+        language_model_only=language_model_only,
+        max_num_seqs=max_num_seqs,
+        enable_prefix_caching=enable_prefix_caching,
+        max_num_batched_tokens=max_num_batched_tokens,
+        num_gpu_blocks_override=num_gpu_blocks_override,
+        enable_lora=enable_lora,
+        max_lora_rank=max_lora_rank,
+        max_loras=max_loras,
+        quantization=quantization,
+        load_format=load_format,
+        reasoning_parser=reasoning_parser,
+    )
+
+
+def _load_llamacpp_client(
+    model_id: str,
+    url: str | None,
+    model_name: str | None,
+    adapter_path: str | None,
+) -> _LlamaCppClient:
+    """Construct a `_LlamaCppClient`. The server must already be running."""
+    if model_name is None:
+        model_name = Path(str(model_id)).name
+    client = _LlamaCppClient(
+        model_name=model_name,
+        url=url or cfg.LLAMACPP_SERVER_URL,
+        lora_path=adapter_path,
+    )
+    log.info(
+        "Using llama.cpp backend: model=%s url=%s adapter=%s",
+        client.model_name, client.url, client.lora_path or "<none>",
+    )
+    return client
+
+
+def _load_vllm_model(
+    model_id: str,
+    cache_dir: str | None,
+    tensor_parallel_size: int | None,
+    gpu_memory_utilization: float | None,
+    max_model_len: int | None,
+    dtype: str | None,
+    language_model_only: bool | None,
+    max_num_seqs: int | None,
+    enable_prefix_caching: bool | None,
+    max_num_batched_tokens: int | None,
+    num_gpu_blocks_override: int | None,
+    enable_lora: bool,
+    max_lora_rank: int | None,
+    max_loras: int | None,
+    quantization: str | None,
+    load_format: str | None,
+    reasoning_parser: str | None,
 ) -> LLM:
-    """Load the judge LLM through vLLM."""
+    """Original vLLM in-process engine loader."""
     from vllm import LLM
 
     model_id = str(model_id)
@@ -140,6 +254,25 @@ def load_judge_model(
     return model
 
 
+def make_lora_handle(adapter_path: str | Path | None, backend: str | None = None,
+                     name: str = "adapter", lora_int_id: int = 1):
+    """Return a backend-appropriate LoRA handle.
+
+    - vLLM: a `LoRARequest(name, lora_int_id, path)` instance.
+    - llama.cpp: the adapter path as a string (informational). The server
+      must already be launched with `--lora <path>`; per-request adapter
+      swapping is not supported here.
+    - None adapter_path → None (no LoRA).
+    """
+    if adapter_path is None:
+        return None
+    resolved = _resolve_backend(backend)
+    if resolved == "vllm":
+        from vllm.lora.request import LoRARequest
+        return LoRARequest(name, lora_int_id, str(adapter_path))
+    return str(adapter_path)
+
+
 # ────────────────────────── generation ───────────────────────
 
 
@@ -189,13 +322,27 @@ def generate_single(
 
 
 def generate_batch(
-    model: LLM,
+    model,
     messages_list: list[list[dict[str, str]]],
     batch_size: int = 16,
     lora_request: Any = None,
     **gen_kwargs,
 ) -> list[str]:
-    """Batched generation for a list of chat-formatted inputs via vLLM."""
+    """Batched chat generation — dispatches on the type of `model`.
+
+    Returns text completions in the same order as `messages_list`.
+    """
+    if isinstance(model, _LlamaCppClient):
+        return _generate_batch_llamacpp(model, messages_list, **gen_kwargs)
+    return _generate_batch_vllm(model, messages_list, lora_request=lora_request, **gen_kwargs)
+
+
+def _generate_batch_vllm(
+    model: LLM,
+    messages_list: list[list[dict[str, str]]],
+    lora_request: Any = None,
+    **gen_kwargs,
+) -> list[str]:
     sampling_params = build_sampling_params(**gen_kwargs)
     chat_kwargs = dict(cfg.VLLM_CHAT_KWARGS)
     if lora_request is not None:
@@ -208,6 +355,53 @@ def generate_batch(
         **chat_kwargs,
     )
     return [_extract_output_text(output) for output in outputs]
+
+
+def _generate_batch_llamacpp(
+    client: _LlamaCppClient,
+    messages_list: list[list[dict[str, str]]],
+    **gen_kwargs,
+) -> list[str]:
+    """Fan out chat.completions calls to llama-server concurrently."""
+    merged = {**cfg.GENERATION_KWARGS, **gen_kwargs}
+    if "max_new_tokens" in merged and "max_tokens" not in merged:
+        merged["max_tokens"] = merged.pop("max_new_tokens")
+    # Strip vLLM-only sampling knobs.
+    for k in ("top_k", "min_p", "stop_token_ids", "repetition_penalty"):
+        merged.pop(k, None)
+    merged.pop("do_sample", None)
+
+    oai_kwargs = {
+        "model": client.model_name,
+        "temperature": float(merged.get("temperature", 0.0)),
+        "top_p": float(merged.get("top_p", 1.0)),
+        "max_tokens": int(merged.get("max_tokens", cfg.GENERATION_KWARGS.get("max_new_tokens", 512))),
+        "extra_body": {
+            "chat_template_kwargs": cfg.VLLM_CHAT_KWARGS.get("chat_template_kwargs", {}),
+        },
+    }
+    if merged.get("seed") is not None:
+        oai_kwargs["seed"] = int(merged["seed"])
+    if merged.get("stop") is not None:
+        oai_kwargs["stop"] = merged["stop"]
+
+    oai = client.client()
+
+    def _one(msgs: list[dict[str, str]]) -> str:
+        resp = oai.chat.completions.create(messages=msgs, **oai_kwargs)
+        return (resp.choices[0].message.content or "").strip()
+
+    results: list[str] = [""] * len(messages_list)
+    with ThreadPoolExecutor(max_workers=client.concurrency) as ex:
+        futures = {ex.submit(_one, msgs): i for i, msgs in enumerate(messages_list)}
+        for fut in tqdm(futures, total=len(futures), desc="llama.cpp chat"):
+            i = futures[fut]
+            try:
+                results[i] = fut.result()
+            except Exception as e:  # pragma: no cover
+                log.warning("llama.cpp request %d failed: %s", i, e)
+                results[i] = ""
+    return results
 
 
 # ────────────────────────── prompts ──────────────────────────
@@ -434,6 +628,57 @@ def build_checkeval_prompt(
 
     return CHECKEVAL_POINTWISE_PROMPT.format(
         dimension_block=dimension_block,
+        context=row["context"],
+        response=row[response_key],
+        checklist_text=checklist_text,
+    )
+
+
+def build_pointwise_prompt_from_qids(
+    row: dict | pd.Series,
+    qids: list[int],
+    qmeta: dict[int, dict[str, str]],
+    side: str = "A",
+) -> str:
+    """Build a pointwise CheckEval prompt for an arbitrary subset of qids.
+
+    Uses the na-aware ``CHECKEVAL_POINTWISE_PROMPT`` template — the same one
+    ``build_checkeval_prompt`` uses — because that is what produced the
+    ``checkeval_pairwise_naaware_*`` baselines (via run_checkeval_judge.py).
+    Do NOT switch to the binary template here without also rerunning the
+    baseline, or the selector will be trained against a distribution that
+    differs from the target evaluation.
+
+    Parameters
+    ----------
+    row : dict | pd.Series
+        Must have ``context``, ``response_a``, ``response_b``.
+    qids : list[int]
+        Global qids from the frozen bank index. Prompt will number them
+        locally as ``Q1, Q2, …`` in the order provided.
+    qmeta : dict[int, dict[str, str]]
+        Map from global qid → ``{"dimension", "question_text", "definition"}``.
+    side : str
+        "A" or "B".
+    """
+    dim_lines: list[str] = []
+    seen_dims: set[str] = set()
+    for q in qids:
+        meta = qmeta[q]
+        dim = meta["dimension"]
+        if dim in seen_dims:
+            continue
+        seen_dims.add(dim)
+        definition = meta.get("definition", "")
+        dim_lines.append(f"{dim} - {definition}" if definition else dim)
+
+    checklist_text = "\n".join(
+        f"Q{i}: {qmeta[q]['question_text']}" for i, q in enumerate(qids, start=1)
+    )
+    response_key = "response_a" if side.upper() == "A" else "response_b"
+
+    return CHECKEVAL_POINTWISE_PROMPT.format(
+        dimension_block="\n".join(dim_lines),
         context=row["context"],
         response=row[response_key],
         checklist_text=checklist_text,
@@ -901,6 +1146,81 @@ _PAIRWISE_TABLE: dict[tuple[str, str], float] = {
 }
 
 
+def _winner_from_margin(margin: float, tie_delta: float) -> str:
+    """Convert pairwise margin to winner label with tie threshold."""
+    if margin > tie_delta:
+        return "A"
+    if margin < -tie_delta:
+        return "B"
+    return "Tie"
+
+
+def _pairwise_label_map(parsed: dict) -> dict[int, str]:
+    """Convert parsed checklist output to ``{qid: yes|no|na}``."""
+    labels: dict[int, str] = {}
+    for a in parsed.get("answers", []):
+        labels[a["q"]] = a["answer"]
+    for a in parsed.get("na_answers", []):
+        labels[a["q"]] = "na"
+    return labels
+
+
+def compute_per_question_decisiveness(
+    parsed_a: dict,
+    parsed_b: dict,
+    expected_n: int,
+    tie_delta: float = 0.05,
+) -> dict[str, Any] | None:
+    """Compute leave-one-out decisiveness for every question.
+
+    For each q in ``1..expected_n``, remove that question's contribution from
+    the pairwise margin and recompute the winner over ``expected_n - 1`` items.
+    ``decisive`` is True when the winner changes relative to full-bank winner.
+    """
+    if parsed_a.get("_raw_fallback") or parsed_b.get("_raw_fallback"):
+        return None
+    if expected_n <= 0:
+        return {"full_margin": 0.0, "full_winner": "Tie", "per_question": {}}
+
+    map_a = _pairwise_label_map(parsed_a)
+    map_b = _pairwise_label_map(parsed_b)
+
+    contribs: dict[int, float] = {}
+    total = 0.0
+    n_aligned = 0
+    for q in range(1, expected_n + 1):
+        la = map_a.get(q, "na")
+        lb = map_b.get(q, "na")
+        c = _PAIRWISE_TABLE[(la, lb)]
+        contribs[q] = c
+        total += c
+        if la != "na" and lb != "na":
+            n_aligned += 1
+
+    full_margin = total / expected_n
+    full_winner = _winner_from_margin(full_margin, tie_delta=tie_delta)
+
+    per_q: dict[int, dict[str, Any]] = {}
+    loo_denom = max(expected_n - 1, 1)
+    for q in range(1, expected_n + 1):
+        loo_total = total - contribs[q]
+        loo_margin = loo_total / loo_denom
+        loo_winner = _winner_from_margin(loo_margin, tie_delta=tie_delta)
+        per_q[q] = {
+            "contribution": contribs[q],
+            "margin_without_q": loo_margin,
+            "winner_without_q": loo_winner,
+            "decisive": loo_winner != full_winner,
+        }
+
+    return {
+        "full_margin": full_margin,
+        "full_winner": full_winner,
+        "n_aligned_full": n_aligned,
+        "per_question": per_q,
+    }
+
+
 def compare_checklists_pairwise(
     parsed_a: dict,
     parsed_b: dict,
@@ -918,17 +1238,8 @@ def compare_checklists_pairwise(
     if parsed_a.get("_raw_fallback") or parsed_b.get("_raw_fallback"):
         return None
 
-    # Build q -> label maps (default "na" for missing questions)
-    def _label_map(parsed: dict) -> dict[int, str]:
-        m: dict[int, str] = {}
-        for a in parsed.get("answers", []):
-            m[a["q"]] = a["answer"]          # "yes" or "no"
-        for a in parsed.get("na_answers", []):
-            m[a["q"]] = "na"
-        return m
-
-    map_a = _label_map(parsed_a)
-    map_b = _label_map(parsed_b)
+    map_a = _pairwise_label_map(parsed_a)
+    map_b = _pairwise_label_map(parsed_b)
 
     total = 0.0
     n_aligned = 0
@@ -941,12 +1252,7 @@ def compare_checklists_pairwise(
 
     margin = total / expected_n
 
-    if margin > tie_delta:
-        winner = "A"
-    elif margin < -tie_delta:
-        winner = "B"
-    else:
-        winner = "Tie"
+    winner = _winner_from_margin(margin, tie_delta=tie_delta)
 
     return {
         "margin": margin,

@@ -29,7 +29,6 @@ if str(_SRC_ROOT / "evaluation") not in sys.path:
     sys.path.insert(0, str(_SRC_ROOT / "evaluation"))
 
 import pandas as pd
-from vllm.lora.request import LoRARequest
 
 import config as cfg
 from data_process.prepare_generator_sft import (
@@ -45,7 +44,7 @@ from train.plugin.checkeval_reward import (
     prepare_completion_pointwise_prompts,
     summarize_judge_pair,
 )
-from utils import compute_metrics, generate_batch, load_judge_model
+from utils import compute_metrics, generate_batch, load_judge_model, make_lora_handle
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s  %(message)s")
 log = logging.getLogger(__name__)
@@ -239,13 +238,14 @@ def _read_adapter_rank(adapter_path: Path | None) -> int:
     return int(data.get("r", 16))
 
 
-def _make_lora_request(adapter_path: Path | None) -> LoRARequest | None:
+def _make_lora_request(adapter_path: Path | None, backend: str | None = None):
     if adapter_path is None:
         return None
-    return LoRARequest(
-        lora_name=adapter_path.name,
+    return make_lora_handle(
+        adapter_path=str(adapter_path),
+        backend=backend,
+        name=adapter_path.name,
         lora_int_id=1,
-        lora_path=str(adapter_path),
     )
 
 

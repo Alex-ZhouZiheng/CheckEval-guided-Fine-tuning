@@ -349,6 +349,9 @@ def main():
         help="Optional suffix appended to the experiment_name, so runs on "
              "different banks don't overwrite each other (e.g. '_v2').",
     )
+    parser.add_argument("--backend", type=str, default=None,
+                        choices=["llamacpp", "vllm"],
+                        help="Inference backend; defaults to cfg.INFERENCE_BACKEND.")
     args = parser.parse_args()
 
     if args.checklists_dir is not None:
@@ -367,6 +370,7 @@ def main():
 
     model = load_judge_model(
         model_id=args.model_id,
+        backend=args.backend,
         cache_dir=args.cache_dir,
         tensor_parallel_size=args.tensor_parallel_size,
         max_model_len=args.max_model_len,

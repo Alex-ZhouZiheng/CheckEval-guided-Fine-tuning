@@ -34,8 +34,6 @@ from pathlib import Path
 
 import pandas as pd
 from tqdm import tqdm
-from vllm.lora.request import LoRARequest
-
 import config as cfg
 from data_process.prepare_judge_sft import build_pointwise_prompt
 from run_generator_infer import parse_generated_checklist
@@ -45,6 +43,7 @@ from utils import (
     compute_metrics,
     generate_batch,
     load_judge_model,
+    make_lora_handle,
     parse_checkeval_output,
     save_results,
 )
@@ -157,6 +156,9 @@ def main() -> None:
     parser.add_argument("--gpu-memory-utilization", type=float,
                         default=cfg.VLLM_ENGINE_KWARGS["gpu_memory_utilization"])
     parser.add_argument("--experiment-suffix",type=str,default=date.today())
+    parser.add_argument("--backend", type=str, default=None,
+                        choices=["llamacpp", "vllm"],
+                        help="Inference backend; defaults to cfg.INFERENCE_BACKEND.")
     args = parser.parse_args()
 
     if args.judge_adapter:
@@ -223,25 +225,23 @@ def main() -> None:
         )
         elapsed = time.time() - t0
     else:
-        # vLLM with optional judge LoRA.
         enable_lora = adapter_path is not None
         model = load_judge_model(
             model_id=args.base_model,
+            backend=args.backend,
             tensor_parallel_size=args.tensor_parallel_size,
             max_model_len=args.max_model_len,
             gpu_memory_utilization=args.gpu_memory_utilization,
             enable_lora=enable_lora,
             max_lora_rank=max(lora_rank, 16) if enable_lora else None,
             max_loras=1 if enable_lora else None,
+            llamacpp_adapter_path=str(adapter_path) if enable_lora else None,
         )
-        lora_request = (
-            LoRARequest(
-                lora_name=adapter_path.name,
-                lora_int_id=1,
-                lora_path=str(adapter_path),
-            )
-            if enable_lora
-            else None
+        lora_request = make_lora_handle(
+            adapter_path=str(adapter_path) if enable_lora else None,
+            backend=args.backend,
+            name=adapter_path.name if enable_lora else "adapter",
+            lora_int_id=1,
         )
 
         t0 = time.time()

@@ -64,6 +64,31 @@ VLLM_CHAT_KWARGS = {
     "chat_template_kwargs": {"enable_thinking": False},
 }
 
+# ────────────────────────── llama.cpp backend ────────────────
+# Primary inference backend. "llamacpp" hits a locally-running llama-server
+# via its OpenAI-compatible HTTP API; "vllm" uses the in-process vLLM engine.
+INFERENCE_BACKEND = os.environ.get("INFERENCE_BACKEND", "llamacpp")
+
+LLAMACPP_SERVER_URL = os.environ.get("LLAMACPP_SERVER_URL", "http://127.0.0.1:8080/v1")
+LLAMACPP_API_KEY = os.environ.get("LLAMACPP_API_KEY", "EMPTY")
+LLAMACPP_QUANT = os.environ.get("LLAMACPP_QUANT", "Q4_K_M")
+
+LLAMACPP_SERVER_KWARGS = {
+    "ctx_size": 16384,       # matches VLLM_ENGINE_KWARGS["max_model_len"]
+    "parallel": 16,          # matches VLLM_ENGINE_KWARGS["max_num_seqs"]
+    "n_gpu_layers": -1,      # all layers on GPU
+    "flash_attn": True,
+    "cont_batching": True,
+}
+
+# Client-side fan-out concurrency when calling llama-server.
+LLAMACPP_HTTP_CONCURRENCY = int(os.environ.get("LLAMACPP_HTTP_CONCURRENCY", "16"))
+
+GGUF_DIR = PROJECT_ROOT / "models" / "gguf"
+GGUF_ADAPTER_DIR = GGUF_DIR / "adapters"
+JUDGE_GGUF = GGUF_DIR / f"Qwen3.5-9B.{LLAMACPP_QUANT}.gguf"
+GENERATOR_GGUF = GGUF_DIR / f"Qwen3.5-4B.{LLAMACPP_QUANT}.gguf"
+
 GENERATION_KWARGS = {
     "max_new_tokens": 512,
     "temperature": 0.0,

@@ -291,6 +291,9 @@ def main():
     parser.add_argument("--n-wrong", type=int, default=25)
     parser.add_argument("--n-correct", type=int, default=25)
     parser.add_argument("--seed", type=int, default=cfg.SEED)
+    parser.add_argument("--backend", type=str, default=None,
+                        choices=["llamacpp", "vllm"],
+                        help="Inference backend; defaults to cfg.INFERENCE_BACKEND.")
     args = parser.parse_args()
 
     checklists_dir = args.checklists_dir or cfg.CHECKLISTS_DIR
@@ -305,6 +308,7 @@ def main():
 
     model = load_judge_model(
         model_id=args.model_id,
+        backend=args.backend,
         cache_dir=args.cache_dir,
         tensor_parallel_size=args.tensor_parallel_size,
         max_model_len=args.max_model_len,

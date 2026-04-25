@@ -113,6 +113,9 @@ def main():
         type=int,
         default=cfg.VLLM_ENGINE_KWARGS["max_num_seqs"],
     )
+    parser.add_argument("--backend", type=str, default=None,
+                        choices=["llamacpp", "vllm"],
+                        help="Inference backend; defaults to cfg.INFERENCE_BACKEND.")
     args = parser.parse_args()
 
     df = load_eval_data(args.split, args.subset)
@@ -122,6 +125,7 @@ def main():
 
     model = load_judge_model(
         model_id=args.model_id,
+        backend=args.backend,
         cache_dir=args.cache_dir,
         tensor_parallel_size=args.tensor_parallel_size,
         max_model_len=args.max_model_len,

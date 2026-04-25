@@ -28,14 +28,13 @@ import time
 from pathlib import Path
 
 import pandas as pd
-from vllm.lora.request import LoRARequest
 
 import config as cfg
 from prepare_generator_sft import (
     build_generator_messages,
     format_checklist_target,
 )
-from utils import generate_batch, load_judge_model
+from utils import generate_batch, load_judge_model, make_lora_handle
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s  %(message)s")
 log = logging.getLogger(__name__)
@@ -129,6 +128,9 @@ def main() -> None:
                         default=cfg.VLLM_ENGINE_KWARGS["max_model_len"])
     parser.add_argument("--gpu-memory-utilization", type=float,
                         default=cfg.VLLM_ENGINE_KWARGS["gpu_memory_utilization"])
+    parser.add_argument("--backend", type=str, default=None,
+                        choices=["llamacpp", "vllm"],
+                        help="Inference backend; defaults to cfg.INFERENCE_BACKEND.")
     args = parser.parse_args()
 
     if args.adapter_path:
@@ -160,21 +162,20 @@ def main() -> None:
              args.base_model, enable_lora, lora_rank)
     model = load_judge_model(
         model_id=args.base_model,
+        backend=args.backend,
         tensor_parallel_size=args.tensor_parallel_size,
         max_model_len=args.max_model_len,
         gpu_memory_utilization=args.gpu_memory_utilization,
         enable_lora=enable_lora,
         max_lora_rank=max(lora_rank, 16) if enable_lora else None,
         max_loras=1 if enable_lora else None,
+        llamacpp_adapter_path=str(adapter_path) if enable_lora else None,
     )
-    lora_request = (
-        LoRARequest(
-            lora_name=adapter_path.name,
-            lora_int_id=1,
-            lora_path=str(adapter_path),
-        )
-        if enable_lora
-        else None
+    lora_request = make_lora_handle(
+        adapter_path=str(adapter_path) if enable_lora else None,
+        backend=args.backend,
+        name=adapter_path.name if enable_lora else "adapter",
+        lora_int_id=1,
     )
 
     all_messages = [build_generator_messages(r) for _, r in df.iterrows()]

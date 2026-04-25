@@ -27,14 +27,13 @@ from pathlib import Path
 
 import pandas as pd
 from tqdm import tqdm
-from vllm.lora.request import LoRARequest
-
 import config as cfg
 from utils import (
     build_vanilla_prompt,
     generate_batch,
     load_eval_data,
     load_judge_model,
+    make_lora_handle,
     parse_winner,
 )
 
@@ -59,6 +58,9 @@ def main():
     p.add_argument("--batch-size", type=int, default=16)
     p.add_argument("--max-samples", type=int, default=None)
     p.add_argument("--max-lora-rank", type=int, default=cfg.LORA_RANK)
+    p.add_argument("--backend", type=str, default=None,
+                   choices=["llamacpp", "vllm"],
+                   help="Inference backend; defaults to cfg.INFERENCE_BACKEND.")
     args = p.parse_args()
 
     df = load_eval_data(args.split, args.subset)
@@ -69,10 +71,17 @@ def main():
 
     model = load_judge_model(
         model_id=args.model_id,
+        backend=args.backend,
         enable_lora=True,
         max_lora_rank=args.max_lora_rank,
+        llamacpp_adapter_path=str(args.adapter_path),
     )
-    lora_req = LoRARequest("warmup", 1, str(args.adapter_path))
+    lora_req = make_lora_handle(
+        adapter_path=str(args.adapter_path),
+        backend=args.backend,
+        name="warmup",
+        lora_int_id=1,
+    )
 
     # normal order
     msgs_norm = [_messages(r) for _, r in df.iterrows()]

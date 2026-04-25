@@ -19,7 +19,7 @@ ENV/
 .vllm/
 .conda/
 .python-version
-.venvmerge/
+.venvmerge
 
 # ────────────────────────── IDE / OS ─────────────────────────
 .vscode/
@@ -116,3 +116,11 @@ checklistbak/
 /_*.py
 .claude/
 wandb/
+
+.claude/
+.agents/
+.code
+.orchestra-skills.json
+.tmp_curves/
+docs/
+results/dev_600_v3_vs_v1_exports/

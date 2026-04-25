@@ -31,7 +31,6 @@ from datetime import date
 
 import pandas as pd
 from tqdm import tqdm
-from vllm.lora.request import LoRARequest
 
 import config as cfg
 from utils import (
@@ -43,6 +42,7 @@ from utils import (
     load_checklists,
     load_eval_data,
     load_judge_model,
+    make_lora_handle,
     parse_checkeval_output,
     parse_winner,
     save_results,
@@ -75,7 +75,7 @@ def run_vanilla_eval(
     df: pd.DataFrame,
     model,
     batch_size: int,
-    lora_request: LoRARequest | None = None,
+    lora_request=None,
 ) -> pd.DataFrame:
     """Run vanilla pairwise judge evaluation."""
     all_messages = []
@@ -110,7 +110,7 @@ def run_checkeval_eval(
     batch_size: int,
     expected_n: int,
     tie_delta: float = TIE_DELTA,
-    lora_request: LoRARequest | None = None,
+    lora_request=None,
 ) -> pd.DataFrame:
     """Run pointwise CheckEval judge evaluation with per-question pairwise aggregation.
 
@@ -244,7 +244,14 @@ def main():
         "--run-name",
         type=str,
         default=None
-    )   
+    )
+    parser.add_argument(
+        "--backend",
+        type=str,
+        default=None,
+        choices=["llamacpp", "vllm"],
+        help="Inference backend; defaults to cfg.INFERENCE_BACKEND.",
+    )
     args = parser.parse_args()
 
     adapter_path = Path(args.adapter_path).resolve()
@@ -262,18 +269,21 @@ def main():
 
     model = load_judge_model(
         model_id=args.base_model,
+        backend=args.backend,
         tensor_parallel_size=args.tensor_parallel_size,
         max_model_len=args.max_model_len,
         gpu_memory_utilization=args.gpu_memory_utilization,
         enable_lora=True,
         max_lora_rank=max_lora_rank,
         max_loras=1,
+        llamacpp_adapter_path=str(adapter_path),
     )
 
-    lora_request = LoRARequest(
-        lora_name=adapter_path.name,
+    lora_request = make_lora_handle(
+        adapter_path=str(adapter_path),
+        backend=args.backend,
+        name=adapter_path.name,
         lora_int_id=1,
-        lora_path=str(adapter_path),
     )
 
     # 3. Load eval data

@@ -1,0 +1,734 @@
+﻿#!/usr/bin/env python3
+"""Dynamic checklist evaluation with top-k selection and escalation policies.
+
+Policies:
+- static_v3
+- random_k
+- domain_fixed_k
+- learned_topk
+- learned_topk_escalate
+- learned_topk_fallback
+
+Usage:
+    python src/evaluation/run_dynamic_eval.py \
+        --selector results/checkpoints/selector_v1 \
+        --bank checklists/v3_frozen \
+        --split dev_600 --policy learned_topk --k 20 \
+        --out results/dynamic_dev_600/p3_k20
+"""
+
+from __future__ import annotations
+
+import os as _os
+import sys as _sys
+
+_sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
+
+import argparse
+import hashlib
+import json
+import logging
+import time
+from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
+from typing import Any
+
+import pandas as pd
+from tqdm import tqdm
+import yaml
+
+import config as cfg
+from evaluation.selector_infer import (
+    active_qids_for_domain,
+    build_sample_texts,
+    load_eval_pairs,
+    load_selector_bundle,
+    score_samples_with_bundle,
+    select_topk_with_quota,
+)
+from utils import (
+    _PAIRWISE_TABLE,
+    build_pointwise_prompt_from_qids,
+    compute_metrics,
+    generate_batch,
+    load_judge_model,
+    parse_checkeval_output,
+)
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s  %(message)s")
+log = logging.getLogger(__name__)
+
+
+def _winner_from_margin(margin: float, tie_delta: float) -> str:
+    if margin > tie_delta:
+        return "A"
+    if margin < -tie_delta:
+        return "B"
+    return "Tie"
+
+
+def _load_bank(bank_dir: Path) -> pd.DataFrame:
+    path = bank_dir / "bank_index.parquet"
+    if not path.exists():
+        raise FileNotFoundError(f"{path} not found")
+    df = pd.read_parquet(path).sort_values("qid", kind="stable").reset_index(drop=True)
+
+    needed = {"qid", "dimension", "question_text"}
+    missing = needed - set(df.columns)
+    if missing:
+        raise ValueError(f"bank_index missing columns: {sorted(missing)}")
+
+    if "definition" not in df.columns:
+        df["definition"] = ""
+    return df
+
+
+def _load_definitions(bank_dir: Path) -> dict[str, str]:
+    out: dict[str, str] = {}
+    for yaml_path in sorted(bank_dir.glob("*_filtered.yaml")):
+        with yaml_path.open("r", encoding="utf-8") as f:
+            data = yaml.safe_load(f)
+        dim = data.get("dimension", yaml_path.stem)
+        out[dim] = data.get("definition", "")
+    return out
+
+
+def _build_prompt_from_qids(
+    row: pd.Series,
+    qids: list[int],
+    qmeta: dict[int, dict[str, str]],
+    side: str,
+) -> str:
+    return build_pointwise_prompt_from_qids(row=row, qids=qids, qmeta=qmeta, side=side)
+
+
+def _http_judge_generate(
+    messages_list: list[list[dict[str, str]]],
+    url: str,
+    model: str,
+    api_key: str,
+    max_new_tokens: int,
+    temperature: float = 0.0,
+    concurrency: int = 32,
+) -> list[str]:
+    from openai import OpenAI
+
+    client = OpenAI(base_url=url, api_key=api_key)
+
+    def one(msgs: list[dict[str, str]]) -> str:
+        resp = client.chat.completions.create(
+            model=model,
+            messages=msgs,
+            temperature=temperature,
+            max_tokens=max_new_tokens,
+            extra_body={"chat_template_kwargs": {"enable_thinking": False}},
+        )
+        return resp.choices[0].message.content or ""
+
+    with ThreadPoolExecutor(max_workers=concurrency) as ex:
+        return list(
+            tqdm(ex.map(one, messages_list), total=len(messages_list), desc="Judge HTTP")
+        )
+
+
+def _generate_local(
+    model,
+    all_messages: list[list[dict[str, str]]],
+    batch_size: int,
+    max_new_tokens: int,
+    prompt_chunk_size: int,
+    seed: int | None,
+) -> list[str]:
+    out: list[str] = []
+    for start in range(0, len(all_messages), prompt_chunk_size):
+        chunk = all_messages[start : start + prompt_chunk_size]
+        out.extend(
+            generate_batch(
+                model,
+                chunk,
+                batch_size=batch_size,
+                max_new_tokens=max_new_tokens,
+                seed=seed,
+            )
+        )
+    return out
+
+
+def _parse_stage_labels(raw: str, qids: list[int]) -> tuple[dict[int, str], dict]:
+    parsed = parse_checkeval_output(raw, expected_n=len(qids))
+    labels: dict[int, str] = {}
+
+    for a in parsed.get("answers", []):
+        local_q = int(a["q"])
+        if 1 <= local_q <= len(qids):
+            labels[qids[local_q - 1]] = str(a["answer"])
+
+    for a in parsed.get("na_answers", []):
+        local_q = int(a["q"])
+        if 1 <= local_q <= len(qids):
+            labels[qids[local_q - 1]] = "na"
+
+    return labels, parsed
+
+
+def _compute_margin(
+    labels_a: dict[int, str],
+    labels_b: dict[int, str],
+    asked_qids: list[int],
+    tie_delta: float,
+) -> dict[str, Any]:
+    if not asked_qids:
+        return {"margin": 0.0, "winner": "Tie", "n_aligned": 0}
+
+    total = 0.0
+    n_aligned = 0
+    for qid in asked_qids:
+        la = labels_a.get(qid, "na")
+        lb = labels_b.get(qid, "na")
+        total += _PAIRWISE_TABLE[(la, lb)]
+        if la != "na" and lb != "na":
+            n_aligned += 1
+
+    margin = total / len(asked_qids)
+    return {
+        "margin": float(margin),
+        "winner": _winner_from_margin(float(margin), tie_delta=tie_delta),
+        "n_aligned": int(n_aligned),
+    }
+
+
+def _run_stage(
+    stage_name: str,
+    df_by_sid: dict[str, pd.Series],
+    qids_by_sid: dict[str, list[int]],
+    qmeta: dict[int, dict[str, str]],
+    judge_mode: str,
+    model,
+    batch_size: int,
+    max_new_tokens: int,
+    prompt_chunk_size: int,
+    seed: int,
+    judge_url: str,
+    judge_model: str | None,
+    judge_api_key: str,
+    http_concurrency: int,
+) -> tuple[dict[str, dict[str, Any]], float]:
+    metas: list[dict[str, Any]] = []
+    messages_a: list[list[dict[str, str]]] = []
+    messages_b: list[list[dict[str, str]]] = []
+
+    for sid, qids in qids_by_sid.items():
+        if not qids:
+            continue
+        row = df_by_sid[sid]
+        pa = _build_prompt_from_qids(row, qids, qmeta, side="A")
+        pb = _build_prompt_from_qids(row, qids, qmeta, side="B")
+
+        messages_a.append([{"role": "user", "content": pa}])
+        messages_b.append([{"role": "user", "content": pb}])
+        metas.append({"sid": sid, "qids": qids})
+
+    if not metas:
+        return {}, 0.0
+
+    all_messages = messages_a + messages_b
+    t0 = time.time()
+    if judge_mode == "http":
+        if not judge_model:
+            raise SystemExit("--judge-model is required for --judge-mode http")
+        raw = _http_judge_generate(
+            all_messages,
+            url=judge_url,
+            model=judge_model,
+            api_key=judge_api_key,
+            max_new_tokens=max_new_tokens,
+            temperature=0.0,
+            concurrency=http_concurrency,
+        )
+    else:
+        raw = _generate_local(
+            model=model,
+            all_messages=all_messages,
+            batch_size=batch_size,
+            max_new_tokens=max_new_tokens,
+            prompt_chunk_size=prompt_chunk_size,
+            seed=seed,
+        )
+    elapsed = time.time() - t0
+
+    n = len(metas)
+    raw_a = raw[:n]
+    raw_b = raw[n:]
+
+    out: dict[str, dict[str, Any]] = {}
+    for meta, r_a, r_b in zip(metas, raw_a, raw_b):
+        sid = meta["sid"]
+        qids = meta["qids"]
+
+        labels_a, parsed_a = _parse_stage_labels(r_a, qids)
+        labels_b, parsed_b = _parse_stage_labels(r_b, qids)
+
+        out[sid] = {
+            "labels_a": labels_a,
+            "labels_b": labels_b,
+            "parse_ok": (not parsed_a.get("_raw_fallback")) and (not parsed_b.get("_raw_fallback")),
+            "raw_a": r_a,
+            "raw_b": r_b,
+            "stage": stage_name,
+        }
+
+    return out, elapsed
+
+
+def _stable_shuffle(values: list[int], seed: int, key: str) -> list[int]:
+    payload = f"{seed}:{key}".encode("utf-8")
+    sid_seed = int(hashlib.sha256(payload).hexdigest()[:8], 16)
+    rng = __import__("random").Random(sid_seed)
+    arr = list(values)
+    rng.shuffle(arr)
+    return arr
+
+
+def _build_domain_fixed_rankings(
+    oracle_train_path: Path,
+    bank_df: pd.DataFrame,
+) -> dict[str, list[int]]:
+    if not oracle_train_path.exists():
+        raise FileNotFoundError(
+            f"{oracle_train_path} not found. Provide --oracle-train for domain_fixed_k policy."
+        )
+
+    df = pd.read_parquet(oracle_train_path)
+    required = {"domain", "qid", "u2_abs_contrib"}
+    missing = required - set(df.columns)
+    if missing:
+        raise ValueError(f"{oracle_train_path} missing columns: {sorted(missing)}")
+
+    mean_u2 = (
+        df.groupby(["domain", "qid"], as_index=False)["u2_abs_contrib"]
+        .mean()
+        .rename(columns={"u2_abs_contrib": "mean_u2"})
+    )
+
+    out: dict[str, list[int]] = {}
+    for domain in sorted(mean_u2["domain"].astype(str).unique().tolist()):
+        active = active_qids_for_domain(bank_df, domain)
+        scores = mean_u2[mean_u2["domain"] == domain].set_index("qid")["mean_u2"].to_dict()
+        ranked = sorted(active, key=lambda q: (scores.get(q, 0.0), -q), reverse=True)
+        out[domain] = ranked
+
+    return out
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--bank", type=Path, required=True)
+    parser.add_argument("--split", type=str, default="dev_600")
+    parser.add_argument("--subset", type=str, default=None)
+    parser.add_argument("--input-path", type=Path, default=None)
+
+    parser.add_argument(
+        "--policy",
+        type=str,
+        required=True,
+        choices=[
+            "static_v3",
+            "random_k",
+            "domain_fixed_k",
+            "learned_topk",
+            "learned_topk_escalate",
+            "learned_topk_fallback",
+        ],
+    )
+    parser.add_argument("--k", type=int, default=20)
+    parser.add_argument("--selector", type=Path, default=None)
+    parser.add_argument("--oracle-train", type=Path, default=Path("data/oracle/train_oracle_v3.parquet"))
+    parser.add_argument("--out", type=Path, required=True)
+
+    parser.add_argument("--tie-delta", type=float, default=0.05)
+    parser.add_argument("--tau-escalate", type=float, default=0.05)
+    parser.add_argument("--tau-hard", type=float, default=0.03)
+    parser.add_argument("--n-min", type=int, default=8)
+
+    parser.add_argument("--no-dim-quota", action="store_true")
+    parser.add_argument("--seed", type=int, default=42)
+
+    parser.add_argument("--batch-size", type=int, default=16)
+    parser.add_argument("--max-new-tokens", type=int, default=1024)
+    parser.add_argument("--prompt-chunk-size", type=int, default=512)
+    parser.add_argument("--max-samples", type=int, default=None)
+
+    parser.add_argument("--selector-batch-size", type=int, default=64)
+    parser.add_argument("--selector-device", type=str, default="cuda" if __import__("torch").cuda.is_available() else "cpu")
+
+    parser.add_argument("--judge-mode", choices=["local", "http"], default="local")
+    parser.add_argument("--backend", type=str, default=None,
+                        choices=["llamacpp", "vllm"],
+                        help="Inference backend for local judge; defaults to cfg.INFERENCE_BACKEND.")
+    parser.add_argument("--judge-url", type=str, default="http://127.0.0.1:8000/v1")
+    parser.add_argument("--judge-model", type=str, default=None)
+    parser.add_argument("--judge-api-key", type=str, default="EMPTY")
+    parser.add_argument("--http-concurrency", type=int, default=32)
+    parser.add_argument("--base-model", type=str, default=str(cfg.JUDGE_MODEL_ID))
+
+    parser.add_argument(
+        "--tensor-parallel-size",
+        type=int,
+        default=cfg.VLLM_ENGINE_KWARGS["tensor_parallel_size"],
+    )
+    parser.add_argument(
+        "--max-model-len",
+        type=int,
+        default=cfg.VLLM_ENGINE_KWARGS["max_model_len"],
+    )
+    parser.add_argument(
+        "--gpu-memory-utilization",
+        type=float,
+        default=cfg.VLLM_ENGINE_KWARGS["gpu_memory_utilization"],
+    )
+    parser.add_argument("--save-raw-outputs", action="store_true")
+    args = parser.parse_args()
+
+    bank_dir = args.bank.resolve()
+    bank_df = _load_bank(bank_dir)
+    _ = _load_definitions(bank_dir)
+    qmeta = {
+        int(r["qid"]): {
+            "dimension": str(r["dimension"]),
+            "question_text": str(r["question_text"]),
+            "definition": str(r.get("definition", "") or ""),
+        }
+        for _, r in bank_df.iterrows()
+    }
+
+    df = load_eval_pairs(
+        split=args.split,
+        subset=args.subset,
+        input_path=args.input_path,
+        max_samples=args.max_samples,
+    )
+    df_by_sid = {str(r["sample_id"]): r for _, r in df.iterrows()}
+
+    # Ranking candidates per sample.
+    ranking_by_sid: dict[str, list[int]] = {}
+    selector_elapsed = 0.0
+
+    if args.policy in {"learned_topk", "learned_topk_escalate", "learned_topk_fallback"}:
+        if args.selector is None:
+            raise SystemExit("--selector is required for learned policies")
+
+        import torch
+
+        selector_device = torch.device(args.selector_device)
+        bundle = load_selector_bundle(args.selector, selector_device)
+        texts = build_sample_texts(df)
+
+        t0_sel = time.time()
+        score_matrix = score_samples_with_bundle(bundle, texts, batch_size=args.selector_batch_size)
+        selector_elapsed = time.time() - t0_sel
+
+        for i, row in df.iterrows():
+            sid = str(row["sample_id"])
+            active = active_qids_for_domain(bank_df, str(row["domain"]))
+            active = [q for q in active if q in bundle.qid_to_idx]
+            if not active:
+                active = active_qids_for_domain(bank_df, str(row["domain"]))
+                ranking_by_sid[sid] = active
+                continue
+
+            idx = torch.tensor([bundle.qid_to_idx[q] for q in active], dtype=torch.long)
+            s = score_matrix[i, idx]
+            order = torch.argsort(s, descending=True)
+            ranking_by_sid[sid] = [active[int(j)] for j in order.tolist()]
+
+    elif args.policy == "random_k":
+        for _, row in df.iterrows():
+            sid = str(row["sample_id"])
+            active = active_qids_for_domain(bank_df, str(row["domain"]))
+            ranking_by_sid[sid] = _stable_shuffle(active, args.seed, sid)
+
+    elif args.policy == "domain_fixed_k":
+        domain_rankings = _build_domain_fixed_rankings(args.oracle_train.resolve(), bank_df)
+        for _, row in df.iterrows():
+            sid = str(row["sample_id"])
+            domain = str(row["domain"])
+            active = active_qids_for_domain(bank_df, domain)
+            ranked = domain_rankings.get(domain, active)
+            ranked = [q for q in ranked if q in set(active)]
+            leftover = [q for q in active if q not in set(ranked)]
+            ranking_by_sid[sid] = ranked + leftover
+
+    else:  # static_v3
+        for _, row in df.iterrows():
+            sid = str(row["sample_id"])
+            ranking_by_sid[sid] = active_qids_for_domain(bank_df, str(row["domain"]))
+
+    # State per sample.
+    state: dict[str, dict[str, Any]] = {}
+    stage_latency_s: dict[str, float] = {str(r["sample_id"]): 0.0 for _, r in df.iterrows()}
+
+    for _, row in df.iterrows():
+        sid = str(row["sample_id"])
+        domain = str(row["domain"])
+        active = active_qids_for_domain(bank_df, domain)
+        ranking = ranking_by_sid[sid]
+
+        ranking = [q for q in ranking if q in set(active)]
+        ranking += [q for q in active if q not in set(ranking)]
+
+        if args.policy == "static_v3":
+            initial = list(ranking)
+        else:
+            initial = select_topk_with_quota(
+                ranked_active_qids=ranking,
+                bank_df=bank_df,
+                domain=domain,
+                k=args.k,
+                enforce_quota=(not args.no_dim_quota),
+            )
+
+        state[sid] = {
+            "ranking": ranking,
+            "active_qids": active,
+            "initial_qids": list(initial),
+            "asked_qids": [],
+            "labels_a": {},
+            "labels_b": {},
+            "parse_ok_all": True,
+            "escalated": False,
+            "fallback": False,
+            "margin_initial": None,
+            "n_aligned_initial": None,
+            "margin_final": None,
+            "n_aligned_final": None,
+            "winner_final": "Tie",
+            "raw_outputs": {},
+        }
+
+    # Judge model (single load for local mode).
+    model = None
+    if args.judge_mode == "local":
+        model = load_judge_model(
+            model_id=args.base_model,
+            backend=args.backend,
+            tensor_parallel_size=args.tensor_parallel_size,
+            max_model_len=args.max_model_len,
+            gpu_memory_utilization=args.gpu_memory_utilization,
+        )
+
+    # Stage 1: initial top-k (or static full bank).
+    stage1_q = {sid: st["initial_qids"] for sid, st in state.items()}
+    stage1_out, t_stage1 = _run_stage(
+        stage_name="stage1",
+        df_by_sid=df_by_sid,
+        qids_by_sid=stage1_q,
+        qmeta=qmeta,
+        judge_mode=args.judge_mode,
+        model=model,
+        batch_size=args.batch_size,
+        max_new_tokens=args.max_new_tokens,
+        prompt_chunk_size=args.prompt_chunk_size,
+        seed=args.seed,
+        judge_url=args.judge_url,
+        judge_model=args.judge_model,
+        judge_api_key=args.judge_api_key,
+        http_concurrency=args.http_concurrency,
+    )
+    if stage1_out:
+        stage1_avg = t_stage1 / len(stage1_out)
+        for sid, result in stage1_out.items():
+            st = state[sid]
+            st["asked_qids"].extend(st["initial_qids"])
+            st["labels_a"].update(result["labels_a"])
+            st["labels_b"].update(result["labels_b"])
+            st["parse_ok_all"] = st["parse_ok_all"] and result["parse_ok"]
+            stage_latency_s[sid] += stage1_avg
+            if args.save_raw_outputs:
+                st["raw_outputs"]["stage1_a"] = result["raw_a"]
+                st["raw_outputs"]["stage1_b"] = result["raw_b"]
+
+    for sid, st in state.items():
+        cmp = _compute_margin(st["labels_a"], st["labels_b"], st["asked_qids"], tie_delta=args.tie_delta)
+        st["margin_initial"] = cmp["margin"]
+        st["n_aligned_initial"] = cmp["n_aligned"]
+        st["margin_final"] = cmp["margin"]
+        st["n_aligned_final"] = cmp["n_aligned"]
+        st["winner_final"] = cmp["winner"]
+
+    # Stage 2: escalation
+    do_escalate = args.policy in {"learned_topk_escalate", "learned_topk_fallback"}
+    stage2_q: dict[str, list[int]] = {}
+    if do_escalate:
+        for sid, st in state.items():
+            need = (abs(float(st["margin_final"])) < args.tau_escalate) or (
+                int(st["n_aligned_final"]) < args.n_min
+            )
+            if not need:
+                continue
+            remaining = [q for q in st["ranking"] if q not in set(st["asked_qids"])]
+            if not remaining:
+                continue
+            add_q = remaining[: args.k]
+            stage2_q[sid] = add_q
+            st["escalated"] = True
+
+    if stage2_q:
+        stage2_out, t_stage2 = _run_stage(
+            stage_name="stage2_escalate",
+            df_by_sid=df_by_sid,
+            qids_by_sid=stage2_q,
+            qmeta=qmeta,
+            judge_mode=args.judge_mode,
+            model=model,
+            batch_size=args.batch_size,
+            max_new_tokens=args.max_new_tokens,
+            prompt_chunk_size=args.prompt_chunk_size,
+            seed=args.seed,
+            judge_url=args.judge_url,
+            judge_model=args.judge_model,
+            judge_api_key=args.judge_api_key,
+            http_concurrency=args.http_concurrency,
+        )
+
+        stage2_avg = t_stage2 / len(stage2_out) if stage2_out else 0.0
+        for sid, result in stage2_out.items():
+            st = state[sid]
+            st["asked_qids"].extend(stage2_q[sid])
+            st["labels_a"].update(result["labels_a"])
+            st["labels_b"].update(result["labels_b"])
+            st["parse_ok_all"] = st["parse_ok_all"] and result["parse_ok"]
+            stage_latency_s[sid] += stage2_avg
+            if args.save_raw_outputs:
+                st["raw_outputs"]["stage2_a"] = result["raw_a"]
+                st["raw_outputs"]["stage2_b"] = result["raw_b"]
+
+            cmp = _compute_margin(st["labels_a"], st["labels_b"], st["asked_qids"], tie_delta=args.tie_delta)
+            st["margin_final"] = cmp["margin"]
+            st["n_aligned_final"] = cmp["n_aligned"]
+            st["winner_final"] = cmp["winner"]
+
+    # Stage 3: hard fallback to full bank.
+    do_fallback = args.policy == "learned_topk_fallback"
+    stage3_q: dict[str, list[int]] = {}
+    if do_fallback:
+        for sid, st in state.items():
+            if abs(float(st["margin_final"])) >= args.tau_hard:
+                continue
+            remaining = [q for q in st["active_qids"] if q not in set(st["asked_qids"])]
+            if not remaining:
+                continue
+            stage3_q[sid] = remaining
+            st["fallback"] = True
+
+    if stage3_q:
+        stage3_out, t_stage3 = _run_stage(
+            stage_name="stage3_fallback",
+            df_by_sid=df_by_sid,
+            qids_by_sid=stage3_q,
+            qmeta=qmeta,
+            judge_mode=args.judge_mode,
+            model=model,
+            batch_size=args.batch_size,
+            max_new_tokens=args.max_new_tokens,
+            prompt_chunk_size=args.prompt_chunk_size,
+            seed=args.seed,
+            judge_url=args.judge_url,
+            judge_model=args.judge_model,
+            judge_api_key=args.judge_api_key,
+            http_concurrency=args.http_concurrency,
+        )
+
+        stage3_avg = t_stage3 / len(stage3_out) if stage3_out else 0.0
+        for sid, result in stage3_out.items():
+            st = state[sid]
+            st["asked_qids"].extend(stage3_q[sid])
+            st["labels_a"].update(result["labels_a"])
+            st["labels_b"].update(result["labels_b"])
+            st["parse_ok_all"] = st["parse_ok_all"] and result["parse_ok"]
+            stage_latency_s[sid] += stage3_avg
+            if args.save_raw_outputs:
+                st["raw_outputs"]["stage3_a"] = result["raw_a"]
+                st["raw_outputs"]["stage3_b"] = result["raw_b"]
+
+            cmp = _compute_margin(st["labels_a"], st["labels_b"], st["asked_qids"], tie_delta=args.tie_delta)
+            st["margin_final"] = cmp["margin"]
+            st["n_aligned_final"] = cmp["n_aligned"]
+            st["winner_final"] = cmp["winner"]
+
+    # selector overhead is shared across all samples.
+    if selector_elapsed > 0 and len(state) > 0:
+        sel_avg = selector_elapsed / len(state)
+        for sid in state:
+            stage_latency_s[sid] += sel_avg
+
+    rows: list[dict[str, Any]] = []
+    y_true: list[str] = []
+    y_pred: list[str] = []
+    domains: list[str] = []
+
+    for _, row in df.iterrows():
+        sid = str(row["sample_id"])
+        st = state[sid]
+        y_true.append(str(row["winner"]))
+        y_pred.append(str(st["winner_final"]))
+        domains.append(str(row["domain"]))
+
+        r = {
+            "sample_id": sid,
+            "prompt_id": row["prompt_id"],
+            "domain": row["domain"],
+            "winner": row["winner"],
+            "predicted_winner": st["winner_final"],
+            "margin_initial": st["margin_initial"],
+            "margin_final": st["margin_final"],
+            "n_aligned_initial": st["n_aligned_initial"],
+            "n_aligned_final": st["n_aligned_final"],
+            "selected_qids": st["initial_qids"],
+            "asked_qids": st["asked_qids"],
+            "k_selected": len(st["initial_qids"]),
+            "k_after_escalation": len(st["asked_qids"]),
+            "escalated": bool(st["escalated"]),
+            "fallback": bool(st["fallback"]),
+            "parse_ok": bool(st["parse_ok_all"]),
+            "latency_s_estimate": float(stage_latency_s[sid]),
+        }
+        if args.save_raw_outputs:
+            r.update(st["raw_outputs"])
+        rows.append(r)
+
+    pred_df = pd.DataFrame(rows)
+
+    metrics = compute_metrics(y_true=y_true, y_pred=y_pred, domains=domains)
+    metrics["policy"] = args.policy
+    metrics["k"] = args.k
+    metrics["tie_delta"] = args.tie_delta
+    metrics["tau_escalate"] = args.tau_escalate
+    metrics["tau_hard"] = args.tau_hard
+    metrics["n_min"] = args.n_min
+    metrics["avg_k"] = float(pred_df["k_after_escalation"].mean()) if len(pred_df) else 0.0
+    metrics["tie_rate"] = float((pred_df["predicted_winner"] == "Tie").mean()) if len(pred_df) else 0.0
+    metrics["parse_ok_rate"] = float(pred_df["parse_ok"].mean()) if len(pred_df) else 0.0
+    metrics["selector_inference_time_s"] = selector_elapsed
+    metrics["judge_mode"] = args.judge_mode
+
+    if len(pred_df):
+        metrics["latency_p50_s"] = float(pred_df["latency_s_estimate"].quantile(0.5))
+        metrics["latency_p90_s"] = float(pred_df["latency_s_estimate"].quantile(0.9))
+        total_latency = float(pred_df["latency_s_estimate"].sum())
+        metrics["samples_per_second_estimate"] = float(len(pred_df) / total_latency) if total_latency > 0 else None
+
+    out_dir = args.out.resolve()
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    pred_path = out_dir / "predictions.parquet"
+    metrics_path = out_dir / "metrics.json"
+    pred_df.to_parquet(pred_path, index=False)
+    with metrics_path.open("w", encoding="utf-8") as f:
+        json.dump(metrics, f, indent=2, ensure_ascii=False, default=str)
+
+    log.info("Saved predictions -> %s", pred_path)
+    log.info("Saved metrics     -> %s", metrics_path)
+
+
+if __name__ == "__main__":
+    main()
