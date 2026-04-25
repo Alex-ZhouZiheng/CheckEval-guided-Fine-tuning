@@ -61,6 +61,8 @@ class SelectorHead(nn.Module):
             nn.Dropout(dropout),
         )
         self.rank_head = nn.Linear(hid2, 1)
+        self.ans_head = nn.Linear(hid2, 1)
+        self.dim_head = nn.Linear(hid2, n_dims)
 
     def forward(self, sample_emb: torch.Tensor, q_emb: torch.Tensor) -> torch.Tensor:
         bsz, emb_dim = sample_emb.shape
