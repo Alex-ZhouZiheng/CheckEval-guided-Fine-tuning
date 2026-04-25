@@ -1,0 +1,68 @@
+definition: The response communicates its content clearly, with purposeful organization and appropriate detail level, enabling
+  the user to efficiently extract and use the information provided.
+dimension: clarity_and_communication
+sub_aspects:
+  Clarity of Expression:
+    filtered_questions:
+    - Is the response written clearly enough that the user can understand the main points without needing to re-read or guess
+      at the meaning?
+    - Does the response use unambiguous wording so that key statements are unlikely to be misinterpreted?
+    - Does the response define or explain specialized terms when they are needed for understanding?
+    - Does the response present information in a logically ordered way that makes the progression of ideas easy to follow?
+    - Does the response provide enough explanation for the user to act on the answer without leaving important points implicit?
+    - Are the main points stated directly rather than implied vaguely?
+    - Are sentences phrased simply enough to be understood on a first read?
+    - Do pronouns and other references clearly point to the intended people, things, or ideas?
+    - Are qualifiers and conditions expressed clearly enough that the intended meaning is easy to interpret?
+    original_count: 11
+    removed_count: 2
+    seed_question: Is the response written clearly enough that the user can understand the main points without needing to
+      re-read or guess at the meaning?
+  Coherence:
+    filtered_questions:
+    - Can the response be read from start to finish without encountering statements that contradict each other, sections that
+      seem out of place, or transitions that break the logical flow?
+    - Does each part of the response build on earlier information in a way that makes the overall explanation easy to follow?
+    - When the response shifts to a new point or step, is the change introduced clearly rather than abruptly?
+    - If the response presents multiple recommendations, steps, or ideas, are they ordered in a way that reflects a clear
+      and sensible progression?
+    - Do the main claims in the response remain consistent with each other throughout?
+    - Does each paragraph or section connect logically to the one before it?
+    - Do transitional words or phrases, if used, accurately reflect the relationship between ideas?
+    - Does the response maintain a stable line of reasoning without unexplained reversals or jumps?
+    original_count: 11
+    removed_count: 3
+    seed_question: Can the response be read from start to finish without encountering statements that contradict each other,
+      sections that seem out of place, or transitions that break the logical flow?
+  Information Efficiency:
+    filtered_questions:
+    - Does the response convey its content without unnecessary repetition, filler, or tangential material that dilutes the
+      useful information?
+    - Does the response stay focused on the user's request rather than spending space on loosely related background or side
+      points?
+    - Does the response present enough detail to be useful without overexplaining straightforward points?
+    - Does the response minimize boilerplate phrasing or generic disclaimers that do not add meaningful value to the answer?
+    - Are examples and explanations kept brief enough to support the point without becoming excessive?
+    - Does the response avoid lengthy digressions into side topics that are not needed?
+    - Is the level of detail concentrated on useful content rather than padded with generic commentary?
+    original_count: 11
+    removed_count: 4
+    seed_question: Does the response convey its content without unnecessary repetition, filler, or tangential material that
+      dilutes the useful information?
+  Structural Effectiveness:
+    filtered_questions:
+    - Is the response organized so that its structure actively helps the reader locate and understand the key information,
+      with the most important content given appropriate prominence?
+    - Does the response present the main takeaway or direct answer early enough that the user does not need to search through
+      supporting details to find it?
+    - Are distinct parts of the response separated in a way that makes different ideas, steps, or sections easy to distinguish
+      and follow?
+    - Does the ordering of information reflect the user's likely needs, placing prerequisite context before dependent details?
+    - Does the response avoid burying essential instructions, conclusions, or caveats within long paragraphs or less important
+      content?
+    - Are headings, labels, or other structural cues used effectively when they would improve navigation?
+    - Is supporting detail placed near the point it is meant to explain?
+    original_count: 11
+    removed_count: 4
+    seed_question: Is the response organized so that its structure actively helps the reader locate and understand the key
+      information, with the most important content given appropriate prominence?
