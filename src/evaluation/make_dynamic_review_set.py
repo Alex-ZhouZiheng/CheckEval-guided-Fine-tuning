@@ -68,6 +68,62 @@ def _load_qmeta(bank_dir: Path) -> dict[int, dict[str, str]]:
     }
 
 
+def _attach_source_fields(
+    df: pd.DataFrame,
+    split: str,
+    subset: str | None,
+    input_path: Path | None,
+    max_samples: int | None,
+) -> pd.DataFrame:
+    required = {"winner", "predicted_winner", "context", "response_a", "response_b", "domain"}
+    missing = required - set(df.columns)
+    source_needed = {"context", "response_a", "response_b"} & missing
+    if not source_needed:
+        return df
+
+    if "sample_id" not in df.columns:
+        raise ValueError(
+            "predictions parquet is missing context/response columns and has no sample_id "
+            "for joining back to the source split."
+        )
+
+    from evaluation.selector_infer import load_eval_pairs
+
+    source = load_eval_pairs(
+        split=split,
+        subset=subset,
+        input_path=input_path,
+        max_samples=max_samples,
+    )
+    source_cols = ["sample_id"] + [
+        c for c in ["prompt_id", "domain", "context", "response_a", "response_b", "winner"]
+        if c not in df.columns
+    ]
+    source = source[source_cols].drop_duplicates(subset=["sample_id"], keep="first")
+    out = df.merge(source, on="sample_id", how="left", validate="many_to_one")
+
+    still_missing = required - set(out.columns)
+    if still_missing:
+        raise ValueError(f"could not attach required columns: {sorted(still_missing)}")
+
+    empty_source = out[["context", "response_a", "response_b"]].isna().any(axis=1)
+    if bool(empty_source.any()):
+        sample_ids = out.loc[empty_source, "sample_id"].astype(str).head(5).tolist()
+        raise ValueError(
+            f"source split did not match {int(empty_source.sum())} prediction rows "
+            f"(first 5 sample_ids: {sample_ids}). Pass the same --split/--subset/--input-path "
+            "used for run_dynamic_eval.py."
+        )
+
+    log.info(
+        "Attached context/response columns from split=%s subset=%s input_path=%s",
+        split,
+        subset,
+        input_path,
+    )
+    return out
+
+
 def _first_text(row: pd.Series, names: list[str]) -> str | None:
     for name in names:
         if name not in row:
@@ -230,6 +286,10 @@ def main() -> None:
     parser.add_argument("--predictions", type=Path, required=True)
     parser.add_argument("--bank", type=Path, required=True)
     parser.add_argument("--out", type=Path, required=True)
+    parser.add_argument("--split", type=str, default="dev_600")
+    parser.add_argument("--subset", type=str, default=None)
+    parser.add_argument("--input-path", type=Path, default=None)
+    parser.add_argument("--max-samples", type=int, default=None)
     parser.add_argument("--n-wrong", type=int, default=60)
     parser.add_argument("--n-tie", type=int, default=20)
     parser.add_argument("--n-correct", type=int, default=20)
@@ -249,10 +309,21 @@ def main() -> None:
         raise FileNotFoundError(pred_path)
 
     df = pd.read_parquet(pred_path)
+    df = _attach_source_fields(
+        df,
+        split=args.split,
+        subset=args.subset,
+        input_path=args.input_path,
+        max_samples=args.max_samples,
+    )
     required = {"winner", "predicted_winner", "context", "response_a", "response_b", "domain"}
     missing = required - set(df.columns)
     if missing:
-        raise ValueError(f"{pred_path} missing columns: {sorted(missing)}")
+        raise ValueError(
+            f"{pred_path} missing columns: {sorted(missing)}. Pass the same "
+            "--split/--subset/--input-path used for run_dynamic_eval.py so the script can "
+            "join source text by sample_id."
+        )
 
     if not {"raw_output_a", "stage1_a"} & set(df.columns):
         raise ValueError(
@@ -288,6 +359,9 @@ def main() -> None:
         "predictions": str(pred_path),
         "bank": str(args.bank.resolve()),
         "out": str(out_path),
+        "split": args.split,
+        "subset": args.subset,
+        "input_path": str(args.input_path) if args.input_path else None,
         "n_rows": len(review),
         "n_wrong": int((review["error_category"] == "wrong_winner").sum()) if len(review) else 0,
         "n_tie": int((review["error_category"] == "tie").sum()) if len(review) else 0,
