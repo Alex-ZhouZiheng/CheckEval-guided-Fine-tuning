@@ -25,6 +25,7 @@ import sys as _sys
 _sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
 
 import argparse
+import ast
 import hashlib
 import json
 import logging
@@ -320,6 +321,52 @@ def _build_domain_fixed_rankings(
     return out
 
 
+def _parse_qid_list(value: Any) -> list[int]:
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return [int(x) for x in value]
+    if isinstance(value, tuple):
+        return [int(x) for x in value]
+    if hasattr(value, "tolist"):
+        return [int(x) for x in value.tolist()]
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return []
+        parsed = ast.literal_eval(text)
+        return _parse_qid_list(parsed)
+    raise TypeError(f"Unsupported qid list value: {type(value).__name__}")
+
+
+def _load_selector_picks(path: Path, df: pd.DataFrame) -> dict[str, list[int]]:
+    if not path.exists():
+        raise FileNotFoundError(path)
+
+    picks = pd.read_parquet(path)
+    if "sample_id" not in picks.columns:
+        raise ValueError(f"{path} missing required column: sample_id")
+
+    qid_col = "ranked_qids" if "ranked_qids" in picks.columns else "selected_qids"
+    if qid_col not in picks.columns:
+        raise ValueError(f"{path} must contain ranked_qids or selected_qids")
+
+    pick_map = {
+        str(row["sample_id"]): _parse_qid_list(row[qid_col])
+        for _, row in picks.drop_duplicates(subset=["sample_id"], keep="first").iterrows()
+    }
+
+    missing = [str(sid) for sid in df["sample_id"].astype(str).tolist() if str(sid) not in pick_map]
+    if missing:
+        raise ValueError(
+            f"{path} is missing selector picks for {len(missing)} eval samples "
+            f"(first 5: {missing[:5]})"
+        )
+
+    log.info("Loaded selector picks from %s using %s", path, qid_col)
+    return pick_map
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--bank", type=Path, required=True)
@@ -342,6 +389,12 @@ def main() -> None:
     )
     parser.add_argument("--k", type=int, default=20)
     parser.add_argument("--selector", type=Path, default=None)
+    parser.add_argument(
+        "--selector-picks",
+        type=Path,
+        default=None,
+        help="Optional selector_infer parquet with ranked_qids/selected_qids; skips loading selector checkpoint.",
+    )
     parser.add_argument("--oracle-train", type=Path, default=Path("data/oracle/train_oracle_v3.parquet"))
     parser.add_argument("--out", type=Path, required=True)
 
@@ -414,32 +467,35 @@ def main() -> None:
     selector_elapsed = 0.0
 
     if args.policy in {"learned_topk", "learned_topk_escalate", "learned_topk_fallback"}:
-        if args.selector is None:
-            raise SystemExit("--selector is required for learned policies")
+        if args.selector_picks is not None:
+            ranking_by_sid = _load_selector_picks(args.selector_picks.resolve(), df)
+        else:
+            if args.selector is None:
+                raise SystemExit("--selector or --selector-picks is required for learned policies")
 
-        import torch
+            import torch
 
-        selector_device = torch.device(args.selector_device)
-        bundle = load_selector_bundle(args.selector, selector_device)
-        texts = build_sample_texts(df)
+            selector_device = torch.device(args.selector_device)
+            bundle = load_selector_bundle(args.selector, selector_device)
+            texts = build_sample_texts(df)
 
-        t0_sel = time.time()
-        score_matrix = score_samples_with_bundle(bundle, texts, batch_size=args.selector_batch_size)
-        selector_elapsed = time.time() - t0_sel
+            t0_sel = time.time()
+            score_matrix = score_samples_with_bundle(bundle, texts, batch_size=args.selector_batch_size)
+            selector_elapsed = time.time() - t0_sel
 
-        for i, row in df.iterrows():
-            sid = str(row["sample_id"])
-            active = active_qids_for_domain(bank_df, str(row["domain"]))
-            active = [q for q in active if q in bundle.qid_to_idx]
-            if not active:
+            for i, row in df.iterrows():
+                sid = str(row["sample_id"])
                 active = active_qids_for_domain(bank_df, str(row["domain"]))
-                ranking_by_sid[sid] = active
-                continue
+                active = [q for q in active if q in bundle.qid_to_idx]
+                if not active:
+                    active = active_qids_for_domain(bank_df, str(row["domain"]))
+                    ranking_by_sid[sid] = active
+                    continue
 
-            idx = torch.tensor([bundle.qid_to_idx[q] for q in active], dtype=torch.long)
-            s = score_matrix[i, idx]
-            order = torch.argsort(s, descending=True)
-            ranking_by_sid[sid] = [active[int(j)] for j in order.tolist()]
+                idx = torch.tensor([bundle.qid_to_idx[q] for q in active], dtype=torch.long)
+                s = score_matrix[i, idx]
+                order = torch.argsort(s, descending=True)
+                ranking_by_sid[sid] = [active[int(j)] for j in order.tolist()]
 
     elif args.policy == "random_k":
         for _, row in df.iterrows():
@@ -709,6 +765,7 @@ def main() -> None:
     metrics["tie_rate"] = float((pred_df["predicted_winner"] == "Tie").mean()) if len(pred_df) else 0.0
     metrics["parse_ok_rate"] = float(pred_df["parse_ok"].mean()) if len(pred_df) else 0.0
     metrics["selector_inference_time_s"] = selector_elapsed
+    metrics["selector_picks"] = str(args.selector_picks) if args.selector_picks else None
     metrics["judge_mode"] = args.judge_mode
 
     if len(pred_df):
