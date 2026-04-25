@@ -629,12 +629,29 @@ def main() -> None:
     sample_out.parent.mkdir(parents=True, exist_ok=True)
     s_df.to_parquet(sample_out, index=False)
 
+    if "winner_pred_full" in s_df.columns:
+        valid_mask = s_df["winner_pred_full"].isin(["A", "B"])
+        n_valid = int(valid_mask.sum())
+        n_tie = int((s_df["winner_pred_full"] == "Tie").sum())
+        n_unparseable = int(s_df["winner_pred_full"].isna().sum())
+        agree_valid = (
+            float((s_df.loc[valid_mask, "winner_pred_full"] == s_df.loc[valid_mask, "winner_gt"]).mean())
+            if n_valid else None
+        )
+    else:
+        n_valid = n_tie = n_unparseable = 0
+        agree_valid = None
+
     metrics = {
         "n_samples": int(len(s_df)),
+        "n_valid": n_valid,
+        "n_tie": n_tie,
+        "n_unparseable": n_unparseable,
         "n_question_rows": int(len(q_df)),
         "parse_ok_rate": float(n_parse_ok / len(s_df)) if len(s_df) else 0.0,
         "avg_questions_per_sample": float(s_df["n_questions"].mean()) if len(s_df) else 0.0,
-        "oracle_agreement_rate": float(s_df["oracle_agrees_gt"].dropna().mean()) if "oracle_agrees_gt" in s_df else None,
+        "oracle_agreement_rate_total": float(s_df["oracle_agrees_gt"].dropna().mean()) if "oracle_agrees_gt" in s_df else None,
+        "oracle_agreement_rate_valid": agree_valid,
         "inference_time_s": infer_elapsed,
         "samples_per_second": float(len(s_df) / infer_elapsed) if infer_elapsed > 0 else None,
         "bank": str(bank_dir),
