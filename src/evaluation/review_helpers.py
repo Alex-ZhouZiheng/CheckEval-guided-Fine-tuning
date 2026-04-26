@@ -1,7 +1,9 @@
 """Pure helper functions for review_app — no Streamlit dependency."""
 
 import re
+import ast
 from pathlib import Path
+from typing import Any
 
 _Q_LINE_RE = re.compile(r"^Q(\d+):\s+(.+)$", re.MULTILINE)
 
@@ -48,6 +50,57 @@ def _load_question_meta(checklists_dir: Path | None = None) -> dict[str, tuple[s
             for q in sub_data.get("filtered_questions", []):
                 meta[q.strip()] = (dim_name, sub_name)
     return meta
+
+
+def _load_question_meta_by_qid(checklists_dir: Path | None = None) -> dict[int, dict[str, str]]:
+    """Return {global_qid: metadata} from a frozen bank_index.parquet."""
+    import pandas as pd
+
+    if checklists_dir is None:
+        checklists_dir = Path(__file__).parent.parent.parent / "checklists" / "v4_frozen"
+    bank_path = checklists_dir / "bank_index.parquet"
+    if not bank_path.exists():
+        return {}
+
+    bank_df = pd.read_parquet(bank_path)
+    dim_col = "dimension" if "dimension" in bank_df.columns else "dim"
+    out: dict[int, dict[str, str]] = {}
+    for _, row in bank_df.iterrows():
+        qid = int(row["qid"])
+        out[qid] = {
+            "question_text": str(row.get("question_text", "")),
+            "dimension": str(row.get(dim_col, "")),
+            "sub_aspect": str(row.get("sub_aspect", "")),
+        }
+    return out
+
+
+def _parse_qid_list(value: Any) -> list[int]:
+    """Parse qid list values coming from parquet/list/string cells."""
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return [int(x) for x in value]
+    if isinstance(value, tuple):
+        return [int(x) for x in value]
+    if hasattr(value, "tolist"):
+        return [int(x) for x in value.tolist()]
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return []
+        return _parse_qid_list(ast.literal_eval(text))
+    return []
+
+
+def _answer_map(parsed: dict) -> dict[int, str]:
+    """Convert parsed CheckEval output to {local_qnum: yes|no|N/A}."""
+    out: dict[int, str] = {}
+    for a in parsed.get("answers", []):
+        out[int(a["q"])] = str(a["answer"])
+    for a in parsed.get("na_answers", []):
+        out[int(a["q"])] = "N/A"
+    return out
 
 
 def _diff_answers(

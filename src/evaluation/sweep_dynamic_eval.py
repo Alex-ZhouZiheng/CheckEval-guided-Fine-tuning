@@ -73,6 +73,10 @@ def _metric_row(metrics_path: Path) -> dict[str, Any]:
         "parse_ok_rate": m.get("parse_ok_rate"),
         "avg_k": m.get("avg_k"),
         "selector_picks": m.get("selector_picks"),
+        "judge_mode": m.get("judge_mode"),
+        "judge_model": m.get("judge_model"),
+        "judge_url": m.get("judge_url"),
+        "http_extra_body": m.get("http_extra_body"),
         "out_dir": str(metrics_path.parent),
     }
 
@@ -201,7 +205,13 @@ def main() -> None:
     parser.add_argument("--judge-url", type=str, default="http://127.0.0.1:8000/v1")
     parser.add_argument("--judge-model", type=str, default=None)
     parser.add_argument("--judge-api-key", type=str, default="EMPTY")
+    parser.add_argument("--judge-api-key-env", type=str, default=None)
     parser.add_argument("--http-concurrency", type=int, default=32)
+    parser.add_argument(
+        "--http-extra-body",
+        choices=["qwen-thinking-off", "none"],
+        default="qwen-thinking-off",
+    )
     parser.add_argument("--base-model", type=str, default=None)
     parser.add_argument("--batch-size", type=int, default=16)
     parser.add_argument("--max-new-tokens", type=int, default=768)
@@ -318,8 +328,12 @@ def main() -> None:
                         args.judge_api_key,
                         "--http-concurrency",
                         str(args.http_concurrency),
+                        "--http-extra-body",
+                        args.http_extra_body,
                     ]
                 )
+                if args.judge_api_key_env:
+                    cmd.extend(["--judge-api-key-env", args.judge_api_key_env])
                 if args.judge_model:
                     cmd.extend(["--judge-model", args.judge_model])
             _run(cmd, env=env)
