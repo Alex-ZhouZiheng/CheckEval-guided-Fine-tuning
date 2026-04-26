@@ -23,8 +23,15 @@ def _render_parsed(parsed: dict) -> str:
     for a in parsed.get("na_answers", []):
         lines.append(f"Q{a['q']}: N/A")
     lines_sorted = sorted(lines, key=lambda x: int(x.split(":")[0][1:]))
+
+    def fmt_score(value: Any) -> str:
+        try:
+            return f"{float(value):.3f}"
+        except (TypeError, ValueError):
+            return "?"
+
     meta = (
-        f"score={parsed.get('score', '?'):.3f}  "
+        f"score={fmt_score(parsed.get('score'))}  "
         f"yes={parsed.get('n_yes')}  no={parsed.get('n_no')}  "
         f"na={parsed.get('n_na')}  answered={parsed.get('n_questions_parsed')}"
     )

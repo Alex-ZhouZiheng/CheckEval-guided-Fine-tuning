@@ -1,7 +1,7 @@
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src", "evaluation"))
 
-from review_helpers import _extract_questions, _diff_answers
+from review_helpers import _extract_questions, _diff_answers, _render_parsed
 
 
 SAMPLE_PROMPT = """
@@ -70,6 +70,11 @@ def test_diff_answers_no_diff_returns_empty():
         "na_answers": [],
     }
     assert _diff_answers(parsed_a, parsed_b) == []
+
+
+def test_render_parsed_missing_score_uses_placeholder():
+    rendered = _render_parsed({})
+    assert rendered.startswith("score=?")
 
 
 def test_diff_answers_missing_q_treated_as_dash():

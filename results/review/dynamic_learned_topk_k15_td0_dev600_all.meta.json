@@ -1,0 +1,16 @@
+{
+  "predictions": "D:\\CheckEval-guided-Fine-tuning\\results\\dynamic_eval\\sweep_v4_9b_5k_e2_dev600\\learned_topk_k15_td0\\predictions.parquet",
+  "bank": "D:\\CheckEval-guided-Fine-tuning\\checklists\\v4_frozen",
+  "out": "D:\\CheckEval-guided-Fine-tuning\\results\\review\\dynamic_learned_topk_k15_td0_dev600_all.parquet",
+  "split": "dev_600",
+  "subset": null,
+  "input_path": null,
+  "n_rows": 600,
+  "n_wrong": 114,
+  "n_tie": 114,
+  "n_correct": 372,
+  "human_reasoning_rows": 0,
+  "human_reasoning_source": null,
+  "na_policy": "skip",
+  "allow_missing_raw": true
+}

@@ -103,6 +103,20 @@ def _build_prompt_from_qids(
     return build_pointwise_prompt_from_qids(row=row, qids=qids, qmeta=qmeta, side=side)
 
 
+def _load_dotenv_if_available() -> Path | None:
+    try:
+        from dotenv import find_dotenv, load_dotenv
+    except ImportError:
+        return None
+
+    dotenv_path = find_dotenv(usecwd=True)
+    if not dotenv_path:
+        return None
+
+    load_dotenv(dotenv_path, override=False)
+    return Path(dotenv_path)
+
+
 def _http_judge_generate(
     messages_list: list[list[dict[str, str]]],
     url: str,
@@ -535,12 +549,22 @@ def main() -> None:
     parser.add_argument("--save-raw-outputs", action="store_true")
     args = parser.parse_args()
 
+    dotenv_path = _load_dotenv_if_available()
+    if dotenv_path is not None:
+        log.info("Loaded environment variables from %s", dotenv_path)
+
     bank_dir = args.bank.resolve()
     judge_api_key = args.judge_api_key
     if args.judge_api_key_env:
         judge_api_key = _os.environ.get(args.judge_api_key_env)
         if not judge_api_key:
             raise SystemExit(f"{args.judge_api_key_env} is not set")
+    elif args.judge_mode == "http" and "deepseek.com" in args.judge_url and judge_api_key == "EMPTY":
+        judge_api_key = _os.environ.get("DEEPSEEK_API_KEY")
+        if not judge_api_key:
+            raise SystemExit(
+                "DEEPSEEK_API_KEY is not set. Put it in .env, export it, or pass --judge-api-key."
+            )
 
     bank_df = _load_bank(bank_dir)
     _ = _load_definitions(bank_dir)
