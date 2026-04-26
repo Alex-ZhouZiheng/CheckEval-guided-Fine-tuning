@@ -111,19 +111,27 @@ def _http_judge_generate(
     max_new_tokens: int,
     temperature: float = 0.0,
     concurrency: int = 32,
+    extra_body_mode: str = "qwen-thinking-off",
 ) -> list[str]:
     from openai import OpenAI
 
     client = OpenAI(base_url=url, api_key=api_key)
+    extra_body = None
+    if extra_body_mode == "qwen-thinking-off":
+        extra_body = {"chat_template_kwargs": {"enable_thinking": False}}
+    elif extra_body_mode != "none":
+        raise ValueError(f"Unknown HTTP extra body mode: {extra_body_mode}")
 
     def one(msgs: list[dict[str, str]]) -> str:
-        resp = client.chat.completions.create(
-            model=model,
-            messages=msgs,
-            temperature=temperature,
-            max_tokens=max_new_tokens,
-            extra_body={"chat_template_kwargs": {"enable_thinking": False}},
-        )
+        kwargs = {
+            "model": model,
+            "messages": msgs,
+            "temperature": temperature,
+            "max_tokens": max_new_tokens,
+        }
+        if extra_body is not None:
+            kwargs["extra_body"] = extra_body
+        resp = client.chat.completions.create(**kwargs)
         return resp.choices[0].message.content or ""
 
     with ThreadPoolExecutor(max_workers=concurrency) as ex:
@@ -213,6 +221,7 @@ def _run_stage(
     judge_model: str | None,
     judge_api_key: str,
     http_concurrency: int,
+    http_extra_body: str,
 ) -> tuple[dict[str, dict[str, Any]], float]:
     metas: list[dict[str, Any]] = []
     messages_a: list[list[dict[str, str]]] = []
@@ -245,6 +254,7 @@ def _run_stage(
             max_new_tokens=max_new_tokens,
             temperature=0.0,
             concurrency=http_concurrency,
+            extra_body_mode=http_extra_body,
         )
     else:
         raw = _generate_local(
@@ -421,7 +431,22 @@ def main() -> None:
     parser.add_argument("--judge-url", type=str, default="http://127.0.0.1:8000/v1")
     parser.add_argument("--judge-model", type=str, default=None)
     parser.add_argument("--judge-api-key", type=str, default="EMPTY")
+    parser.add_argument(
+        "--judge-api-key-env",
+        type=str,
+        default=None,
+        help="Read the HTTP judge API key from this environment variable.",
+    )
     parser.add_argument("--http-concurrency", type=int, default=32)
+    parser.add_argument(
+        "--http-extra-body",
+        choices=["qwen-thinking-off", "none"],
+        default="qwen-thinking-off",
+        help=(
+            "Extra OpenAI-compatible request body for HTTP judge. "
+            "Use 'none' for external APIs such as DeepSeek."
+        ),
+    )
     parser.add_argument("--base-model", type=str, default=str(cfg.JUDGE_MODEL_ID))
 
     parser.add_argument(
@@ -443,6 +468,12 @@ def main() -> None:
     args = parser.parse_args()
 
     bank_dir = args.bank.resolve()
+    judge_api_key = args.judge_api_key
+    if args.judge_api_key_env:
+        judge_api_key = _os.environ.get(args.judge_api_key_env)
+        if not judge_api_key:
+            raise SystemExit(f"{args.judge_api_key_env} is not set")
+
     bank_df = _load_bank(bank_dir)
     _ = _load_definitions(bank_dir)
     qmeta = {
@@ -587,8 +618,9 @@ def main() -> None:
         seed=args.seed,
         judge_url=args.judge_url,
         judge_model=args.judge_model,
-        judge_api_key=args.judge_api_key,
+        judge_api_key=judge_api_key,
         http_concurrency=args.http_concurrency,
+        http_extra_body=args.http_extra_body,
     )
     if stage1_out:
         stage1_avg = t_stage1 / len(stage1_out)
@@ -642,8 +674,9 @@ def main() -> None:
             seed=args.seed,
             judge_url=args.judge_url,
             judge_model=args.judge_model,
-            judge_api_key=args.judge_api_key,
+            judge_api_key=judge_api_key,
             http_concurrency=args.http_concurrency,
+            http_extra_body=args.http_extra_body,
         )
 
         stage2_avg = t_stage2 / len(stage2_out) if stage2_out else 0.0
@@ -690,8 +723,9 @@ def main() -> None:
             seed=args.seed,
             judge_url=args.judge_url,
             judge_model=args.judge_model,
-            judge_api_key=args.judge_api_key,
+            judge_api_key=judge_api_key,
             http_concurrency=args.http_concurrency,
+            http_extra_body=args.http_extra_body,
         )
 
         stage3_avg = t_stage3 / len(stage3_out) if stage3_out else 0.0
@@ -767,6 +801,9 @@ def main() -> None:
     metrics["selector_inference_time_s"] = selector_elapsed
     metrics["selector_picks"] = str(args.selector_picks) if args.selector_picks else None
     metrics["judge_mode"] = args.judge_mode
+    metrics["judge_url"] = args.judge_url if args.judge_mode == "http" else None
+    metrics["judge_model"] = args.judge_model if args.judge_mode == "http" else args.base_model
+    metrics["http_extra_body"] = args.http_extra_body if args.judge_mode == "http" else None
 
     if len(pred_df):
         metrics["latency_p50_s"] = float(pred_df["latency_s_estimate"].quantile(0.5))
