@@ -112,6 +112,7 @@ def _http_judge_generate(
     temperature: float = 0.0,
     concurrency: int = 32,
     extra_body_mode: str = "qwen-thinking-off",
+    reasoning_effort: str | None = None,
 ) -> list[str]:
     from openai import OpenAI
 
@@ -119,6 +120,10 @@ def _http_judge_generate(
     extra_body = None
     if extra_body_mode == "qwen-thinking-off":
         extra_body = {"chat_template_kwargs": {"enable_thinking": False}}
+    elif extra_body_mode == "deepseek-thinking-on":
+        extra_body = {"thinking": {"type": "enabled"}}
+    elif extra_body_mode == "deepseek-thinking-off":
+        extra_body = {"thinking": {"type": "disabled"}}
     elif extra_body_mode != "none":
         raise ValueError(f"Unknown HTTP extra body mode: {extra_body_mode}")
 
@@ -131,6 +136,8 @@ def _http_judge_generate(
         }
         if extra_body is not None:
             kwargs["extra_body"] = extra_body
+        if reasoning_effort is not None:
+            kwargs["reasoning_effort"] = reasoning_effort
         resp = client.chat.completions.create(**kwargs)
         return resp.choices[0].message.content or ""
 
@@ -222,6 +229,7 @@ def _run_stage(
     judge_api_key: str,
     http_concurrency: int,
     http_extra_body: str,
+    http_reasoning_effort: str | None,
 ) -> tuple[dict[str, dict[str, Any]], float]:
     metas: list[dict[str, Any]] = []
     messages_a: list[list[dict[str, str]]] = []
@@ -255,6 +263,7 @@ def _run_stage(
             temperature=0.0,
             concurrency=http_concurrency,
             extra_body_mode=http_extra_body,
+            reasoning_effort=http_reasoning_effort,
         )
     else:
         raw = _generate_local(
@@ -440,12 +449,18 @@ def main() -> None:
     parser.add_argument("--http-concurrency", type=int, default=32)
     parser.add_argument(
         "--http-extra-body",
-        choices=["qwen-thinking-off", "none"],
+        choices=["qwen-thinking-off", "deepseek-thinking-on", "deepseek-thinking-off", "none"],
         default="qwen-thinking-off",
         help=(
             "Extra OpenAI-compatible request body for HTTP judge. "
-            "Use 'none' for external APIs such as DeepSeek."
+            "Use 'deepseek-thinking-off' for DeepSeek V4."
         ),
+    )
+    parser.add_argument(
+        "--http-reasoning-effort",
+        choices=["high", "max"],
+        default=None,
+        help="DeepSeek V4 reasoning effort when thinking mode is enabled.",
     )
     parser.add_argument("--base-model", type=str, default=str(cfg.JUDGE_MODEL_ID))
 
@@ -621,6 +636,7 @@ def main() -> None:
         judge_api_key=judge_api_key,
         http_concurrency=args.http_concurrency,
         http_extra_body=args.http_extra_body,
+        http_reasoning_effort=args.http_reasoning_effort,
     )
     if stage1_out:
         stage1_avg = t_stage1 / len(stage1_out)
@@ -677,6 +693,7 @@ def main() -> None:
             judge_api_key=judge_api_key,
             http_concurrency=args.http_concurrency,
             http_extra_body=args.http_extra_body,
+            http_reasoning_effort=args.http_reasoning_effort,
         )
 
         stage2_avg = t_stage2 / len(stage2_out) if stage2_out else 0.0
@@ -726,6 +743,7 @@ def main() -> None:
             judge_api_key=judge_api_key,
             http_concurrency=args.http_concurrency,
             http_extra_body=args.http_extra_body,
+            http_reasoning_effort=args.http_reasoning_effort,
         )
 
         stage3_avg = t_stage3 / len(stage3_out) if stage3_out else 0.0
@@ -804,6 +822,7 @@ def main() -> None:
     metrics["judge_url"] = args.judge_url if args.judge_mode == "http" else None
     metrics["judge_model"] = args.judge_model if args.judge_mode == "http" else args.base_model
     metrics["http_extra_body"] = args.http_extra_body if args.judge_mode == "http" else None
+    metrics["http_reasoning_effort"] = args.http_reasoning_effort if args.judge_mode == "http" else None
 
     if len(pred_df):
         metrics["latency_p50_s"] = float(pred_df["latency_s_estimate"].quantile(0.5))

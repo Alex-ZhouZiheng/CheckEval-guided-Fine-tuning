@@ -77,6 +77,7 @@ def _metric_row(metrics_path: Path) -> dict[str, Any]:
         "judge_model": m.get("judge_model"),
         "judge_url": m.get("judge_url"),
         "http_extra_body": m.get("http_extra_body"),
+        "http_reasoning_effort": m.get("http_reasoning_effort"),
         "out_dir": str(metrics_path.parent),
     }
 
@@ -209,9 +210,10 @@ def main() -> None:
     parser.add_argument("--http-concurrency", type=int, default=32)
     parser.add_argument(
         "--http-extra-body",
-        choices=["qwen-thinking-off", "none"],
+        choices=["qwen-thinking-off", "deepseek-thinking-on", "deepseek-thinking-off", "none"],
         default="qwen-thinking-off",
     )
+    parser.add_argument("--http-reasoning-effort", choices=["high", "max"], default=None)
     parser.add_argument("--base-model", type=str, default=None)
     parser.add_argument("--batch-size", type=int, default=16)
     parser.add_argument("--max-new-tokens", type=int, default=768)
@@ -332,6 +334,8 @@ def main() -> None:
                         args.http_extra_body,
                     ]
                 )
+                if args.http_reasoning_effort:
+                    cmd.extend(["--http-reasoning-effort", args.http_reasoning_effort])
                 if args.judge_api_key_env:
                     cmd.extend(["--judge-api-key-env", args.judge_api_key_env])
                 if args.judge_model:
