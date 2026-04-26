@@ -113,7 +113,7 @@ def _http_judge_generate(
     concurrency: int = 32,
     extra_body_mode: str = "qwen-thinking-off",
     reasoning_effort: str | None = None,
-) -> list[str]:
+) -> list[dict[str, Any]]:
     from openai import OpenAI
 
     client = OpenAI(base_url=url, api_key=api_key)
@@ -127,7 +127,16 @@ def _http_judge_generate(
     elif extra_body_mode != "none":
         raise ValueError(f"Unknown HTTP extra body mode: {extra_body_mode}")
 
-    def one(msgs: list[dict[str, str]]) -> str:
+    def dump_obj(obj: Any) -> Any:
+        if obj is None:
+            return None
+        if hasattr(obj, "model_dump"):
+            return obj.model_dump()
+        if hasattr(obj, "dict"):
+            return obj.dict()
+        return str(obj)
+
+    def one(msgs: list[dict[str, str]]) -> dict[str, Any]:
         kwargs = {
             "model": model,
             "messages": msgs,
@@ -139,12 +148,36 @@ def _http_judge_generate(
         if reasoning_effort is not None:
             kwargs["reasoning_effort"] = reasoning_effort
         resp = client.chat.completions.create(**kwargs)
-        return resp.choices[0].message.content or ""
+        choice = resp.choices[0]
+        msg = choice.message
+        content = msg.content or ""
+        reasoning_content = getattr(msg, "reasoning_content", "") or ""
+        return {
+            "content": content,
+            "reasoning_content": reasoning_content,
+            "finish_reason": getattr(choice, "finish_reason", None),
+            "content_len": len(content),
+            "reasoning_len": len(reasoning_content),
+            "usage": dump_obj(getattr(resp, "usage", None)),
+            "message": dump_obj(msg),
+        }
 
     with ThreadPoolExecutor(max_workers=concurrency) as ex:
         return list(
             tqdm(ex.map(one, messages_list), total=len(messages_list), desc="Judge HTTP")
         )
+
+
+def _local_judge_response(raw: str) -> dict[str, Any]:
+    return {
+        "content": raw,
+        "reasoning_content": "",
+        "finish_reason": None,
+        "content_len": len(raw),
+        "reasoning_len": 0,
+        "usage": None,
+        "message": None,
+    }
 
 
 def _generate_local(
@@ -168,6 +201,21 @@ def _generate_local(
             )
         )
     return out
+
+
+def _save_raw_output_debug(
+    raw_outputs: dict[str, Any],
+    prefix: str,
+    response: dict[str, Any],
+) -> None:
+    raw_outputs[prefix] = response.get("content", "")
+    raw_outputs[f"{prefix}_reasoning_content"] = response.get("reasoning_content", "")
+    raw_outputs[f"{prefix}_finish_reason"] = response.get("finish_reason")
+    raw_outputs[f"{prefix}_content_len"] = response.get("content_len")
+    raw_outputs[f"{prefix}_reasoning_len"] = response.get("reasoning_len")
+    raw_outputs[f"{prefix}_usage"] = json.dumps(
+        response.get("usage"), ensure_ascii=False, default=str
+    )
 
 
 def _parse_stage_labels(raw: str, qids: list[int]) -> tuple[dict[int, str], dict]:
@@ -254,7 +302,7 @@ def _run_stage(
     if judge_mode == "http":
         if not judge_model:
             raise SystemExit("--judge-model is required for --judge-mode http")
-        raw = _http_judge_generate(
+        responses = _http_judge_generate(
             all_messages,
             url=judge_url,
             model=judge_model,
@@ -274,16 +322,19 @@ def _run_stage(
             prompt_chunk_size=prompt_chunk_size,
             seed=seed,
         )
+        responses = [_local_judge_response(x) for x in raw]
     elapsed = time.time() - t0
 
     n = len(metas)
-    raw_a = raw[:n]
-    raw_b = raw[n:]
+    raw_a = responses[:n]
+    raw_b = responses[n:]
 
     out: dict[str, dict[str, Any]] = {}
-    for meta, r_a, r_b in zip(metas, raw_a, raw_b):
+    for meta, resp_a, resp_b in zip(metas, raw_a, raw_b):
         sid = meta["sid"]
         qids = meta["qids"]
+        r_a = str(resp_a.get("content", ""))
+        r_b = str(resp_b.get("content", ""))
 
         labels_a, parsed_a = _parse_stage_labels(r_a, qids)
         labels_b, parsed_b = _parse_stage_labels(r_b, qids)
@@ -294,6 +345,8 @@ def _run_stage(
             "parse_ok": (not parsed_a.get("_raw_fallback")) and (not parsed_b.get("_raw_fallback")),
             "raw_a": r_a,
             "raw_b": r_b,
+            "resp_a": resp_a,
+            "resp_b": resp_b,
             "stage": stage_name,
         }
 
@@ -648,8 +701,8 @@ def main() -> None:
             st["parse_ok_all"] = st["parse_ok_all"] and result["parse_ok"]
             stage_latency_s[sid] += stage1_avg
             if args.save_raw_outputs:
-                st["raw_outputs"]["stage1_a"] = result["raw_a"]
-                st["raw_outputs"]["stage1_b"] = result["raw_b"]
+                _save_raw_output_debug(st["raw_outputs"], "stage1_a", result["resp_a"])
+                _save_raw_output_debug(st["raw_outputs"], "stage1_b", result["resp_b"])
 
     for sid, st in state.items():
         cmp = _compute_margin(st["labels_a"], st["labels_b"], st["asked_qids"], tie_delta=args.tie_delta)
@@ -705,8 +758,8 @@ def main() -> None:
             st["parse_ok_all"] = st["parse_ok_all"] and result["parse_ok"]
             stage_latency_s[sid] += stage2_avg
             if args.save_raw_outputs:
-                st["raw_outputs"]["stage2_a"] = result["raw_a"]
-                st["raw_outputs"]["stage2_b"] = result["raw_b"]
+                _save_raw_output_debug(st["raw_outputs"], "stage2_a", result["resp_a"])
+                _save_raw_output_debug(st["raw_outputs"], "stage2_b", result["resp_b"])
 
             cmp = _compute_margin(st["labels_a"], st["labels_b"], st["asked_qids"], tie_delta=args.tie_delta)
             st["margin_final"] = cmp["margin"]
@@ -755,8 +808,8 @@ def main() -> None:
             st["parse_ok_all"] = st["parse_ok_all"] and result["parse_ok"]
             stage_latency_s[sid] += stage3_avg
             if args.save_raw_outputs:
-                st["raw_outputs"]["stage3_a"] = result["raw_a"]
-                st["raw_outputs"]["stage3_b"] = result["raw_b"]
+                _save_raw_output_debug(st["raw_outputs"], "stage3_a", result["resp_a"])
+                _save_raw_output_debug(st["raw_outputs"], "stage3_b", result["resp_b"])
 
             cmp = _compute_margin(st["labels_a"], st["labels_b"], st["asked_qids"], tie_delta=args.tie_delta)
             st["margin_final"] = cmp["margin"]
