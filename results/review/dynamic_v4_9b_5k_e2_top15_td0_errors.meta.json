@@ -1,0 +1,15 @@
+{
+  "predictions": "/root/autodl-tmp/Thesis/results/dynamic_eval/v4_9b_5k_e2_learned_top15_dev600_td0_raw/predictions.parquet",
+  "bank": "/root/autodl-tmp/Thesis/checklists/v4_frozen",
+  "out": "/root/autodl-tmp/Thesis/results/review/dynamic_v4_9b_5k_e2_top15_td0_errors.parquet",
+  "split": "dev_600",
+  "subset": null,
+  "input_path": null,
+  "n_rows": 184,
+  "n_wrong": 114,
+  "n_tie": 40,
+  "n_correct": 30,
+  "human_reasoning_rows": 184,
+  "human_reasoning_source": "helpsteer3_train.parquet",
+  "na_policy": "skip"
+}
