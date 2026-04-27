@@ -296,6 +296,7 @@ def _make_review_row(
     qmeta: dict[int, dict[str, str]],
     na_policy: str,
     coverage_threshold: float,
+    allow_missing_raw: bool,
 ) -> dict[str, Any]:
     qids = _parse_list(row.get("asked_qids") if "asked_qids" in row else row.get("selected_qids"))
     if not qids:
@@ -310,25 +311,33 @@ def _make_review_row(
     raw_a = _first_text(row, ["raw_output_a", "stage1_a"])
     raw_b = _first_text(row, ["raw_output_b", "stage1_b"])
     if raw_a is None or raw_b is None:
-        raise ValueError(
-            "predictions parquet lacks raw judge outputs. Rerun run_dynamic_eval.py "
-            "with --save-raw-outputs before building review data."
+        if not allow_missing_raw:
+            raise ValueError(
+                "predictions parquet lacks raw judge outputs. Rerun run_dynamic_eval.py "
+                "with --save-raw-outputs before building review data, or pass "
+                "--allow-missing-raw to build a selector/source review set."
+            )
+        raw_a = ""
+        raw_b = ""
+        parsed_a: dict[str, Any] = {}
+        parsed_b: dict[str, Any] = {}
+        agg_a = None
+        agg_b = None
+    else:
+        parsed_a = parse_checkeval_output(raw_a, expected_n=len(qids))
+        parsed_b = parse_checkeval_output(raw_b, expected_n=len(qids))
+        agg_a = aggregate_checklist_score(
+            parsed_a,
+            na_policy=na_policy,
+            coverage_threshold=coverage_threshold,
+            expected_n=len(qids),
         )
-
-    parsed_a = parse_checkeval_output(raw_a, expected_n=len(qids))
-    parsed_b = parse_checkeval_output(raw_b, expected_n=len(qids))
-    agg_a = aggregate_checklist_score(
-        parsed_a,
-        na_policy=na_policy,
-        coverage_threshold=coverage_threshold,
-        expected_n=len(qids),
-    )
-    agg_b = aggregate_checklist_score(
-        parsed_b,
-        na_policy=na_policy,
-        coverage_threshold=coverage_threshold,
-        expected_n=len(qids),
-    )
+        agg_b = aggregate_checklist_score(
+            parsed_b,
+            na_policy=na_policy,
+            coverage_threshold=coverage_threshold,
+            expected_n=len(qids),
+        )
 
     winner = str(row.get("winner"))
     predicted = str(row.get("predicted_winner"))
@@ -401,6 +410,14 @@ def main() -> None:
         action="store_true",
         help="Do not attempt to attach individual_preference for review_app.",
     )
+    parser.add_argument(
+        "--allow-missing-raw",
+        action="store_true",
+        help=(
+            "Build a source/selector review parquet even if predictions lack raw judge "
+            "outputs. Raw and parsed judge columns will be empty."
+        ),
+    )
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument(
         "--na-policy",
@@ -432,7 +449,7 @@ def main() -> None:
             "join source text by sample_id."
         )
 
-    if not {"raw_output_a", "stage1_a"} & set(df.columns):
+    if not args.allow_missing_raw and not {"raw_output_a", "stage1_a"} & set(df.columns):
         raise ValueError(
             f"{pred_path} does not contain raw outputs. Rerun dynamic eval with --save-raw-outputs."
         )
@@ -453,6 +470,7 @@ def main() -> None:
             qmeta=qmeta,
             na_policy=args.na_policy,
             coverage_threshold=args.coverage_threshold,
+            allow_missing_raw=args.allow_missing_raw,
         )
         for _, row in selected.iterrows()
     ]
@@ -495,6 +513,7 @@ def main() -> None:
         "human_reasoning_rows": human_filled,
         "human_reasoning_source": human_source,
         "na_policy": args.na_policy,
+        "allow_missing_raw": bool(args.allow_missing_raw),
     }
     with out_path.with_suffix(".meta.json").open("w", encoding="utf-8") as f:
         json.dump(meta, f, indent=2, ensure_ascii=False, default=str)

@@ -103,6 +103,20 @@ def _build_prompt_from_qids(
     return build_pointwise_prompt_from_qids(row=row, qids=qids, qmeta=qmeta, side=side)
 
 
+def _load_dotenv_if_available() -> Path | None:
+    try:
+        from dotenv import find_dotenv, load_dotenv
+    except ImportError:
+        return None
+
+    dotenv_path = find_dotenv(usecwd=True)
+    if not dotenv_path:
+        return None
+
+    load_dotenv(dotenv_path, override=False)
+    return Path(dotenv_path)
+
+
 def _http_judge_generate(
     messages_list: list[list[dict[str, str]]],
     url: str,
@@ -439,6 +453,40 @@ def _load_selector_picks(path: Path, df: pd.DataFrame) -> dict[str, list[int]]:
     return pick_map
 
 
+def compute_human_alignment(
+    pred_df: pd.DataFrame,
+    human_df: pd.DataFrame,
+) -> dict[str, float | int | None]:
+    """Recall of selected/asked qids against the human yes-set ({qid: h > 0})."""
+    yes_by_sample: dict[str, set[int]] = {}
+    for _, row in human_df.iterrows():
+        if float(row["h"]) > 0:
+            yes_by_sample.setdefault(str(row["sample_id"]), set()).add(int(row["qid"]))
+
+    recalls_selected: list[float] = []
+    recalls_asked: list[float] = []
+    for _, row in pred_df.iterrows():
+        sid = str(row["sample_id"])
+        yes_set = yes_by_sample.get(sid)
+        if not yes_set:
+            continue
+
+        selected = set(_parse_qid_list(row.get("selected_qids")))
+        asked = set(_parse_qid_list(row.get("asked_qids")))
+        recalls_selected.append(len(selected & yes_set) / len(yes_set))
+        recalls_asked.append(len(asked & yes_set) / len(yes_set))
+
+    return {
+        "recall_human_selected": (
+            float(sum(recalls_selected) / len(recalls_selected)) if recalls_selected else None
+        ),
+        "recall_human_asked": (
+            float(sum(recalls_asked) / len(recalls_asked)) if recalls_asked else None
+        ),
+        "n_evaluated": int(len(recalls_selected)),
+    }
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--bank", type=Path, required=True)
@@ -468,6 +516,15 @@ def main() -> None:
         help="Optional selector_infer parquet with ranked_qids/selected_qids; skips loading selector checkpoint.",
     )
     parser.add_argument("--oracle-train", type=Path, default=Path("data/oracle/train_oracle_v3.parquet"))
+    parser.add_argument(
+        "--human-relevance",
+        type=Path,
+        default=None,
+        help=(
+            "Optional human-relevance parquet; when set, emit "
+            "recall_human_{selected,asked} in metrics.json."
+        ),
+    )
     parser.add_argument("--out", type=Path, required=True)
 
     parser.add_argument("--tie-delta", type=float, default=0.05)
@@ -535,12 +592,22 @@ def main() -> None:
     parser.add_argument("--save-raw-outputs", action="store_true")
     args = parser.parse_args()
 
+    dotenv_path = _load_dotenv_if_available()
+    if dotenv_path is not None:
+        log.info("Loaded environment variables from %s", dotenv_path)
+
     bank_dir = args.bank.resolve()
     judge_api_key = args.judge_api_key
     if args.judge_api_key_env:
         judge_api_key = _os.environ.get(args.judge_api_key_env)
         if not judge_api_key:
             raise SystemExit(f"{args.judge_api_key_env} is not set")
+    elif args.judge_mode == "http" and "deepseek.com" in args.judge_url and judge_api_key == "EMPTY":
+        judge_api_key = _os.environ.get("DEEPSEEK_API_KEY")
+        if not judge_api_key:
+            raise SystemExit(
+                "DEEPSEEK_API_KEY is not set. Put it in .env, export it, or pass --judge-api-key."
+            )
 
     bank_df = _load_bank(bank_dir)
     _ = _load_definitions(bank_dir)
@@ -876,6 +943,17 @@ def main() -> None:
     metrics["judge_model"] = args.judge_model if args.judge_mode == "http" else args.base_model
     metrics["http_extra_body"] = args.http_extra_body if args.judge_mode == "http" else None
     metrics["http_reasoning_effort"] = args.http_reasoning_effort if args.judge_mode == "http" else None
+
+    if args.human_relevance is not None:
+        if not args.human_relevance.exists():
+            raise SystemExit(f"--human-relevance not found: {args.human_relevance}")
+        human_df = pd.read_parquet(args.human_relevance)
+        required = {"sample_id", "qid", "h"}
+        missing = required - set(human_df.columns)
+        if missing:
+            raise SystemExit(f"human_relevance parquet missing columns: {sorted(missing)}")
+        metrics.update(compute_human_alignment(pred_df, human_df))
+        metrics["human_relevance"] = str(args.human_relevance)
 
     if len(pred_df):
         metrics["latency_p50_s"] = float(pred_df["latency_s_estimate"].quantile(0.5))
