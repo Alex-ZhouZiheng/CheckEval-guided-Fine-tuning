@@ -69,3 +69,33 @@ def _filter(seq, valid_qids: set[int]) -> list[int]:
             seen.add(iv)
             out.append(iv)
     return out
+
+
+def aggregate_h(
+    sample_id: str,
+    prompt_id: str,
+    per_annotator: list[dict],
+    valid_qids: set[int],
+) -> list[dict]:
+    usable = [a for a in per_annotator if a.get("ok")]
+    n = len(usable)
+    if n == 0:
+        return []
+
+    counts: dict[int, int] = {}
+    for a in usable:
+        for qid in a["qids"]:
+            counts[qid] = counts.get(qid, 0) + 1
+
+    rows: list[dict] = []
+    for qid, c in counts.items():
+        if qid not in valid_qids:
+            continue
+        rows.append({
+            "prompt_id": prompt_id,
+            "sample_id": sample_id,
+            "qid": int(qid),
+            "h": float(c) / float(n),
+            "n_annotators": int(n),
+        })
+    return rows

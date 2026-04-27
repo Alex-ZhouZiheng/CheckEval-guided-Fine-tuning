@@ -50,3 +50,34 @@ def test_parse_total_failure_returns_empty():
     qids, fallback = parse_extractor_response(raw, valid_qids=set(range(1, 62)))
     assert qids == []
     assert fallback is True
+
+
+from build_human_relevance import aggregate_h
+
+
+def test_aggregate_h_basic():
+    # 3 annotators on one sample; valid bank = qids 1..5
+    per_annotator_qids = [
+        {"qids": [1, 2], "fallback": False, "ok": True},
+        {"qids": [2, 3], "fallback": True,  "ok": True},
+        {"qids": [],     "fallback": True,  "ok": False},  # parse total failure -> excluded
+    ]
+    rows = aggregate_h(
+        sample_id="s1", prompt_id="p1",
+        per_annotator=per_annotator_qids,
+        valid_qids=set(range(1, 6)),
+    )
+    # Two usable annotators -> qid1 1/2=0.5, qid2 2/2=1.0, qid3 1/2=0.5
+    by_qid = {r["qid"]: r["h"] for r in rows}
+    assert by_qid == {1: 0.5, 2: 1.0, 3: 0.5}
+    assert all(r["n_annotators"] == 2 for r in rows)
+    assert all(r["sample_id"] == "s1" and r["prompt_id"] == "p1" for r in rows)
+
+
+def test_aggregate_h_drops_zero_usable():
+    rows = aggregate_h(
+        sample_id="s2", prompt_id="p2",
+        per_annotator=[{"qids": [], "fallback": True, "ok": False}],
+        valid_qids=set(range(1, 6)),
+    )
+    assert rows == []
