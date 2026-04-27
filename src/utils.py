@@ -349,6 +349,7 @@ def _generate_batch_vllm(
     lora_request: Any = None,
     **gen_kwargs,
 ) -> list[str]:
+    use_tqdm = gen_kwargs.pop("use_tqdm", True)
     sampling_params = build_sampling_params(**gen_kwargs)
     chat_kwargs = dict(cfg.VLLM_CHAT_KWARGS)
     if lora_request is not None:
@@ -356,7 +357,7 @@ def _generate_batch_vllm(
     outputs = model.chat(
         messages_list,
         sampling_params=sampling_params,
-        use_tqdm=True,
+        use_tqdm=use_tqdm,
         add_generation_prompt=True,
         **chat_kwargs,
     )

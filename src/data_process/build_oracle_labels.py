@@ -191,6 +191,21 @@ def _http_judge_generate(
         )
 
 
+def build_vllm_speculative_config(
+    enable_mtp: bool,
+    mtp_method: str,
+    num_speculative_tokens: int,
+) -> dict | None:
+    if not enable_mtp:
+        return None
+    if num_speculative_tokens <= 0:
+        raise ValueError("--mtp-num-speculative-tokens must be > 0 when --enable-mtp is set")
+    return {
+        "method": mtp_method,
+        "num_speculative_tokens": int(num_speculative_tokens),
+    }
+
+
 def _generate_local(
     all_messages: list[list[dict[str, str]]],
     base_model: str,
@@ -203,14 +218,18 @@ def _generate_local(
     max_num_batched_tokens: int,
     prompt_chunk_size: int,
     seed: int | None,
+    backend: str | None = None,
+    speculative_config: dict | None = None,
 ) -> tuple[list[str], float]:
     model = load_judge_model(
         model_id=base_model,
+        backend=backend,
         tensor_parallel_size=tensor_parallel_size,
         max_model_len=max_model_len,
         gpu_memory_utilization=gpu_memory_utilization,
         max_num_seqs=max_num_seqs,
         max_num_batched_tokens=max_num_batched_tokens,
+        speculative_config=speculative_config,
     )
 
     outputs: list[str] = []
@@ -300,9 +319,10 @@ def main() -> None:
 
     parser.add_argument(
         "--judge-mode",
-        choices=["local", "http"],
+        choices=["local", "http", "vllm"],
         default="local",
-        help="Use local vLLM or OpenAI-compatible HTTP endpoint.",
+        help="`local` dispatches via cfg.INFERENCE_BACKEND; `vllm` forces in-process vLLM "
+             "(supports --enable-mtp); `http` uses an OpenAI-compatible endpoint.",
     )
     parser.add_argument("--judge-url", type=str, default="http://127.0.0.1:8000/v1")
     parser.add_argument("--judge-model", type=str, default=None, help="Required in --judge-mode http")
@@ -335,6 +355,23 @@ def main() -> None:
         type=int,
         default=16384,
         help="vLLM max_num_batched_tokens for local judge mode.",
+    )
+    parser.add_argument(
+        "--enable-mtp",
+        action="store_true",
+        help="Enable vLLM MTP speculative decoding (only with --judge-mode vllm).",
+    )
+    parser.add_argument(
+        "--mtp-method",
+        type=str,
+        default="mtp",
+        help="vLLM speculative_config method, e.g. mtp or qwen3_next_mtp.",
+    )
+    parser.add_argument(
+        "--mtp-num-speculative-tokens",
+        type=int,
+        default=1,
+        help="vLLM MTP speculative depth.",
     )
     parser.add_argument(
         "--save-raw-outputs",
@@ -411,6 +448,9 @@ def main() -> None:
 
     all_messages = messages_a + messages_b
 
+    if args.enable_mtp and args.judge_mode != "vllm":
+        raise SystemExit("--enable-mtp requires --judge-mode vllm")
+
     if args.judge_mode == "http":
         if not args.judge_model:
             raise SystemExit("--judge-model is required when --judge-mode http")
@@ -426,6 +466,12 @@ def main() -> None:
         )
         infer_elapsed = time.time() - t0
     else:
+        backend_override = "vllm" if args.judge_mode == "vllm" else None
+        speculative_config = build_vllm_speculative_config(
+            enable_mtp=args.enable_mtp,
+            mtp_method=args.mtp_method,
+            num_speculative_tokens=args.mtp_num_speculative_tokens,
+        )
         all_outputs, infer_elapsed = _generate_local(
             all_messages,
             base_model=args.base_model,
@@ -438,6 +484,8 @@ def main() -> None:
             max_num_batched_tokens=args.max_num_batched_tokens,
             prompt_chunk_size=args.prompt_chunk_size,
             seed=args.seed,
+            backend=backend_override,
+            speculative_config=speculative_config,
         )
 
     n = len(metas)
@@ -678,6 +726,11 @@ def main() -> None:
         "base_model": args.base_model,
         "judge_mode": args.judge_mode,
         "tie_delta": args.tie_delta,
+        "enable_mtp": bool(args.enable_mtp) if args.judge_mode == "vllm" else False,
+        "mtp_method": args.mtp_method if args.judge_mode == "vllm" and args.enable_mtp else None,
+        "mtp_num_speculative_tokens": (
+            args.mtp_num_speculative_tokens if args.judge_mode == "vllm" and args.enable_mtp else None
+        ),
     }
 
     metrics_path = out_path.with_suffix(".meta.json")

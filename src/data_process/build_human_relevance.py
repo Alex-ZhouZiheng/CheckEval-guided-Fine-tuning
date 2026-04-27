@@ -272,6 +272,7 @@ def _vllm_extract(
                 max_new_tokens=max_new_tokens,
                 temperature=0.0,
                 seed=seed,
+                use_tqdm=False,
             )
         )
     return outputs
