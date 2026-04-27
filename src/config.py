@@ -26,6 +26,12 @@ WITH_REASON_DIR = DATA_DIR / "with_reason"
 RESULTS_DIR = PROJECT_ROOT / "results"
 CHECKLISTS_DIR = PROJECT_ROOT / "checklists" / "v4_frozen"
 
+HUMAN_RELEVANCE_DIR = DATA_DIR / "oracle"  # co-located with oracle parquets
+HUMAN_RELEVANCE_FILENAMES = {
+    "train":   "train_human_relevance_v3.parquet",
+    "dev_600": "dev_600_human_relevance_v3.parquet",
+}
+
 for _dir in [DATA_DIR, RAW_DIR, SPLITS_DIR, WITH_REASON_DIR, RESULTS_DIR]:
     _dir.mkdir(parents=True, exist_ok=True)
 
