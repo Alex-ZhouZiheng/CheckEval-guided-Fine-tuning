@@ -22,6 +22,7 @@ from tqdm import tqdm
 
 import config as cfg
 from prepare_data_reasoning import make_sample_id
+from utils import generate_batch, load_judge_model
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s  %(message)s")
 log = logging.getLogger(__name__)
@@ -212,6 +213,70 @@ def _http_extract(
         return list(tqdm(ex.map(one, prompts), total=len(prompts), desc="Extract HTTP"))
 
 
+def build_vllm_speculative_config(
+    enable_mtp: bool,
+    mtp_method: str,
+    num_speculative_tokens: int,
+) -> dict | None:
+    if not enable_mtp:
+        return None
+    if num_speculative_tokens <= 0:
+        raise ValueError("--mtp-num-speculative-tokens must be > 0 when --enable-mtp is set")
+    return {
+        "method": mtp_method,
+        "num_speculative_tokens": int(num_speculative_tokens),
+    }
+
+
+def _vllm_extract(
+    prompts: list[str],
+    base_model: str,
+    batch_size: int,
+    max_new_tokens: int,
+    prompt_chunk_size: int,
+    seed: int | None,
+    tensor_parallel_size: int,
+    max_model_len: int,
+    gpu_memory_utilization: float,
+    max_num_seqs: int,
+    max_num_batched_tokens: int,
+    enable_mtp: bool,
+    mtp_method: str,
+    mtp_num_speculative_tokens: int,
+) -> list[str]:
+    speculative_config = build_vllm_speculative_config(
+        enable_mtp=enable_mtp,
+        mtp_method=mtp_method,
+        num_speculative_tokens=mtp_num_speculative_tokens,
+    )
+    model = load_judge_model(
+        model_id=base_model,
+        backend="vllm",
+        tensor_parallel_size=tensor_parallel_size,
+        max_model_len=max_model_len,
+        gpu_memory_utilization=gpu_memory_utilization,
+        max_num_seqs=max_num_seqs,
+        max_num_batched_tokens=max_num_batched_tokens,
+        speculative_config=speculative_config,
+    )
+
+    outputs: list[str] = []
+    t_messages = [[{"role": "user", "content": prompt}] for prompt in prompts]
+    for start in range(0, len(t_messages), prompt_chunk_size):
+        chunk = t_messages[start : start + prompt_chunk_size]
+        outputs.extend(
+            generate_batch(
+                model,
+                chunk,
+                batch_size=batch_size,
+                max_new_tokens=max_new_tokens,
+                temperature=0.0,
+                seed=seed,
+            )
+        )
+    return outputs
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--bank", type=Path, required=True)
@@ -221,11 +286,66 @@ def main() -> None:
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--max-samples", type=int, default=None)
     parser.add_argument("--max-new-tokens", type=int, default=512)
+    parser.add_argument(
+        "--judge-mode",
+        choices=["http", "vllm"],
+        default="http",
+        help="Use OpenAI-compatible HTTP endpoint or in-process vLLM.",
+    )
     parser.add_argument("--judge-url", type=str, default="http://127.0.0.1:8080/v1")
-    parser.add_argument("--judge-model", type=str, required=True)
+    parser.add_argument("--judge-model", type=str, default=None)
     parser.add_argument("--judge-api-key", type=str, default="EMPTY")
     parser.add_argument("--http-concurrency", type=int, default=4)
+    parser.add_argument("--base-model", type=str, default=str(cfg.JUDGE_MODEL_ID))
+    parser.add_argument("--batch-size", type=int, default=16)
+    parser.add_argument("--prompt-chunk-size", type=int, default=512)
+    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument(
+        "--tensor-parallel-size",
+        type=int,
+        default=cfg.VLLM_ENGINE_KWARGS["tensor_parallel_size"],
+    )
+    parser.add_argument(
+        "--max-model-len",
+        type=int,
+        default=cfg.VLLM_ENGINE_KWARGS["max_model_len"],
+    )
+    parser.add_argument(
+        "--gpu-memory-utilization",
+        type=float,
+        default=cfg.VLLM_ENGINE_KWARGS["gpu_memory_utilization"],
+    )
+    parser.add_argument(
+        "--max-num-seqs",
+        type=int,
+        default=cfg.VLLM_ENGINE_KWARGS["max_num_seqs"],
+    )
+    parser.add_argument(
+        "--max-num-batched-tokens",
+        type=int,
+        default=16384,
+    )
+    parser.add_argument(
+        "--enable-mtp",
+        action="store_true",
+        help="Enable vLLM MTP speculative decoding for --judge-mode vllm.",
+    )
+    parser.add_argument(
+        "--mtp-method",
+        type=str,
+        default="mtp",
+        help="vLLM speculative_config method, e.g. mtp or qwen3_next_mtp.",
+    )
+    parser.add_argument(
+        "--mtp-num-speculative-tokens",
+        type=int,
+        default=1,
+        help="vLLM MTP speculative depth.",
+    )
     args = parser.parse_args()
+
+    if args.judge_mode == "http" and not args.judge_model:
+        raise SystemExit("--judge-model is required when --judge-mode http")
 
     bank_df = _load_bank(args.bank.resolve())
     valid_qids = set(bank_df["qid"].astype(int).tolist())
@@ -256,12 +376,33 @@ def main() -> None:
     log.info("Built %d (sample, annotator) extraction jobs", len(jobs))
 
     t0 = time.time()
-    raws = _http_extract(
-        [j["prompt"] for j in jobs],
-        url=args.judge_url, model=args.judge_model,
-        api_key=args.judge_api_key, max_new_tokens=args.max_new_tokens,
-        concurrency=args.http_concurrency,
-    )
+    prompts = [j["prompt"] for j in jobs]
+    if not prompts:
+        raws = []
+    elif args.judge_mode == "http":
+        raws = _http_extract(
+            prompts,
+            url=args.judge_url, model=args.judge_model,
+            api_key=args.judge_api_key, max_new_tokens=args.max_new_tokens,
+            concurrency=args.http_concurrency,
+        )
+    else:
+        raws = _vllm_extract(
+            prompts,
+            base_model=args.base_model,
+            batch_size=args.batch_size,
+            max_new_tokens=args.max_new_tokens,
+            prompt_chunk_size=args.prompt_chunk_size,
+            seed=args.seed,
+            tensor_parallel_size=args.tensor_parallel_size,
+            max_model_len=args.max_model_len,
+            gpu_memory_utilization=args.gpu_memory_utilization,
+            max_num_seqs=args.max_num_seqs,
+            max_num_batched_tokens=args.max_num_batched_tokens,
+            enable_mtp=args.enable_mtp,
+            mtp_method=args.mtp_method,
+            mtp_num_speculative_tokens=args.mtp_num_speculative_tokens,
+        )
     elapsed = time.time() - t0
 
     # Group annotator results by sample_id, then aggregate.
@@ -321,8 +462,14 @@ def main() -> None:
             float(out_df.groupby("sample_id").size().mean()) if len(out_df) else 0.0
         ),
         "elapsed_s": elapsed,
-        "judge_model": args.judge_model,
-        "judge_url": args.judge_url,
+        "judge_mode": args.judge_mode,
+        "judge_model": args.judge_model if args.judge_mode == "http" else args.base_model,
+        "judge_url": args.judge_url if args.judge_mode == "http" else None,
+        "enable_mtp": bool(args.enable_mtp) if args.judge_mode == "vllm" else False,
+        "mtp_method": args.mtp_method if args.judge_mode == "vllm" and args.enable_mtp else None,
+        "mtp_num_speculative_tokens": (
+            args.mtp_num_speculative_tokens if args.judge_mode == "vllm" and args.enable_mtp else None
+        ),
     }
 
     import json as _json

@@ -115,6 +115,7 @@ def load_judge_model(
     quantization: str | None = None,
     load_format: str | None = None,
     reasoning_parser: str | None = None,
+    speculative_config: dict[str, Any] | None = None,
     llamacpp_url: str | None = None,
     llamacpp_model_name: str | None = None,
     llamacpp_adapter_path: str | None = None,
@@ -151,6 +152,7 @@ def load_judge_model(
         quantization=quantization,
         load_format=load_format,
         reasoning_parser=reasoning_parser,
+        speculative_config=speculative_config,
     )
 
 
@@ -193,6 +195,7 @@ def _load_vllm_model(
     quantization: str | None,
     load_format: str | None,
     reasoning_parser: str | None,
+    speculative_config: dict[str, Any] | None,
 ) -> LLM:
     """Original vLLM in-process engine loader."""
     from vllm import LLM
@@ -224,6 +227,8 @@ def _load_vllm_model(
 
     if reasoning_parser is not None:
         engine_kwargs["reasoning_parser"] = reasoning_parser
+    if speculative_config is not None:
+        engine_kwargs["speculative_config"] = speculative_config
 
     if num_gpu_blocks_override is None:
         engine_kwargs.pop("num_gpu_blocks_override", None)
@@ -234,13 +239,14 @@ def _load_vllm_model(
     log.info("Loading model with vLLM: %s", model_id)
     log.info(
         "  tp=%s  max_model_len=%s  gpu_mem=%.2f  max_num_seqs=%s  "
-        "max_num_batched_tokens=%s  prefix_caching=%s",
+        "max_num_batched_tokens=%s  prefix_caching=%s  speculative_config=%s",
         engine_kwargs.get("tensor_parallel_size"),
         engine_kwargs.get("max_model_len"),
         engine_kwargs.get("gpu_memory_utilization"),
         engine_kwargs.get("max_num_seqs"),
         engine_kwargs.get("max_num_batched_tokens"),
         engine_kwargs.get("enable_prefix_caching"),
+        engine_kwargs.get("speculative_config"),
     )
 
     t0 = time.time()

@@ -1,7 +1,11 @@
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src", "data_process"))
 
-from build_human_relevance import build_extractor_prompt, parse_extractor_response
+from build_human_relevance import (
+    build_extractor_prompt,
+    build_vllm_speculative_config,
+    parse_extractor_response,
+)
 
 
 def test_prompt_includes_all_qids_and_reasoning():
@@ -57,6 +61,22 @@ def test_parse_total_failure_returns_empty():
     qids, fallback = parse_extractor_response(raw, valid_qids=set(range(1, 62)))
     assert qids == []
     assert fallback is True
+
+
+def test_build_vllm_speculative_config_for_mtp():
+    assert build_vllm_speculative_config(
+        enable_mtp=True,
+        mtp_method="mtp",
+        num_speculative_tokens=1,
+    ) == {"method": "mtp", "num_speculative_tokens": 1}
+
+
+def test_build_vllm_speculative_config_disabled():
+    assert build_vllm_speculative_config(
+        enable_mtp=False,
+        mtp_method="mtp",
+        num_speculative_tokens=1,
+    ) is None
 
 
 from build_human_relevance import aggregate_h
