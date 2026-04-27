@@ -32,10 +32,11 @@ def build_extractor_prompt(reasoning: str, qmeta: list[dict]) -> str:
     for q in qmeta:
         lines.append(f"Q{int(q['qid'])} ({q['dimension']}): {q['question_text']}")
     questions_block = "\n".join(lines)
+    n_questions = len(qmeta)
 
     return (
         "You are mapping a human annotator's free-text rationale onto a fixed "
-        "checklist of 61 evaluation questions. Return the qids the rationale "
+        f"checklist of {n_questions} evaluation questions. Return the qids the rationale "
         "directly addresses (positively or negatively). If the rationale is "
         "ambiguous, return an empty list. Do not infer.\n\n"
         "[Checklist]\n"
@@ -47,7 +48,7 @@ def build_extractor_prompt(reasoning: str, qmeta: list[dict]) -> str:
 
 
 _JSON_OBJ_RE = re.compile(r"\{[^{}]*\"mentioned_qids\"\s*:\s*\[[^\]]*\][^{}]*\}", re.DOTALL)
-_QID_TOKEN_RE = re.compile(r"\b[Qq](\d{1,2})\b")
+_QID_TOKEN_RE = re.compile(r"\b[Qq]?(\d{1,2})\b")
 
 
 def parse_extractor_response(raw: str, valid_qids: set[int]) -> tuple[list[int], bool]:
@@ -269,11 +270,18 @@ def main() -> None:
     n_strict = 0
     n_fallback = 0
     n_empty = 0
+    n_parse_fail = 0
     for j, raw in zip(jobs, raws):
-        ok = bool(raw and raw.strip())
+        has_raw = bool(raw and raw.strip())
+        ok = has_raw
         qids, used_fallback = parse_extractor_response(raw, valid_qids) if ok else ([], True)
-        if not ok:
+        if ok and used_fallback and not qids:
+            ok = False
+            n_parse_fail += 1
+        if not has_raw:
             n_empty += 1
+        elif not ok:
+            pass
         elif used_fallback:
             n_fallback += 1
         else:
@@ -305,6 +313,7 @@ def main() -> None:
         "n_strict_parse": n_strict,
         "n_regex_fallback": n_fallback,
         "n_empty_response": n_empty,
+        "n_parse_fail": n_parse_fail,
         "parse_strict_rate": (n_strict / n_jobs) if n_jobs else None,
         "fallback_rate": (n_fallback / n_jobs) if n_jobs else None,
         "n_h_rows": int(len(out_df)),

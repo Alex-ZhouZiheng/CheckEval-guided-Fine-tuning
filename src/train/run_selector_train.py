@@ -190,7 +190,15 @@ def _prepare_oracle_tensors(
     beta: float,
     gamma: float,
     only_oracle_correct_for_ranking: bool,
+    target_mode: str = "oracle_baseline",
+    human_relevance_df: pd.DataFrame | None = None,
+    oracle_fallback_eps: float = 0.1,
 ) -> OracleTensors:
+    if target_mode not in {"oracle_baseline", "pure_human", "human_oracle_fallback"}:
+        raise ValueError(f"unknown target_mode: {target_mode}")
+    if target_mode != "oracle_baseline" and human_relevance_df is None:
+        raise ValueError("human_relevance_df is required when target_mode != oracle_baseline")
+
     bank_df = (
         q_df[["qid", "dim", "question_text"]]
         .drop_duplicates(subset=["qid"], keep="first")
@@ -224,6 +232,7 @@ def _prepare_oracle_tensors(
     n_skipped_parse_fail = 0
     n_skipped_null_util = 0
 
+    # First pass: preserve the oracle-derived supervision tensors exactly.
     for _, row in q_df.iterrows():
         sid = str(row["sample_id"])
         qid = int(row["qid"])
@@ -259,6 +268,47 @@ def _prepare_oracle_tensors(
         u2_target[i, j] = u2
         ans_target[i, j] = u1
         active_mask[i, j] = True
+
+    if target_mode != "oracle_baseline":
+        h_mat = torch.zeros((n_s, n_q), dtype=torch.float32)
+        n_h_used = 0
+        assert human_relevance_df is not None
+        for _, row in human_relevance_df.iterrows():
+            sid = str(row["sample_id"])
+            qid = int(row["qid"])
+            if sid not in sid_to_index or qid not in qid_to_index:
+                continue
+
+            i = sid_to_index[sid]
+            j = qid_to_index[qid]
+            if not bool(active_mask[i, j]):
+                continue
+
+            h_raw = row.get("h")
+            if pd.isna(h_raw):
+                continue
+            h_mat[i, j] = float(h_raw)
+            n_h_used += 1
+
+        if target_mode == "pure_human":
+            rank_target = torch.where(
+                active_mask,
+                h_mat,
+                rank_target.new_zeros(rank_target.shape),
+            )
+        else:
+            fallback = oracle_fallback_eps * u2_target
+            rank_target = torch.where(
+                active_mask,
+                torch.where(h_mat > 0, h_mat, fallback),
+                rank_target.new_zeros(rank_target.shape),
+            )
+
+        log.info(
+            "target_mode=%s; %d (sample,qid) human_relevance entries applied",
+            target_mode,
+            n_h_used,
+        )
 
     if n_skipped_parse_fail or n_skipped_null_util:
         log.info(
@@ -542,6 +592,27 @@ def main() -> None:
         action="store_true",
         help="Disable the holdout leakage guard (DANGEROUS — only for diagnostic runs).",
     )
+    parser.add_argument(
+        "--target-mode",
+        choices=["oracle_baseline", "pure_human", "human_oracle_fallback"],
+        default="oracle_baseline",
+        help="Source of the rank target.",
+    )
+    parser.add_argument(
+        "--human-relevance",
+        type=Path,
+        default=None,
+        help=(
+            "Path to data/oracle/<split>_human_relevance_v3.parquet. "
+            "Required when --target-mode != oracle_baseline."
+        ),
+    )
+    parser.add_argument(
+        "--oracle-fallback-eps",
+        type=float,
+        default=0.1,
+        help="Used only when --target-mode == human_oracle_fallback.",
+    )
     args = parser.parse_args()
 
     _set_seed(args.seed)
@@ -558,6 +629,31 @@ def main() -> None:
         _assert_no_holdout_leak(s_df, args.holdout_splits)
     else:
         log.warning("Holdout leakage guard disabled via --allow-holdout-leak")
+
+    human_df: pd.DataFrame | None = None
+    if args.target_mode != "oracle_baseline":
+        if args.human_relevance is None:
+            raise SystemExit("--human-relevance is required when --target-mode != oracle_baseline")
+        if not args.human_relevance.exists():
+            raise SystemExit(f"--human-relevance not found: {args.human_relevance}")
+
+        human_df = pd.read_parquet(args.human_relevance)
+        required = {"sample_id", "qid", "h"}
+        missing = required - set(human_df.columns)
+        if missing:
+            raise SystemExit(f"human_relevance parquet missing columns: {sorted(missing)}")
+
+        if not args.allow_holdout_leak:
+            human_sids = set(human_df["sample_id"].astype(str).tolist())
+            oracle_sids = set(_sample_ids_for_leak_check(s_df, winner_col="winner_gt") or [])
+            extra = human_sids - oracle_sids
+            if extra:
+                log.warning(
+                    "human_relevance has %d sample_ids not in oracle and will be ignored: %s",
+                    len(extra),
+                    sorted(extra)[:5],
+                )
+
     tensors = _prepare_oracle_tensors(
         q_df=q_df,
         s_df=s_df,
@@ -565,6 +661,9 @@ def main() -> None:
         beta=args.beta,
         gamma=args.gamma,
         only_oracle_correct_for_ranking=args.only_oracle_correct_for_ranking,
+        target_mode=args.target_mode,
+        human_relevance_df=human_df,
+        oracle_fallback_eps=args.oracle_fallback_eps,
     )
 
     log.info("Oracle samples: %d  questions: %d", len(tensors.sample_ids), len(tensors.qids))
@@ -735,6 +834,9 @@ def main() -> None:
         "train_size": len(train_idx),
         "val_size": len(val_idx),
         "only_oracle_correct_for_ranking": args.only_oracle_correct_for_ranking,
+        "target_mode": args.target_mode,
+        "human_relevance": str(args.human_relevance) if args.human_relevance else None,
+        "oracle_fallback_eps": args.oracle_fallback_eps,
     }
     with (out_dir / "config.json").open("w", encoding="utf-8") as f:
         json.dump(cfg_payload, f, indent=2, ensure_ascii=False)

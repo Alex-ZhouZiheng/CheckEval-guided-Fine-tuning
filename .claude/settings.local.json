@@ -49,7 +49,10 @@
       "Bash(python -c \"import pandas as pd; df = pd.read_parquet\\('D:/CheckEval-guided-Fine-tuning/data/splits/test.parquet'\\); print\\('Columns:', df.columns.tolist\\(\\)\\); print\\('Shape:', df.shape\\); print\\('\\\\nDtypes:'\\); print\\(df.dtypes\\); print\\('\\\\nFirst row:'\\); print\\(df.iloc[0:1]\\)\")",
       "Bash(python3 *)",
       "Bash(python *)",
-      "Bash(ssh *)"
+      "Bash(ssh *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(cd \"D:\\\\\\\\CheckEval-guided-Fine-tuning\")"
     ]
   }
 }

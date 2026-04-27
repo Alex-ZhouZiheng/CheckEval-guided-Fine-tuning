@@ -32,7 +32,7 @@ HUMAN_RELEVANCE_FILENAMES = {
     "dev_600": "dev_600_human_relevance_v3.parquet",
 }
 
-for _dir in [DATA_DIR, RAW_DIR, SPLITS_DIR, WITH_REASON_DIR, RESULTS_DIR]:
+for _dir in [DATA_DIR, RAW_DIR, SPLITS_DIR, WITH_REASON_DIR, HUMAN_RELEVANCE_DIR, RESULTS_DIR]:
     _dir.mkdir(parents=True, exist_ok=True)
 
 # ────────────────────────── dataset ──────────────────────────

@@ -39,6 +39,13 @@ def test_parse_regex_fallback():
     assert fallback is True
 
 
+def test_parse_regex_fallback_accepts_bare_qid_numbers():
+    raw = "The relevant checklist items are 5 and 19."
+    qids, fallback = parse_extractor_response(raw, valid_qids=set(range(1, 62)))
+    assert sorted(qids) == [5, 19]
+    assert fallback is True
+
+
 def test_parse_filters_out_of_range_qids():
     raw = '{"mentioned_qids": [1, 99, 200]}'
     qids, _ = parse_extractor_response(raw, valid_qids=set(range(1, 62)))
