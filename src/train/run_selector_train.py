@@ -771,19 +771,27 @@ def main() -> None:
             head.eval()
             with torch.no_grad():
                 all_scores: list[torch.Tensor] = []
+                all_rank: list[torch.Tensor] = []
                 all_u2: list[torch.Tensor] = []
                 all_mask: list[torch.Tensor] = []
                 for batch in val_loader:
                     s = batch["sample_emb"].to(device)
                     rank_logits, _, _ = head(s, q_emb_dev)
                     all_scores.append(rank_logits.cpu())
+                    all_rank.append(batch["rank_target"].cpu())
                     all_u2.append(batch["u2_target"].cpu())
                     all_mask.append(batch["active_mask"].cpu())
 
                 score_mat = torch.cat(all_scores, dim=0)
+                rank_mat = torch.cat(all_rank, dim=0)
                 u2_mat = torch.cat(all_u2, dim=0)
                 mask_mat = torch.cat(all_mask, dim=0)
-                eval_metrics = _compute_ndcg_recall(score_mat, u2_mat, mask_mat)
+                # eval against the same target the model was trained on
+                eval_metrics = _compute_ndcg_recall(score_mat, rank_mat, mask_mat)
+                # also report u2-based metrics for cross-mode comparison
+                u2_metrics = _compute_ndcg_recall(score_mat, u2_mat, mask_mat)
+                for k, v in u2_metrics.items():
+                    eval_metrics[f"{k}_u2"] = v
 
         row = {
             "epoch": epoch,

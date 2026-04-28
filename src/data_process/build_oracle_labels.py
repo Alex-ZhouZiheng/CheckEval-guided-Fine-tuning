@@ -24,11 +24,13 @@ _sys.path.insert(
 )
 
 import argparse
+import hashlib
 import json
 import logging
 import time
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
+from threading import Lock
 from typing import Any
 
 import pandas as pd
@@ -170,25 +172,238 @@ def _http_judge_generate(
     max_new_tokens: int,
     temperature: float = 0.0,
     concurrency: int = 32,
-) -> list[str]:
+    extra_body_mode: str = "auto",
+    reasoning_effort: str | None = None,
+    request_keys: list[str] | None = None,
+    resume_cache: Path | None = None,
+) -> list[dict[str, Any]]:
     from openai import OpenAI
 
     client = OpenAI(base_url=url, api_key=api_key)
+    extra_body = _http_extra_body(extra_body_mode, url)
+    if request_keys is None:
+        request_keys = [str(i) for i in range(len(messages_list))]
+    if len(request_keys) != len(messages_list):
+        raise ValueError("request_keys length must match messages_list length")
 
-    def one(msgs: list[dict[str, str]]) -> str:
-        resp = client.chat.completions.create(
-            model=model,
-            messages=msgs,
-            temperature=temperature,
-            max_tokens=max_new_tokens,
-            extra_body={"chat_template_kwargs": {"enable_thinking": False}},
-        )
-        return resp.choices[0].message.content or ""
+    signature = _http_request_signature(
+        url=url,
+        model=model,
+        max_new_tokens=max_new_tokens,
+        temperature=temperature,
+        extra_body=extra_body,
+        reasoning_effort=reasoning_effort,
+    )
+    prompt_hashes = [_prompt_hash(msgs) for msgs in messages_list]
+    cached = _load_http_resume_cache(resume_cache, signature)
+    out: list[dict[str, Any] | None] = [None] * len(messages_list)
+    pending: list[int] = []
+    for idx, (key, prompt_sha) in enumerate(zip(request_keys, prompt_hashes)):
+        response = cached.get((key, prompt_sha))
+        if response is None:
+            pending.append(idx)
+        else:
+            out[idx] = response
 
-    with ThreadPoolExecutor(max_workers=concurrency) as ex:
-        return list(
-            tqdm(ex.map(one, messages_list), total=len(messages_list), desc="Judge HTTP")
+    if resume_cache is not None:
+        log.info(
+            "HTTP resume cache %s: %d cached, %d pending",
+            resume_cache,
+            len(messages_list) - len(pending),
+            len(pending),
         )
+        resume_cache.parent.mkdir(parents=True, exist_ok=True)
+    write_lock = Lock()
+
+    def one(msgs: list[dict[str, str]]) -> dict[str, Any]:
+        kwargs = {
+            "model": model,
+            "messages": msgs,
+            "temperature": temperature,
+            "max_tokens": max_new_tokens,
+        }
+        if extra_body is not None:
+            kwargs["extra_body"] = extra_body
+        if reasoning_effort is not None:
+            kwargs["reasoning_effort"] = reasoning_effort
+        resp = client.chat.completions.create(**kwargs)
+        choice = resp.choices[0]
+        msg = choice.message
+        content = msg.content or ""
+        reasoning_content = getattr(msg, "reasoning_content", "") or ""
+        return {
+            "content": content,
+            "reasoning_content": reasoning_content,
+            "finish_reason": getattr(choice, "finish_reason", None),
+            "content_len": len(content),
+            "reasoning_len": len(reasoning_content),
+            "usage": _dump_obj(getattr(resp, "usage", None)),
+            "message": _dump_obj(msg),
+        }
+
+    def save_cache(idx: int, response: dict[str, Any]) -> None:
+        if resume_cache is None:
+            return
+        record = {
+            "request_key": request_keys[idx],
+            "prompt_sha256": prompt_hashes[idx],
+            "signature": signature,
+            "response": response,
+        }
+        line = json.dumps(record, ensure_ascii=False, default=str)
+        with write_lock:
+            with resume_cache.open("a", encoding="utf-8") as f:
+                f.write(line + "\n")
+
+    if pending:
+        with ThreadPoolExecutor(max_workers=concurrency) as ex:
+            futures = {ex.submit(one, messages_list[idx]): idx for idx in pending}
+            errors: list[tuple[int, BaseException]] = []
+            with tqdm(total=len(pending), desc="Judge HTTP") as pbar:
+                for fut in as_completed(futures):
+                    idx = futures[fut]
+                    try:
+                        response = fut.result()
+                    except BaseException as exc:
+                        errors.append((idx, exc))
+                    else:
+                        out[idx] = response
+                        save_cache(idx, response)
+                    pbar.update(1)
+            if errors:
+                first_idx, first_error = errors[0]
+                log.error(
+                    "HTTP judge failed for %d/%d pending requests; completed requests were cached.",
+                    len(errors),
+                    len(pending),
+                )
+                raise RuntimeError(
+                    f"HTTP request failed for {request_keys[first_idx]}"
+                ) from first_error
+
+    missing = [request_keys[idx] for idx, response in enumerate(out) if response is None]
+    if missing:
+        raise RuntimeError(f"Missing HTTP responses after generation: {missing[:5]}")
+    return [response for response in out if response is not None]
+
+
+def _http_request_signature(
+    url: str,
+    model: str,
+    max_new_tokens: int,
+    temperature: float,
+    extra_body: dict[str, Any] | None,
+    reasoning_effort: str | None,
+) -> str:
+    payload = {
+        "url": url,
+        "model": model,
+        "max_new_tokens": max_new_tokens,
+        "temperature": temperature,
+        "extra_body": extra_body,
+        "reasoning_effort": reasoning_effort,
+    }
+    return json.dumps(payload, sort_keys=True, ensure_ascii=False, default=str)
+
+
+def _prompt_hash(messages: list[dict[str, str]]) -> str:
+    payload = json.dumps(messages, sort_keys=True, ensure_ascii=False)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _load_http_resume_cache(
+    cache_path: Path | None,
+    signature: str,
+) -> dict[tuple[str, str], dict[str, Any]]:
+    if cache_path is None or not cache_path.exists():
+        return {}
+
+    out: dict[tuple[str, str], dict[str, Any]] = {}
+    with cache_path.open("r", encoding="utf-8") as f:
+        for line_no, line in enumerate(f, start=1):
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                record = json.loads(line)
+            except json.JSONDecodeError:
+                log.warning("Skipping malformed cache line %s in %s", line_no, cache_path)
+                continue
+            if record.get("signature") != signature:
+                continue
+            key = record.get("request_key")
+            prompt_sha = record.get("prompt_sha256")
+            response = record.get("response")
+            if not key or not prompt_sha or not isinstance(response, dict):
+                continue
+            out[(str(key), str(prompt_sha))] = response
+    return out
+
+
+def _http_extra_body(extra_body_mode: str, judge_url: str) -> dict[str, Any] | None:
+    mode = extra_body_mode
+    if mode == "auto":
+        mode = "deepseek-thinking-on" if "deepseek.com" in judge_url else "qwen-thinking-off"
+
+    if mode == "qwen-thinking-off":
+        return {"chat_template_kwargs": {"enable_thinking": False}}
+    if mode == "deepseek-thinking-on":
+        return {"thinking": {"type": "enabled"}}
+    if mode == "deepseek-thinking-off":
+        return {"thinking": {"type": "disabled"}}
+    if mode == "none":
+        return None
+    raise ValueError(f"Unknown HTTP extra body mode: {extra_body_mode}")
+
+
+def _dump_obj(obj: Any) -> Any:
+    if obj is None:
+        return None
+    if hasattr(obj, "model_dump"):
+        return obj.model_dump()
+    if hasattr(obj, "dict"):
+        return obj.dict()
+    return str(obj)
+
+
+def _local_judge_response(raw: str) -> dict[str, Any]:
+    return {
+        "content": raw,
+        "reasoning_content": "",
+        "finish_reason": None,
+        "content_len": len(raw),
+        "reasoning_len": 0,
+        "usage": None,
+        "message": None,
+    }
+
+
+def _response_parse_text(response: dict[str, Any]) -> str:
+    content = str(response.get("content") or "")
+    if content.strip():
+        return content
+    return str(response.get("reasoning_content") or "")
+
+
+def _resolve_http_api_key(judge_url: str, judge_api_key: str, judge_api_key_env: str | None) -> str:
+    if judge_api_key_env:
+        resolved = _os.environ.get(judge_api_key_env)
+        if not resolved:
+            raise SystemExit(f"{judge_api_key_env} is not set")
+        return resolved
+
+    if judge_api_key != "EMPTY":
+        return judge_api_key
+
+    if "deepseek.com" in judge_url:
+        resolved = _os.environ.get("DEEPSEEK_API_KEY")
+        if not resolved:
+            raise SystemExit(
+                "DEEPSEEK_API_KEY is not set. Put it in .env, export it, or pass --judge-api-key."
+            )
+        return resolved
+
+    return _os.environ.get("OPENAI_API_KEY", judge_api_key)
 
 
 def build_vllm_speculative_config(
@@ -327,7 +542,36 @@ def main() -> None:
     parser.add_argument("--judge-url", type=str, default="http://127.0.0.1:8000/v1")
     parser.add_argument("--judge-model", type=str, default=None, help="Required in --judge-mode http")
     parser.add_argument("--judge-api-key", type=str, default="EMPTY")
+    parser.add_argument(
+        "--judge-api-key-env",
+        type=str,
+        default=None,
+        help="Read the HTTP judge API key from this environment variable.",
+    )
+    parser.add_argument(
+        "--http-extra-body",
+        choices=["auto", "qwen-thinking-off", "deepseek-thinking-on", "deepseek-thinking-off", "none"],
+        default="auto",
+        help="Provider-specific extra_body for HTTP judge calls.",
+    )
+    parser.add_argument(
+        "--http-reasoning-effort",
+        choices=["low", "medium", "high", "max"],
+        default=None,
+        help="Optional reasoning_effort for HTTP judge calls when supported.",
+    )
     parser.add_argument("--http-concurrency", type=int, default=32)
+    parser.add_argument(
+        "--http-resume-cache",
+        type=Path,
+        default=None,
+        help="JSONL cache for completed HTTP requests (default: <out_stem>.http_cache.jsonl).",
+    )
+    parser.add_argument(
+        "--no-http-resume",
+        action="store_true",
+        help="Disable HTTP request resume caching.",
+    )
 
     parser.add_argument(
         "--tensor-parallel-size",
@@ -460,19 +704,41 @@ def main() -> None:
     if args.enable_mtp and args.judge_mode != "vllm":
         raise SystemExit("--enable-mtp requires --judge-mode vllm")
 
+    http_resume_cache = None
+
     if args.judge_mode == "http":
         if not args.judge_model:
             raise SystemExit("--judge-model is required when --judge-mode http")
+        judge_api_key = _resolve_http_api_key(
+            judge_url=args.judge_url,
+            judge_api_key=args.judge_api_key,
+            judge_api_key_env=args.judge_api_key_env,
+        )
+        if not args.no_http_resume:
+            http_resume_cache = (
+                args.http_resume_cache.resolve()
+                if args.http_resume_cache is not None
+                else args.out.with_name(f"{args.out.stem}.http_cache.jsonl").resolve()
+            )
+        request_keys = (
+            [f"{meta['sample_id']}:A" for meta in metas]
+            + [f"{meta['sample_id']}:B" for meta in metas]
+        )
         t0 = time.time()
-        all_outputs = _http_judge_generate(
+        all_responses = _http_judge_generate(
             all_messages,
             url=args.judge_url,
             model=args.judge_model,
-            api_key=args.judge_api_key,
+            api_key=judge_api_key,
             max_new_tokens=args.max_new_tokens,
             temperature=0.0,
             concurrency=args.http_concurrency,
+            extra_body_mode=args.http_extra_body,
+            reasoning_effort=args.http_reasoning_effort,
+            request_keys=request_keys,
+            resume_cache=http_resume_cache,
         )
+        all_outputs = [_response_parse_text(r) for r in all_responses]
         infer_elapsed = time.time() - t0
     else:
         backend_override = "vllm" if args.judge_mode == "vllm" else None
@@ -496,10 +762,13 @@ def main() -> None:
             backend=backend_override,
             speculative_config=speculative_config,
         )
+        all_responses = [_local_judge_response(raw) for raw in all_outputs]
 
     n = len(metas)
     raw_a = all_outputs[:n]
     raw_b = all_outputs[n:]
+    resp_a = all_responses[:n]
+    resp_b = all_responses[n:]
 
     question_rows: list[dict[str, Any]] = []
     sample_rows: list[dict[str, Any]] = []
@@ -510,7 +779,9 @@ def main() -> None:
     prompts_a_all = [m[0]["content"] for m in messages_a]
     prompts_b_all = [m[0]["content"] for m in messages_b]
 
-    for idx, (meta, out_a, out_b) in enumerate(tqdm(zip(metas, raw_a, raw_b), total=n, desc="Parse oracle")):
+    for idx, (meta, out_a, out_b, meta_a, meta_b) in enumerate(
+        tqdm(zip(metas, raw_a, raw_b, resp_a, resp_b), total=n, desc="Parse oracle")
+    ):
         qids = meta["active_qids"]
         n_q = meta["n_questions"]
 
@@ -619,6 +890,20 @@ def main() -> None:
         if args.save_raw_outputs:
             sample_row["raw_output_a"] = out_a
             sample_row["raw_output_b"] = out_b
+            sample_row["raw_content_a"] = meta_a.get("content", "")
+            sample_row["raw_content_b"] = meta_b.get("content", "")
+            sample_row["raw_reasoning_content_a"] = meta_a.get("reasoning_content", "")
+            sample_row["raw_reasoning_content_b"] = meta_b.get("reasoning_content", "")
+            sample_row["raw_finish_reason_a"] = meta_a.get("finish_reason")
+            sample_row["raw_finish_reason_b"] = meta_b.get("finish_reason")
+            sample_row["raw_content_len_a"] = meta_a.get("content_len")
+            sample_row["raw_content_len_b"] = meta_b.get("content_len")
+            sample_row["raw_reasoning_len_a"] = meta_a.get("reasoning_len")
+            sample_row["raw_reasoning_len_b"] = meta_b.get("reasoning_len")
+            sample_row["raw_usage_a"] = json.dumps(meta_a.get("usage"), ensure_ascii=False, default=str)
+            sample_row["raw_usage_b"] = json.dumps(meta_b.get("usage"), ensure_ascii=False, default=str)
+            sample_row["raw_message_a"] = json.dumps(meta_a.get("message"), ensure_ascii=False, default=str)
+            sample_row["raw_message_b"] = json.dumps(meta_b.get("message"), ensure_ascii=False, default=str)
 
         sample_rows.append(sample_row)
 
@@ -734,6 +1019,9 @@ def main() -> None:
         "tier": args.tier,
         "base_model": args.base_model,
         "judge_mode": args.judge_mode,
+        "http_extra_body": args.http_extra_body if args.judge_mode == "http" else None,
+        "http_reasoning_effort": args.http_reasoning_effort if args.judge_mode == "http" else None,
+        "http_resume_cache": str(http_resume_cache) if http_resume_cache is not None else None,
         "tie_delta": args.tie_delta,
         "enable_mtp": bool(args.enable_mtp) if args.judge_mode == "vllm" else False,
         "mtp_method": args.mtp_method if args.judge_mode == "vllm" and args.enable_mtp else None,
