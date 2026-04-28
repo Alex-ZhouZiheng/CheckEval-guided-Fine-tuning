@@ -397,6 +397,15 @@ def main() -> None:
         type=float,
         default=0.8,
     )
+    parser.add_argument(
+        "--rerun-out",
+        type=Path,
+        default=None,
+        help="If set, dump samples where the oracle disagreed with ground truth "
+             "(wrong winner, Tie, or parse_fail) as a parquet usable directly as "
+             "--input-path for a phase-2 stronger-model rerun. Sample_id is "
+             "preserved so merge_oracle.py can splice strong answers back in.",
+    )
     args = parser.parse_args()
 
     bank_dir = args.bank.resolve()
@@ -740,6 +749,43 @@ def main() -> None:
     log.info("Saved oracle question rows -> %s", out_path)
     log.info("Saved oracle sample rows   -> %s", sample_out)
     log.info("Saved run metadata         -> %s", metrics_path)
+
+    if args.rerun_out is not None:
+        rerun_path = args.rerun_out.resolve()
+        rerun_path.parent.mkdir(parents=True, exist_ok=True)
+        rerun_records = []
+        for meta, sr in zip(metas, sample_rows):
+            if sr.get("oracle_agrees_gt") is True:
+                continue
+            rerun_records.append({
+                "sample_id": meta["sample_id"],
+                "prompt_id": meta["prompt_id"],
+                "domain": meta["domain"],
+                "context": meta["context"],
+                "response_a": meta["response_a"],
+                "response_b": meta["response_b"],
+                "winner": meta["winner_gt"],
+                "active_qids": meta["active_qids"],
+                "n_questions": meta["n_questions"],
+                "weak_winner_pred": sr["winner_pred_full"],
+                "weak_margin": sr["margin_full"],
+                "weak_oracle_agrees_gt": sr["oracle_agrees_gt"],
+            })
+        if not rerun_records:
+            log.warning("No incorrect samples to dump for rerun. Skipping %s.", rerun_path)
+        else:
+            pd.DataFrame(rerun_records).to_parquet(rerun_path, index=False)
+            log.info(
+                "Saved rerun parquet (%d incorrect samples) -> %s",
+                len(rerun_records),
+                rerun_path,
+            )
+            log.info(
+                "Phase 2: python src/data_process/build_oracle_labels.py "
+                "--bank %s --input-path %s --base-model <strong-model> --out <strong_oracle.parquet>",
+                bank_dir,
+                rerun_path,
+            )
 
     if args.review_out is not None:
         review_path = args.review_out.resolve()
