@@ -48,6 +48,7 @@ from evaluation.selector_infer import (
     select_topk_with_quota,
 )
 from utils import (
+    PAIRWISE_TABLE,
     aggregate_checklist_score,
     build_pointwise_prompt_from_qids,
     compare_checklists_pairwise,
@@ -292,6 +293,7 @@ def _score_checklists(
     tie_delta: float,
     aggregate_na_policy: str,
     aggregate_coverage_threshold: float,
+    qid_weights: dict[int, float] | None = None,
 ) -> dict[str, Any]:
     if not asked_qids:
         return {
@@ -366,6 +368,82 @@ def _score_checklists(
             "n_aligned": int(n_aligned),
             "score_a": score_a,
             "score_b": score_b,
+        }
+
+    if score_method in {
+        "compare_checklists_pairwise_weighted",
+        "aggregate_checklist_score_weighted",
+    }:
+        if qid_weights is None:
+            raise ValueError(f"score_method {score_method} requires qid_weights")
+
+        # restrict to asked qids that have a weight; un-weighted asked qids ignored
+        active = [q for q in asked_qids if q in qid_weights]
+        n_aligned = sum(
+            1
+            for qid in active
+            if str(labels_a.get(qid, "na")).lower() != "na"
+            and str(labels_b.get(qid, "na")).lower() != "na"
+        )
+
+        if not active:
+            return {
+                "margin": 0.0,
+                "winner": "Tie",
+                "n_aligned": int(n_aligned),
+                "score_a": None,
+                "score_b": None,
+            }
+
+        denom = sum(float(qid_weights[q]) for q in active)
+        if denom <= 0.0:
+            return {
+                "margin": 0.0,
+                "winner": "Tie",
+                "n_aligned": int(n_aligned),
+                "score_a": None,
+                "score_b": None,
+            }
+
+        if score_method == "compare_checklists_pairwise_weighted":
+            num = 0.0
+            for q in active:
+                la = str(labels_a.get(q, "na")).lower()
+                lb = str(labels_b.get(q, "na")).lower()
+                if la not in {"yes", "no", "na"}:
+                    la = "na"
+                if lb not in {"yes", "no", "na"}:
+                    lb = "na"
+                num += float(qid_weights[q]) * PAIRWISE_TABLE[(la, lb)]
+            margin = num / denom
+            return {
+                "margin": float(margin),
+                "winner": _winner_from_margin(float(margin), tie_delta=tie_delta),
+                "n_aligned": int(n_aligned),
+                "score_a": None,
+                "score_b": None,
+            }
+
+        # aggregate_checklist_score_weighted: shared denominator, NA & no → 0
+        num_a = 0.0
+        num_b = 0.0
+        for q in active:
+            w = float(qid_weights[q])
+            la = str(labels_a.get(q, "na")).lower()
+            lb = str(labels_b.get(q, "na")).lower()
+            if la == "yes":
+                num_a += w
+            if lb == "yes":
+                num_b += w
+        score_a = num_a / denom
+        score_b = num_b / denom
+        margin = score_a - score_b
+        return {
+            "margin": float(margin),
+            "winner": _winner_from_margin(float(margin), tie_delta=tie_delta),
+            "n_aligned": int(n_aligned),
+            "score_a": float(score_a),
+            "score_b": float(score_b),
         }
 
     raise ValueError(f"unknown score_method: {score_method}")
@@ -549,6 +627,99 @@ def _load_selector_picks(path: Path, df: pd.DataFrame) -> dict[str, list[int]]:
     return pick_map
 
 
+def _softmax(values: list[float], temperature: float) -> list[float]:
+    if not values:
+        return []
+    if temperature <= 0:
+        raise ValueError("temperature must be > 0")
+    import math
+    scaled = [v / temperature for v in values]
+    m = max(scaled)
+    exps = [math.exp(v - m) for v in scaled]
+    s = sum(exps)
+    if s <= 0:
+        return [1.0 / len(values)] * len(values)
+    return [e / s for e in exps]
+
+
+def _load_question_weights(
+    path: Path,
+    df: pd.DataFrame,
+    *,
+    weight_column: str,
+    transform: str,
+    temperature: float,
+) -> dict[str, dict[int, float]]:
+    """Return {sample_id: {qid: weight}}.
+
+    `transform`:
+        "none"    → use weight_column as-is
+        "softmax" → softmax over importance_raw with given temperature
+    """
+    if not path.exists():
+        raise FileNotFoundError(path)
+
+    wdf = pd.read_parquet(path)
+    if "sample_id" not in wdf.columns:
+        raise ValueError(f"{path} missing sample_id")
+    if "selected_qids" not in wdf.columns:
+        raise ValueError(f"{path} missing selected_qids")
+
+    if transform == "softmax":
+        if "importance_raw" not in wdf.columns:
+            raise ValueError(
+                f"{path} missing importance_raw (required for --weight-transform softmax)"
+            )
+    elif transform == "none":
+        if weight_column not in wdf.columns:
+            raise ValueError(f"{path} missing weight column: {weight_column}")
+    else:
+        raise ValueError(f"unknown weight transform: {transform}")
+
+    out: dict[str, dict[int, float]] = {}
+    for _, row in wdf.drop_duplicates(subset=["sample_id"], keep="first").iterrows():
+        sid = str(row["sample_id"])
+        qids = _parse_qid_list(row["selected_qids"])
+        if transform == "softmax":
+            raw_vals = [float(x) for x in _parse_qid_list_floats(row["importance_raw"])]
+            weights = _softmax(raw_vals, temperature=temperature)
+        else:
+            weights = [float(x) for x in _parse_qid_list_floats(row[weight_column])]
+        if len(weights) != len(qids):
+            raise ValueError(
+                f"sample {sid}: weight len {len(weights)} != qid len {len(qids)}"
+            )
+        out[sid] = {int(q): float(w) for q, w in zip(qids, weights)}
+
+    missing = [str(sid) for sid in df["sample_id"].astype(str).tolist() if str(sid) not in out]
+    if missing:
+        raise ValueError(
+            f"{path} missing weights for {len(missing)} eval samples "
+            f"(first 5: {missing[:5]})"
+        )
+
+    log.info(
+        "Loaded question weights from %s (column=%s transform=%s T=%.3f)",
+        path, weight_column, transform, temperature,
+    )
+    return out
+
+
+def _parse_qid_list_floats(value: Any) -> list[float]:
+    if value is None:
+        return []
+    if isinstance(value, (list, tuple)):
+        return [float(x) for x in value]
+    if hasattr(value, "tolist"):
+        return [float(x) for x in value.tolist()]
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return []
+        return [float(x) for x in ast.literal_eval(text)]
+    raise TypeError(f"Unsupported float list value: {type(value).__name__}")
+
+
 def compute_human_alignment(
     pred_df: pd.DataFrame,
     human_df: pd.DataFrame,
@@ -625,12 +796,50 @@ def main() -> None:
 
     parser.add_argument(
         "--score-method",
-        choices=["compare_checklists_pairwise", "aggregate_checklist_score"],
+        choices=[
+            "compare_checklists_pairwise",
+            "aggregate_checklist_score",
+            "compare_checklists_pairwise_weighted",
+            "aggregate_checklist_score_weighted",
+        ],
         default="compare_checklists_pairwise",
         help=(
             "How to convert parsed checklist answers into A/B winner. "
-            "compare_checklists_pairwise uses utils.compare_checklists_pairwise; "
-            "aggregate_checklist_score uses utils.aggregate_checklist_score for each side."
+            "*_weighted variants require --question-weights and use shared "
+            "denominator weighted aggregation."
+        ),
+    )
+    parser.add_argument(
+        "--question-weights",
+        type=Path,
+        default=None,
+        help="Parquet from build_question_importance_weights.py (required for weighted score methods).",
+    )
+    parser.add_argument(
+        "--weight-column",
+        type=str,
+        default="importance_softmax",
+        help="Column to read weights from when --weight-transform none.",
+    )
+    parser.add_argument(
+        "--weight-transform",
+        choices=["none", "softmax"],
+        default="none",
+        help="If 'softmax', re-softmax importance_raw with --weight-temperature (overrides --weight-column).",
+    )
+    parser.add_argument(
+        "--weight-temperature",
+        type=float,
+        default=1.0,
+        help="Softmax temperature when --weight-transform softmax.",
+    )
+    parser.add_argument(
+        "--weighted-na-policy",
+        choices=["ignore"],
+        default="ignore",
+        help=(
+            "NA policy for weighted score methods. Currently only 'ignore' (NA contributes 0 "
+            "to numerator, weight still in denominator)."
         ),
     )
     parser.add_argument(
@@ -727,6 +936,20 @@ def main() -> None:
                 "DEEPSEEK_API_KEY is not set. Put it in .env, export it, or pass --judge-api-key."
             )
 
+    weighted_methods = {
+        "compare_checklists_pairwise_weighted",
+        "aggregate_checklist_score_weighted",
+    }
+    if args.score_method in weighted_methods and args.question_weights is None:
+        raise SystemExit(
+            f"--question-weights is required for --score-method {args.score_method}"
+        )
+    if args.question_weights is not None and args.score_method not in weighted_methods:
+        log.warning(
+            "--question-weights provided but --score-method is %s; weights will be ignored.",
+            args.score_method,
+        )
+
     bank_df = _load_bank(bank_dir)
     _ = _load_definitions(bank_dir)
     qmeta = {
@@ -745,6 +968,16 @@ def main() -> None:
         max_samples=args.max_samples,
     )
     df_by_sid = {str(r["sample_id"]): r for _, r in df.iterrows()}
+
+    weights_by_sid: dict[str, dict[int, float]] = {}
+    if args.score_method in weighted_methods:
+        weights_by_sid = _load_question_weights(
+            args.question_weights.resolve(),
+            df,
+            weight_column=args.weight_column,
+            transform=args.weight_transform,
+            temperature=args.weight_temperature,
+        )
 
     # Ranking candidates per sample.
     ranking_by_sid: dict[str, list[int]] = {}
@@ -902,6 +1135,7 @@ def main() -> None:
             tie_delta=args.tie_delta,
             aggregate_na_policy=args.aggregate_na_policy,
             aggregate_coverage_threshold=args.aggregate_coverage_threshold,
+            qid_weights=weights_by_sid.get(sid),
         )
         st["margin_initial"] = cmp["margin"]
         st["n_aligned_initial"] = cmp["n_aligned"]
@@ -970,6 +1204,7 @@ def main() -> None:
                 tie_delta=args.tie_delta,
                 aggregate_na_policy=args.aggregate_na_policy,
                 aggregate_coverage_threshold=args.aggregate_coverage_threshold,
+                qid_weights=weights_by_sid.get(sid),
             )
             st["margin_final"] = cmp["margin"]
             st["n_aligned_final"] = cmp["n_aligned"]
@@ -1030,6 +1265,7 @@ def main() -> None:
                 tie_delta=args.tie_delta,
                 aggregate_na_policy=args.aggregate_na_policy,
                 aggregate_coverage_threshold=args.aggregate_coverage_threshold,
+                qid_weights=weights_by_sid.get(sid),
             )
             st["margin_final"] = cmp["margin"]
             st["n_aligned_final"] = cmp["n_aligned"]
@@ -1077,6 +1313,9 @@ def main() -> None:
             "fallback": bool(st["fallback"]),
             "parse_ok": bool(st["parse_ok_all"]),
             "latency_s_estimate": float(stage_latency_s[sid]),
+            "weight_source": (
+                str(args.question_weights) if args.score_method in weighted_methods else None
+            ),
         }
         if args.save_raw_outputs:
             r.update(st["raw_outputs"])
@@ -1091,6 +1330,11 @@ def main() -> None:
     metrics["tie_delta"] = args.tie_delta
     metrics["aggregate_na_policy"] = args.aggregate_na_policy
     metrics["aggregate_coverage_threshold"] = args.aggregate_coverage_threshold
+    metrics["question_weights"] = str(args.question_weights) if args.question_weights else None
+    metrics["weight_column"] = args.weight_column if args.score_method in weighted_methods else None
+    metrics["weight_transform"] = args.weight_transform if args.score_method in weighted_methods else None
+    metrics["weight_temperature"] = args.weight_temperature if args.score_method in weighted_methods else None
+    metrics["weighted_na_policy"] = args.weighted_na_policy if args.score_method in weighted_methods else None
     metrics["tau_escalate"] = args.tau_escalate
     metrics["tau_hard"] = args.tau_hard
     metrics["n_min"] = args.n_min
