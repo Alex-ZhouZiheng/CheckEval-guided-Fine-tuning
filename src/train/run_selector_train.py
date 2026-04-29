@@ -204,6 +204,7 @@ def _prepare_oracle_tensors(
     neg_per_pos: int = 2,
     min_neg: int = 5,
     neg_sample_seed: int = 42,
+    exclude_zero_pos_from_neg: bool = False,
 ) -> OracleTensors:
     if target_mode not in {"oracle_baseline", "pure_human", "human_oracle_fallback"}:
         raise ValueError(f"unknown target_mode: {target_mode}")

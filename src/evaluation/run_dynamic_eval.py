@@ -48,8 +48,9 @@ from evaluation.selector_infer import (
     select_topk_with_quota,
 )
 from utils import (
-    _PAIRWISE_TABLE,
+    aggregate_checklist_score,
     build_pointwise_prompt_from_qids,
+    compare_checklists_pairwise,
     compute_metrics,
     generate_batch,
     load_judge_model,
@@ -249,30 +250,125 @@ def _parse_stage_labels(raw: str, qids: list[int]) -> tuple[dict[int, str], dict
     return labels, parsed
 
 
-def _compute_margin(
+def _labels_to_parsed(labels: dict[int, str], asked_qids: list[int]) -> dict[str, Any]:
+    """Convert global-qid labels into the parsed checklist shape used by utils."""
+    answers: list[dict[str, Any]] = []
+    na_answers: list[dict[str, Any]] = []
+    for local_q, qid in enumerate(asked_qids, 1):
+        label = str(labels.get(qid, "na")).lower()
+        if label == "na":
+            na_answers.append({"q": local_q})
+        elif label in {"yes", "no"}:
+            answers.append({"q": local_q, "answer": label})
+        else:
+            na_answers.append({"q": local_q})
+
+    n_yes = sum(1 for a in answers if a["answer"] == "yes")
+    n_no = sum(1 for a in answers if a["answer"] == "no")
+    n_answered = len(answers)
+    n_na = len(na_answers)
+    expected_n = len(asked_qids)
+
+    return {
+        "answers": answers,
+        "na_answers": na_answers,
+        "n_questions_parsed": n_answered,
+        "n_yes": n_yes,
+        "n_no": n_no,
+        "n_na": n_na,
+        "na_qnums": [a["q"] for a in na_answers],
+        "score": n_yes / n_answered if n_answered else 0.0,
+        "complete": n_answered == expected_n and n_na == 0,
+        "complete_with_na": (n_answered + n_na) == expected_n,
+    }
+
+
+def _score_checklists(
     labels_a: dict[int, str],
     labels_b: dict[int, str],
     asked_qids: list[int],
+    *,
+    score_method: str,
     tie_delta: float,
+    aggregate_na_policy: str,
+    aggregate_coverage_threshold: float,
 ) -> dict[str, Any]:
     if not asked_qids:
-        return {"margin": 0.0, "winner": "Tie", "n_aligned": 0}
+        return {
+            "margin": 0.0,
+            "winner": "Tie",
+            "n_aligned": 0,
+            "score_a": None,
+            "score_b": None,
+        }
 
-    total = 0.0
-    n_aligned = 0
-    for qid in asked_qids:
-        la = labels_a.get(qid, "na")
-        lb = labels_b.get(qid, "na")
-        total += _PAIRWISE_TABLE[(la, lb)]
-        if la != "na" and lb != "na":
-            n_aligned += 1
+    parsed_a = _labels_to_parsed(labels_a, asked_qids)
+    parsed_b = _labels_to_parsed(labels_b, asked_qids)
+    expected_n = len(asked_qids)
 
-    margin = total / len(asked_qids)
-    return {
-        "margin": float(margin),
-        "winner": _winner_from_margin(float(margin), tie_delta=tie_delta),
-        "n_aligned": int(n_aligned),
-    }
+    if score_method == "compare_checklists_pairwise":
+        cmp = compare_checklists_pairwise(
+            parsed_a,
+            parsed_b,
+            expected_n=expected_n,
+            tie_delta=tie_delta,
+        )
+        if cmp is None:
+            return {
+                "margin": 0.0,
+                "winner": "Tie",
+                "n_aligned": 0,
+                "score_a": None,
+                "score_b": None,
+            }
+        return {
+            "margin": float(cmp["margin"]),
+            "winner": cmp["winner"],
+            "n_aligned": int(cmp["n_aligned"]),
+            "score_a": None,
+            "score_b": None,
+        }
+
+    if score_method == "aggregate_checklist_score":
+        agg_a = aggregate_checklist_score(
+            parsed_a,
+            na_policy=aggregate_na_policy,
+            coverage_threshold=aggregate_coverage_threshold,
+            expected_n=expected_n,
+        )
+        agg_b = aggregate_checklist_score(
+            parsed_b,
+            na_policy=aggregate_na_policy,
+            coverage_threshold=aggregate_coverage_threshold,
+            expected_n=expected_n,
+        )
+        n_aligned = sum(
+            1
+            for qid in asked_qids
+            if str(labels_a.get(qid, "na")).lower() != "na"
+            and str(labels_b.get(qid, "na")).lower() != "na"
+        )
+        if agg_a is None or agg_b is None:
+            return {
+                "margin": 0.0,
+                "winner": "Tie",
+                "n_aligned": int(n_aligned),
+                "score_a": None,
+                "score_b": None,
+            }
+
+        score_a = float(agg_a["score"])
+        score_b = float(agg_b["score"])
+        margin = score_a - score_b
+        return {
+            "margin": float(margin),
+            "winner": _winner_from_margin(float(margin), tie_delta=tie_delta),
+            "n_aligned": int(n_aligned),
+            "score_a": score_a,
+            "score_b": score_b,
+        }
+
+    raise ValueError(f"unknown score_method: {score_method}")
 
 
 def _run_stage(
@@ -527,6 +623,28 @@ def main() -> None:
     )
     parser.add_argument("--out", type=Path, required=True)
 
+    parser.add_argument(
+        "--score-method",
+        choices=["compare_checklists_pairwise", "aggregate_checklist_score"],
+        default="compare_checklists_pairwise",
+        help=(
+            "How to convert parsed checklist answers into A/B winner. "
+            "compare_checklists_pairwise uses utils.compare_checklists_pairwise; "
+            "aggregate_checklist_score uses utils.aggregate_checklist_score for each side."
+        ),
+    )
+    parser.add_argument(
+        "--aggregate-na-policy",
+        choices=["strict", "as_no", "skip", "partial"],
+        default="as_no",
+        help="N/A policy used only when --score-method aggregate.",
+    )
+    parser.add_argument(
+        "--aggregate-coverage-threshold",
+        type=float,
+        default=0.8,
+        help="Coverage threshold used only with --score-method aggregate --aggregate-na-policy partial.",
+    )
     parser.add_argument("--tie-delta", type=float, default=0.05)
     parser.add_argument("--tau-escalate", type=float, default=0.05)
     parser.add_argument("--tau-hard", type=float, default=0.03)
@@ -721,8 +839,12 @@ def main() -> None:
             "fallback": False,
             "margin_initial": None,
             "n_aligned_initial": None,
+            "score_a_initial": None,
+            "score_b_initial": None,
             "margin_final": None,
             "n_aligned_final": None,
+            "score_a_final": None,
+            "score_b_final": None,
             "winner_final": "Tie",
             "raw_outputs": {},
         }
@@ -772,11 +894,23 @@ def main() -> None:
                 _save_raw_output_debug(st["raw_outputs"], "stage1_b", result["resp_b"])
 
     for sid, st in state.items():
-        cmp = _compute_margin(st["labels_a"], st["labels_b"], st["asked_qids"], tie_delta=args.tie_delta)
+        cmp = _score_checklists(
+            st["labels_a"],
+            st["labels_b"],
+            st["asked_qids"],
+            score_method=args.score_method,
+            tie_delta=args.tie_delta,
+            aggregate_na_policy=args.aggregate_na_policy,
+            aggregate_coverage_threshold=args.aggregate_coverage_threshold,
+        )
         st["margin_initial"] = cmp["margin"]
         st["n_aligned_initial"] = cmp["n_aligned"]
+        st["score_a_initial"] = cmp["score_a"]
+        st["score_b_initial"] = cmp["score_b"]
         st["margin_final"] = cmp["margin"]
         st["n_aligned_final"] = cmp["n_aligned"]
+        st["score_a_final"] = cmp["score_a"]
+        st["score_b_final"] = cmp["score_b"]
         st["winner_final"] = cmp["winner"]
 
     # Stage 2: escalation
@@ -828,9 +962,19 @@ def main() -> None:
                 _save_raw_output_debug(st["raw_outputs"], "stage2_a", result["resp_a"])
                 _save_raw_output_debug(st["raw_outputs"], "stage2_b", result["resp_b"])
 
-            cmp = _compute_margin(st["labels_a"], st["labels_b"], st["asked_qids"], tie_delta=args.tie_delta)
+            cmp = _score_checklists(
+                st["labels_a"],
+                st["labels_b"],
+                st["asked_qids"],
+                score_method=args.score_method,
+                tie_delta=args.tie_delta,
+                aggregate_na_policy=args.aggregate_na_policy,
+                aggregate_coverage_threshold=args.aggregate_coverage_threshold,
+            )
             st["margin_final"] = cmp["margin"]
             st["n_aligned_final"] = cmp["n_aligned"]
+            st["score_a_final"] = cmp["score_a"]
+            st["score_b_final"] = cmp["score_b"]
             st["winner_final"] = cmp["winner"]
 
     # Stage 3: hard fallback to full bank.
@@ -878,9 +1022,19 @@ def main() -> None:
                 _save_raw_output_debug(st["raw_outputs"], "stage3_a", result["resp_a"])
                 _save_raw_output_debug(st["raw_outputs"], "stage3_b", result["resp_b"])
 
-            cmp = _compute_margin(st["labels_a"], st["labels_b"], st["asked_qids"], tie_delta=args.tie_delta)
+            cmp = _score_checklists(
+                st["labels_a"],
+                st["labels_b"],
+                st["asked_qids"],
+                score_method=args.score_method,
+                tie_delta=args.tie_delta,
+                aggregate_na_policy=args.aggregate_na_policy,
+                aggregate_coverage_threshold=args.aggregate_coverage_threshold,
+            )
             st["margin_final"] = cmp["margin"]
             st["n_aligned_final"] = cmp["n_aligned"]
+            st["score_a_final"] = cmp["score_a"]
+            st["score_b_final"] = cmp["score_b"]
             st["winner_final"] = cmp["winner"]
 
     # selector overhead is shared across all samples.
@@ -911,6 +1065,10 @@ def main() -> None:
             "margin_final": st["margin_final"],
             "n_aligned_initial": st["n_aligned_initial"],
             "n_aligned_final": st["n_aligned_final"],
+            "score_a_initial": st["score_a_initial"],
+            "score_b_initial": st["score_b_initial"],
+            "score_a_final": st["score_a_final"],
+            "score_b_final": st["score_b_final"],
             "selected_qids": st["initial_qids"],
             "asked_qids": st["asked_qids"],
             "k_selected": len(st["initial_qids"]),
@@ -929,7 +1087,10 @@ def main() -> None:
     metrics = compute_metrics(y_true=y_true, y_pred=y_pred, domains=domains)
     metrics["policy"] = args.policy
     metrics["k"] = args.k
+    metrics["score_method"] = args.score_method
     metrics["tie_delta"] = args.tie_delta
+    metrics["aggregate_na_policy"] = args.aggregate_na_policy
+    metrics["aggregate_coverage_threshold"] = args.aggregate_coverage_threshold
     metrics["tau_escalate"] = args.tau_escalate
     metrics["tau_hard"] = args.tau_hard
     metrics["n_min"] = args.n_min
