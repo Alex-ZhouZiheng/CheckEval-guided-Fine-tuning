@@ -1,0 +1,81 @@
+{
+  "n_total": 1073,
+  "n_valid": 778,
+  "n_tie": 295,
+  "n_unparseable": 0,
+  "parse_rate": 0.7250698974836906,
+  "accuracy": 0.7686375321336761,
+  "macro_f1": 0.768623770751824,
+  "classification_report": {
+    "A": {
+      "precision": 0.7668393782383419,
+      "recall": 0.7668393782383419,
+      "f1-score": 0.7668393782383419,
+      "support": 386.0
+    },
+    "B": {
+      "precision": 0.7704081632653061,
+      "recall": 0.7704081632653061,
+      "f1-score": 0.7704081632653061,
+      "support": 392.0
+    },
+    "accuracy": 0.7686375321336761,
+    "macro avg": {
+      "precision": 0.768623770751824,
+      "recall": 0.768623770751824,
+      "f1-score": 0.768623770751824,
+      "support": 778.0
+    },
+    "weighted avg": {
+      "precision": 0.7686375321336761,
+      "recall": 0.7686375321336761,
+      "f1-score": 0.7686375321336761,
+      "support": 778.0
+    }
+  },
+  "pred_distribution": {
+    "Tie": 295,
+    "B": 392,
+    "A": 386
+  },
+  "position_bias_A": 0.4961439588688946,
+  "per_domain": {
+    "code": {
+      "n": 222,
+      "accuracy": 0.8108108108108109,
+      "macro_f1": 0.8104261548471048
+    },
+    "general": {
+      "n": 443,
+      "accuracy": 0.7562076749435666,
+      "macro_f1": 0.7557583925508453
+    },
+    "stem": {
+      "n": 113,
+      "accuracy": 0.7345132743362832,
+      "macro_f1": 0.7343260188087775
+    }
+  },
+  "policy": "static_v3",
+  "k": 20,
+  "score_method": "aggregate_checklist_score",
+  "tie_delta": 0.05,
+  "aggregate_na_policy": "as_no",
+  "aggregate_coverage_threshold": 0.8,
+  "tau_escalate": 0.05,
+  "tau_hard": 0.03,
+  "n_min": 8,
+  "avg_k": 49.131407269338304,
+  "tie_rate": 0.2749301025163094,
+  "parse_ok_rate": 0.9981360671015843,
+  "selector_inference_time_s": 0.0,
+  "selector_picks": null,
+  "judge_mode": "local",
+  "judge_url": null,
+  "judge_model": "/root/autodl-tmp/Thesis/models/Qwen3.5-9B",
+  "http_extra_body": null,
+  "http_reasoning_effort": null,
+  "latency_p50_s": 0.9712136429487159,
+  "latency_p90_s": 0.9712136429487159,
+  "samples_per_second_estimate": 1.0296395723642073
+}

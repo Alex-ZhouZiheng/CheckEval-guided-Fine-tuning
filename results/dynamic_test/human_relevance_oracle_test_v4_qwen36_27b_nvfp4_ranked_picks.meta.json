@@ -1,0 +1,9 @@
+{
+  "human_relevance": "data/oracle/test_human_relevance_v4_qwen36_27b_nvfp4.parquet",
+  "base_selector_picks": "results/dynamic_test/selector_v4bank_v4hr_noOracleFilter_best_test_k20_picks.parquet",
+  "n_samples": 1073,
+  "n_samples_with_hr_positive": 1039,
+  "mean_human_qids": 6.863000931966449,
+  "median_human_qids": 6.0,
+  "max_human_qids": 55
+}

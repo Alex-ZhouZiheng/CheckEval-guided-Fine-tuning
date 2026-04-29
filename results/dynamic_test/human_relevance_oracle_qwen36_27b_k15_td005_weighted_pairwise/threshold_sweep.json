@@ -1,0 +1,92 @@
+[
+  {
+    "tie_delta": 0.0,
+    "n_total": 1073,
+    "n_valid": 773,
+    "n_tie": 300,
+    "tie_rate": 0.27958993476234856,
+    "accuracy": 0.7943078913324709,
+    "macro_f1": 0.7942734617837433,
+    "effective_accuracy": 0.5722273998136067
+  },
+  {
+    "tie_delta": 0.005,
+    "n_total": 1073,
+    "n_valid": 721,
+    "n_tie": 352,
+    "tie_rate": 0.32805219012115566,
+    "accuracy": 0.8016643550624133,
+    "macro_f1": 0.80162619458538,
+    "effective_accuracy": 0.5386766076421249
+  },
+  {
+    "tie_delta": 0.01,
+    "n_total": 1073,
+    "n_valid": 702,
+    "n_tie": 371,
+    "tie_rate": 0.34575955265610436,
+    "accuracy": 0.8034188034188035,
+    "macro_f1": 0.80337890498149,
+    "effective_accuracy": 0.5256290773532153
+  },
+  {
+    "tie_delta": 0.02,
+    "n_total": 1073,
+    "n_valid": 686,
+    "n_tie": 387,
+    "tie_rate": 0.36067101584342964,
+    "accuracy": 0.8061224489795918,
+    "macro_f1": 0.8060890726119252,
+    "effective_accuracy": 0.5153774464119292
+  },
+  {
+    "tie_delta": 0.03,
+    "n_total": 1073,
+    "n_valid": 661,
+    "n_tie": 412,
+    "tie_rate": 0.38397017707362535,
+    "accuracy": 0.81089258698941,
+    "macro_f1": 0.8108648825588236,
+    "effective_accuracy": 0.4995340167753961
+  },
+  {
+    "tie_delta": 0.04,
+    "n_total": 1073,
+    "n_valid": 654,
+    "n_tie": 419,
+    "tie_rate": 0.39049394221808015,
+    "accuracy": 0.8149847094801224,
+    "macro_f1": 0.8149496650180645,
+    "effective_accuracy": 0.4967381174277726
+  },
+  {
+    "tie_delta": 0.05,
+    "n_total": 1073,
+    "n_valid": 648,
+    "n_tie": 425,
+    "tie_rate": 0.3960857409133271,
+    "accuracy": 0.816358024691358,
+    "macro_f1": 0.8163470904713024,
+    "effective_accuracy": 0.4930102516309413
+  },
+  {
+    "tie_delta": 0.075,
+    "n_total": 1073,
+    "n_valid": 618,
+    "n_tie": 455,
+    "tie_rate": 0.424044734389562,
+    "accuracy": 0.8220064724919094,
+    "macro_f1": 0.8219150808952972,
+    "effective_accuracy": 0.47343895619757687
+  },
+  {
+    "tie_delta": 0.1,
+    "n_total": 1073,
+    "n_valid": 599,
+    "n_tie": 474,
+    "tie_rate": 0.44175209692451073,
+    "accuracy": 0.8263772954924875,
+    "macro_f1": 0.8262954783733744,
+    "effective_accuracy": 0.4613233923578751
+  }
+]

@@ -1152,6 +1152,9 @@ _PAIRWISE_TABLE: dict[tuple[str, str], float] = {
     ("na",  "na"):   0.0,
 }
 
+# Public alias for callers that need the contribution table (e.g. weighted scoring).
+PAIRWISE_TABLE = _PAIRWISE_TABLE
+
 
 def _winner_from_margin(margin: float, tie_delta: float) -> str:
     """Convert pairwise margin to winner label with tie threshold."""

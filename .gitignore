@@ -124,3 +124,6 @@ wandb/
 .tmp_curves/
 docs/
 results/dev_600_v3_vs_v1_exports/
+
+Process.models
+*.png
