@@ -435,6 +435,40 @@ def _encode_texts(
     return torch.cat(outputs, dim=0)
 
 
+def _embed_cache_key(
+    encoder_model: str,
+    max_length: int,
+    normalize: bool,
+    texts: list[str],
+) -> str:
+    h = hashlib.sha256()
+    h.update(f"{encoder_model}|{int(max_length)}|{int(normalize)}\n".encode("utf-8"))
+    for t in texts:
+        h.update(t.encode("utf-8"))
+        h.update(b"\x00")
+    return h.hexdigest()[:32]
+
+
+def _try_load_cached_embedding(cache_dir: Path | None, key: str) -> torch.Tensor | None:
+    if cache_dir is None:
+        return None
+    p = cache_dir / f"{key}.pt"
+    if not p.exists():
+        return None
+    blob = torch.load(p, map_location="cpu")
+    log.info("Embed cache HIT: %s", p.name)
+    return blob["embeddings"]
+
+
+def _save_cached_embedding(cache_dir: Path | None, key: str, emb: torch.Tensor) -> None:
+    if cache_dir is None:
+        return
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    p = cache_dir / f"{key}.pt"
+    torch.save({"embeddings": emb, "key": key}, p)
+    log.info("Embed cache SAVED: %s", p.name)
+
+
 def _listmle_loss(
     scores: torch.Tensor,
     targets: torch.Tensor,
@@ -737,6 +771,17 @@ def main() -> None:
         default=None,
         help="Seed for pure_human negative sampling; defaults to --seed.",
     )
+    parser.add_argument(
+        "--embed-cache-dir",
+        type=Path,
+        default=Path("results/embed_cache"),
+        help="Directory for cached sample/question embeddings. Use empty string or --no-embed-cache to disable.",
+    )
+    parser.add_argument(
+        "--no-embed-cache",
+        action="store_true",
+        help="Skip the embedding cache (always re-encode).",
+    )
     args = parser.parse_args()
 
     _set_seed(args.seed)
@@ -795,31 +840,63 @@ def main() -> None:
 
     log.info("Oracle samples: %d  questions: %d", len(tensors.sample_ids), len(tensors.qids))
 
-    t0_embed = time.time()
-    tokenizer = AutoTokenizer.from_pretrained(args.encoder_model, trust_remote_code=True)
-    model = AutoModel.from_pretrained(args.encoder_model, trust_remote_code=True).to(device)
+    cache_dir: Path | None
+    if args.no_embed_cache or str(args.embed_cache_dir) == "":
+        cache_dir = None
+    else:
+        cache_dir = Path(args.embed_cache_dir)
 
-    sample_emb = _encode_texts(
-        model=model,
-        tokenizer=tokenizer,
-        texts=tensors.sample_texts,
-        max_length=args.max_length,
-        batch_size=args.embed_batch_size,
-        device=device,
-        normalize=args.normalize_emb,
+    q_max_len = min(args.max_length, 256)
+    sample_key = _embed_cache_key(
+        args.encoder_model, args.max_length, args.normalize_emb, tensors.sample_texts
     )
-    q_emb = _encode_texts(
-        model=model,
-        tokenizer=tokenizer,
-        texts=tensors.question_texts,
-        max_length=min(args.max_length, 256),
-        batch_size=args.embed_batch_size,
-        device=device,
-        normalize=args.normalize_emb,
+    q_key = _embed_cache_key(
+        args.encoder_model, q_max_len, args.normalize_emb, tensors.question_texts
     )
+    sample_emb_cached = _try_load_cached_embedding(cache_dir, sample_key)
+    q_emb_cached = _try_load_cached_embedding(cache_dir, q_key)
+    cache_hits = {"sample": sample_emb_cached is not None, "question": q_emb_cached is not None}
+
+    t0_embed = time.time()
+    if sample_emb_cached is not None and q_emb_cached is not None:
+        log.info("All embeddings cached, skipping encoder load")
+        sample_emb = sample_emb_cached
+        q_emb = q_emb_cached
+    else:
+        tokenizer = AutoTokenizer.from_pretrained(args.encoder_model, trust_remote_code=True)
+        model = AutoModel.from_pretrained(args.encoder_model, trust_remote_code=True).to(device)
+
+        if sample_emb_cached is not None:
+            sample_emb = sample_emb_cached
+        else:
+            sample_emb = _encode_texts(
+                model=model,
+                tokenizer=tokenizer,
+                texts=tensors.sample_texts,
+                max_length=args.max_length,
+                batch_size=args.embed_batch_size,
+                device=device,
+                normalize=args.normalize_emb,
+            )
+            _save_cached_embedding(cache_dir, sample_key, sample_emb)
+
+        if q_emb_cached is not None:
+            q_emb = q_emb_cached
+        else:
+            q_emb = _encode_texts(
+                model=model,
+                tokenizer=tokenizer,
+                texts=tensors.question_texts,
+                max_length=q_max_len,
+                batch_size=args.embed_batch_size,
+                device=device,
+                normalize=args.normalize_emb,
+            )
+            _save_cached_embedding(cache_dir, q_key, q_emb)
+
+        del model
+        torch.cuda.empty_cache() if torch.cuda.is_available() else None
     embed_elapsed = time.time() - t0_embed
-    del model
-    torch.cuda.empty_cache() if torch.cuda.is_available() else None
 
     emb_dim = sample_emb.shape[1]
     head = SelectorHead(
@@ -985,6 +1062,11 @@ def main() -> None:
         "neg_per_pos": args.neg_per_pos,
         "min_neg": args.min_neg,
         "neg_sample_seed": args.seed if args.neg_sample_seed is None else args.neg_sample_seed,
+        "embed_cache_dir": str(cache_dir) if cache_dir is not None else None,
+        "embed_cache_hit_sample": cache_hits["sample"],
+        "embed_cache_hit_question": cache_hits["question"],
+        "embed_cache_key_sample": sample_key,
+        "embed_cache_key_question": q_key,
     }
     with (out_dir / "config.json").open("w", encoding="utf-8") as f:
         json.dump(cfg_payload, f, indent=2, ensure_ascii=False)
