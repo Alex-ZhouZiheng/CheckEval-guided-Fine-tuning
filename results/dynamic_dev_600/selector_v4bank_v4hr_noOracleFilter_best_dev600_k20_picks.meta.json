@@ -1,0 +1,10 @@
+{
+  "selector": "/root/autodl-tmp/Thesis/results/checkpoints/selector_v4bank_v4hr_noOracleFilter/best",
+  "split": "dev_600",
+  "subset": null,
+  "k": 10,
+  "n_samples": 600,
+  "inference_time_s": 72.50375866889954,
+  "samples_per_second": 8.27543303982349,
+  "dim_quota": true
+}
