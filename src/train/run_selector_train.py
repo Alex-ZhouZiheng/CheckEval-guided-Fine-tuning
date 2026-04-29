@@ -60,9 +60,11 @@ class OracleTensors:
     qid_to_index: dict[int, int]
     q_dim_ids: torch.Tensor
     rank_target: torch.Tensor
+    human_target: torch.Tensor
     u2_target: torch.Tensor
     ans_target: torch.Tensor
     active_mask: torch.Tensor
+    rank_mask: torch.Tensor
     ranking_sample_mask: torch.Tensor
     dim_vocab: list[str]
     bank_df: pd.DataFrame
@@ -104,17 +106,21 @@ class EmbeddingDataset(Dataset):
         self,
         sample_emb: torch.Tensor,
         rank_target: torch.Tensor,
+        human_target: torch.Tensor,
         u2_target: torch.Tensor,
         ans_target: torch.Tensor,
         active_mask: torch.Tensor,
+        rank_mask: torch.Tensor,
         ranking_sample_mask: torch.Tensor,
         indices: list[int],
     ):
         self.sample_emb = sample_emb
         self.rank_target = rank_target
+        self.human_target = human_target
         self.u2_target = u2_target
         self.ans_target = ans_target
         self.active_mask = active_mask
+        self.rank_mask = rank_mask
         self.ranking_sample_mask = ranking_sample_mask
         self.indices = indices
 
@@ -126,9 +132,11 @@ class EmbeddingDataset(Dataset):
         return {
             "sample_emb": self.sample_emb[i],
             "rank_target": self.rank_target[i],
+            "human_target": self.human_target[i],
             "u2_target": self.u2_target[i],
             "ans_target": self.ans_target[i],
             "active_mask": self.active_mask[i],
+            "rank_mask": self.rank_mask[i],
             "ranking_sample_mask": self.ranking_sample_mask[i],
         }
 
@@ -193,6 +201,9 @@ def _prepare_oracle_tensors(
     target_mode: str = "oracle_baseline",
     human_relevance_df: pd.DataFrame | None = None,
     oracle_fallback_eps: float = 0.1,
+    neg_per_pos: int = 2,
+    min_neg: int = 5,
+    neg_sample_seed: int = 42,
 ) -> OracleTensors:
     if target_mode not in {"oracle_baseline", "pure_human", "human_oracle_fallback"}:
         raise ValueError(f"unknown target_mode: {target_mode}")
@@ -225,9 +236,11 @@ def _prepare_oracle_tensors(
     ]
 
     rank_target = torch.zeros((n_s, n_q), dtype=torch.float32)
+    human_target = torch.zeros((n_s, n_q), dtype=torch.float32)
     u2_target = torch.zeros((n_s, n_q), dtype=torch.float32)
     ans_target = torch.zeros((n_s, n_q), dtype=torch.float32)
     active_mask = torch.zeros((n_s, n_q), dtype=torch.bool)
+    rank_mask = torch.zeros((n_s, n_q), dtype=torch.bool)
 
     n_skipped_parse_fail = 0
     n_skipped_null_util = 0
@@ -290,6 +303,12 @@ def _prepare_oracle_tensors(
             h_mat[i, j] = float(h_raw)
             n_h_used += 1
 
+        human_target = torch.where(
+            active_mask,
+            h_mat,
+            rank_target.new_zeros(rank_target.shape),
+        )
+
         if target_mode == "pure_human":
             rank_target = torch.where(
                 active_mask,
@@ -317,6 +336,41 @@ def _prepare_oracle_tensors(
             n_skipped_null_util,
         )
 
+    if target_mode == "pure_human":
+        rng = random.Random(neg_sample_seed)
+        neg_per_pos = max(0, int(neg_per_pos))
+        min_neg = max(0, int(min_neg))
+        n_rank_samples = 0
+        n_rank_pos = 0
+        n_rank_neg = 0
+        for i in range(n_s):
+            pos_idx = torch.nonzero(active_mask[i] & (rank_target[i] > 0), as_tuple=False).squeeze(-1)
+            if pos_idx.numel() == 0:
+                continue
+
+            neg_pool = torch.nonzero(active_mask[i] & (rank_target[i] == 0), as_tuple=False).squeeze(-1)
+            rank_mask[i, pos_idx] = True
+            n_rank_pos += int(pos_idx.numel())
+
+            if neg_pool.numel() > 0:
+                n_neg = min(max(min_neg, neg_per_pos * int(pos_idx.numel())), int(neg_pool.numel()))
+                if n_neg > 0:
+                    neg_list = neg_pool.tolist()
+                    neg_idx = torch.tensor(rng.sample(neg_list, n_neg), dtype=torch.long)
+                    rank_mask[i, neg_idx] = True
+                    n_rank_neg += n_neg
+
+            n_rank_samples += 1
+
+        log.info(
+            "pure_human rank mask: %d samples with positives, %d positive rows, %d sampled negative rows",
+            n_rank_samples,
+            n_rank_pos,
+            n_rank_neg,
+        )
+    else:
+        rank_mask = active_mask.clone()
+
     ranking_sample_mask = torch.ones(n_s, dtype=torch.bool)
     if only_oracle_correct_for_ranking and {"winner_pred_full", "winner_gt"}.issubset(sample_table.columns):
         ranking_sample_mask = torch.tensor(
@@ -332,9 +386,11 @@ def _prepare_oracle_tensors(
         qid_to_index=qid_to_index,
         q_dim_ids=q_dim_ids,
         rank_target=rank_target,
+        human_target=human_target,
         u2_target=u2_target,
         ans_target=ans_target,
         active_mask=active_mask,
+        rank_mask=rank_mask,
         ranking_sample_mask=ranking_sample_mask,
         dim_vocab=dim_vocab,
         bank_df=bank_df,
@@ -382,10 +438,10 @@ def _encode_texts(
 def _listmle_loss(
     scores: torch.Tensor,
     targets: torch.Tensor,
-    active_mask: torch.Tensor,
+    rank_mask: torch.Tensor,
     ranking_sample_mask: torch.Tensor,
 ) -> torch.Tensor:
-    """ListMLE over active questions only."""
+    """ListMLE over the ranking candidate questions only."""
     losses: list[torch.Tensor] = []
 
     bsz = scores.shape[0]
@@ -393,7 +449,7 @@ def _listmle_loss(
         if not bool(ranking_sample_mask[i]):
             continue
 
-        idx = torch.nonzero(active_mask[i], as_tuple=False).squeeze(-1)
+        idx = torch.nonzero(rank_mask[i], as_tuple=False).squeeze(-1)
         if idx.numel() <= 1:
             continue
 
@@ -459,6 +515,56 @@ def _compute_ndcg_recall(
 
         out[f"ndcg@{k}"] = float(np.mean(ndcgs)) if ndcgs else 0.0
         out[f"recall@{k}"] = float(np.mean(recalls)) if recalls else 0.0
+
+    return out
+
+
+def _compute_positive_retrieval_metrics(
+    scores: torch.Tensor,
+    gains: torch.Tensor,
+    active_mask: torch.Tensor,
+    ks: tuple[int, ...] = (5, 10, 20),
+) -> dict[str, float]:
+    """Measure whether top-k over all active qids retrieves positive human qids."""
+    out: dict[str, float] = {}
+    bsz, _ = scores.shape
+
+    for k in ks:
+        recalls: list[float] = []
+        precisions: list[float] = []
+        ndcgs: list[float] = []
+
+        for i in range(bsz):
+            idx = torch.nonzero(active_mask[i], as_tuple=False).squeeze(-1)
+            if idx.numel() == 0:
+                continue
+
+            g = gains[i, idx]
+            pos = torch.nonzero(g > 0, as_tuple=False).squeeze(-1)
+            if pos.numel() == 0:
+                continue
+
+            s = scores[i, idx]
+            k_eff = min(k, idx.numel())
+            pred_rank = torch.argsort(s, descending=True)
+            pred_idx = pred_rank[:k_eff]
+
+            pred_set = set(pred_idx.tolist())
+            pos_set = set(pos.tolist())
+            hits = len(pred_set & pos_set)
+            recalls.append(hits / len(pos_set))
+            precisions.append(hits / k_eff)
+
+            pred_g = g[pred_idx]
+            true_g = torch.sort(g, descending=True).values[:k_eff]
+            discounts = 1.0 / torch.log2(torch.arange(2, 2 + k_eff, dtype=torch.float32))
+            dcg = float(((2.0 ** pred_g - 1.0) * discounts).sum().item())
+            idcg = float(((2.0 ** true_g - 1.0) * discounts).sum().item())
+            ndcgs.append(dcg / idcg if idcg > 0 else 0.0)
+
+        out[f"human_recall@{k}"] = float(np.mean(recalls)) if recalls else 0.0
+        out[f"human_precision@{k}"] = float(np.mean(precisions)) if precisions else 0.0
+        out[f"human_ndcg@{k}"] = float(np.mean(ndcgs)) if ndcgs else 0.0
 
     return out
 
@@ -613,6 +719,24 @@ def main() -> None:
         default=0.1,
         help="Used only when --target-mode == human_oracle_fallback.",
     )
+    parser.add_argument(
+        "--neg-per-pos",
+        type=int,
+        default=2,
+        help="For pure_human rank loss, sample this many negative qids per positive qid.",
+    )
+    parser.add_argument(
+        "--min-neg",
+        type=int,
+        default=5,
+        help="For pure_human rank loss, sample at least this many negatives when available.",
+    )
+    parser.add_argument(
+        "--neg-sample-seed",
+        type=int,
+        default=None,
+        help="Seed for pure_human negative sampling; defaults to --seed.",
+    )
     args = parser.parse_args()
 
     _set_seed(args.seed)
@@ -664,6 +788,9 @@ def main() -> None:
         target_mode=args.target_mode,
         human_relevance_df=human_df,
         oracle_fallback_eps=args.oracle_fallback_eps,
+        neg_per_pos=args.neg_per_pos,
+        min_neg=args.min_neg,
+        neg_sample_seed=args.seed if args.neg_sample_seed is None else args.neg_sample_seed,
     )
 
     log.info("Oracle samples: %d  questions: %d", len(tensors.sample_ids), len(tensors.qids))
@@ -708,18 +835,22 @@ def main() -> None:
     train_ds = EmbeddingDataset(
         sample_emb=sample_emb,
         rank_target=tensors.rank_target,
+        human_target=tensors.human_target,
         u2_target=tensors.u2_target,
         ans_target=tensors.ans_target,
         active_mask=tensors.active_mask,
+        rank_mask=tensors.rank_mask,
         ranking_sample_mask=tensors.ranking_sample_mask,
         indices=train_idx,
     )
     val_ds = EmbeddingDataset(
         sample_emb=sample_emb,
         rank_target=tensors.rank_target,
+        human_target=tensors.human_target,
         u2_target=tensors.u2_target,
         ans_target=tensors.ans_target,
         active_mask=tensors.active_mask,
+        rank_mask=tensors.rank_mask,
         ranking_sample_mask=tensors.ranking_sample_mask,
         indices=val_idx,
     )
@@ -741,11 +872,12 @@ def main() -> None:
             y_rank = batch["rank_target"].to(device)
             y_ans = batch["ans_target"].to(device)
             mask = batch["active_mask"].to(device)
+            rank_mask = batch["rank_mask"].to(device)
             rank_sample_mask = batch["ranking_sample_mask"].to(device)
 
             rank_logits, ans_logits, dim_logits = head(s, q_emb_dev)
 
-            loss_rank = _listmle_loss(rank_logits, y_rank, mask, rank_sample_mask)
+            loss_rank = _listmle_loss(rank_logits, y_rank, rank_mask, rank_sample_mask)
 
             if mask.any():
                 loss_ans = F.binary_cross_entropy_with_logits(ans_logits[mask], y_ans[mask])
@@ -772,6 +904,7 @@ def main() -> None:
             with torch.no_grad():
                 all_scores: list[torch.Tensor] = []
                 all_rank: list[torch.Tensor] = []
+                all_human: list[torch.Tensor] = []
                 all_u2: list[torch.Tensor] = []
                 all_mask: list[torch.Tensor] = []
                 for batch in val_loader:
@@ -779,15 +912,19 @@ def main() -> None:
                     rank_logits, _, _ = head(s, q_emb_dev)
                     all_scores.append(rank_logits.cpu())
                     all_rank.append(batch["rank_target"].cpu())
+                    all_human.append(batch["human_target"].cpu())
                     all_u2.append(batch["u2_target"].cpu())
                     all_mask.append(batch["active_mask"].cpu())
 
                 score_mat = torch.cat(all_scores, dim=0)
                 rank_mat = torch.cat(all_rank, dim=0)
+                human_mat = torch.cat(all_human, dim=0)
                 u2_mat = torch.cat(all_u2, dim=0)
                 mask_mat = torch.cat(all_mask, dim=0)
                 # eval against the same target the model was trained on
                 eval_metrics = _compute_ndcg_recall(score_mat, rank_mat, mask_mat)
+                human_metrics = _compute_positive_retrieval_metrics(score_mat, human_mat, mask_mat)
+                eval_metrics.update(human_metrics)
                 # also report u2-based metrics for cross-mode comparison
                 u2_metrics = _compute_ndcg_recall(score_mat, u2_mat, mask_mat)
                 for k, v in u2_metrics.items():
@@ -845,6 +982,9 @@ def main() -> None:
         "target_mode": args.target_mode,
         "human_relevance": str(args.human_relevance) if args.human_relevance else None,
         "oracle_fallback_eps": args.oracle_fallback_eps,
+        "neg_per_pos": args.neg_per_pos,
+        "min_neg": args.min_neg,
+        "neg_sample_seed": args.seed if args.neg_sample_seed is None else args.neg_sample_seed,
     }
     with (out_dir / "config.json").open("w", encoding="utf-8") as f:
         json.dump(cfg_payload, f, indent=2, ensure_ascii=False)
