@@ -1,0 +1,81 @@
+{
+  "n_total": 600,
+  "n_valid": 405,
+  "n_tie": 195,
+  "n_unparseable": 0,
+  "parse_rate": 0.675,
+  "accuracy": 0.7555555555555555,
+  "macro_f1": 0.7554064358700625,
+  "classification_report": {
+    "A": {
+      "precision": 0.7628865979381443,
+      "recall": 0.736318407960199,
+      "f1-score": 0.7493670886075949,
+      "support": 201.0
+    },
+    "B": {
+      "precision": 0.7488151658767772,
+      "recall": 0.7745098039215687,
+      "f1-score": 0.7614457831325301,
+      "support": 204.0
+    },
+    "accuracy": 0.7555555555555555,
+    "macro avg": {
+      "precision": 0.7558508819074607,
+      "recall": 0.7554141059408839,
+      "f1-score": 0.7554064358700625,
+      "support": 405.0
+    },
+    "weighted avg": {
+      "precision": 0.7557987654924186,
+      "recall": 0.7555555555555555,
+      "f1-score": 0.7554511717757103,
+      "support": 405.0
+    }
+  },
+  "pred_distribution": {
+    "Tie": 195,
+    "A": 194,
+    "B": 211
+  },
+  "position_bias_A": 0.47901234567901235,
+  "per_domain": {
+    "code": {
+      "n": 122,
+      "accuracy": 0.819672131147541,
+      "macro_f1": 0.8194780737153619
+    },
+    "general": {
+      "n": 224,
+      "accuracy": 0.7098214285714286,
+      "macro_f1": 0.7091199680351614
+    },
+    "stem": {
+      "n": 59,
+      "accuracy": 0.7966101694915254,
+      "macro_f1": 0.7960829493087558
+    }
+  },
+  "policy": "learned_topk",
+  "k": 20,
+  "score_method": "compare_checklists_pairwise",
+  "tie_delta": 0.05,
+  "aggregate_na_policy": "as_no",
+  "aggregate_coverage_threshold": 0.8,
+  "tau_escalate": 0.05,
+  "tau_hard": 0.03,
+  "n_min": 8,
+  "avg_k": 20.0,
+  "tie_rate": 0.325,
+  "parse_ok_rate": 0.9983333333333333,
+  "selector_inference_time_s": 0.0,
+  "selector_picks": "results/dynamic_dev_600/selector_v4bank_v4hr_noOracleFilter_best_dev600_k20_picks.parquet",
+  "judge_mode": "local",
+  "judge_url": null,
+  "judge_model": "/root/autodl-tmp/Thesis/models/Qwen3.5-9B",
+  "http_extra_body": null,
+  "http_reasoning_effort": null,
+  "latency_p50_s": 0.5291199441750845,
+  "latency_p90_s": 0.5291199441750845,
+  "samples_per_second_estimate": 1.8899306499569455
+}

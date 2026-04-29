@@ -1,0 +1,85 @@
+{
+  "n_total": 1073,
+  "n_valid": 765,
+  "n_tie": 308,
+  "n_unparseable": 0,
+  "parse_rate": 0.7129543336439889,
+  "accuracy": 0.7934640522875817,
+  "macro_f1": 0.7931243410513056,
+  "classification_report": {
+    "A": {
+      "precision": 0.8044692737430168,
+      "recall": 0.7659574468085106,
+      "f1-score": 0.784741144414169,
+      "support": 376.0
+    },
+    "B": {
+      "precision": 0.7837837837837838,
+      "recall": 0.8200514138817481,
+      "f1-score": 0.8015075376884422,
+      "support": 389.0
+    },
+    "accuracy": 0.7934640522875817,
+    "macro avg": {
+      "precision": 0.7941265287634003,
+      "recall": 0.7930044303451294,
+      "f1-score": 0.7931243410513056,
+      "support": 765.0
+    },
+    "weighted avg": {
+      "precision": 0.7939507696983871,
+      "recall": 0.7934640522875817,
+      "f1-score": 0.7932668006020019,
+      "support": 765.0
+    }
+  },
+  "pred_distribution": {
+    "B": 407,
+    "A": 358,
+    "Tie": 308
+  },
+  "position_bias_A": 0.46797385620915033,
+  "per_domain": {
+    "code": {
+      "n": 219,
+      "accuracy": 0.8082191780821918,
+      "macro_f1": 0.8081831831831832
+    },
+    "general": {
+      "n": 431,
+      "accuracy": 0.7911832946635731,
+      "macro_f1": 0.7900974025974026
+    },
+    "stem": {
+      "n": 115,
+      "accuracy": 0.7739130434782608,
+      "macro_f1": 0.7737590799031477
+    }
+  },
+  "policy": "learned_topk",
+  "k": 15,
+  "score_method": "compare_checklists_pairwise",
+  "tie_delta": 0.05,
+  "aggregate_na_policy": "as_no",
+  "aggregate_coverage_threshold": 0.8,
+  "tau_escalate": 0.05,
+  "tau_hard": 0.03,
+  "n_min": 8,
+  "avg_k": 15.0,
+  "tie_rate": 0.2870456663560112,
+  "parse_ok_rate": 0.9953401677539608,
+  "selector_inference_time_s": 0.0,
+  "selector_picks": "results/dynamic_test/human_relevance_oracle_test_v4_qwen36_27b_nvfp4_ranked_picks.parquet",
+  "judge_mode": "local",
+  "judge_url": null,
+  "judge_model": "/root/autodl-tmp/Thesis/models/Qwen3.5-9B",
+  "http_extra_body": null,
+  "http_reasoning_effort": null,
+  "recall_human_selected": 0.9322004564453831,
+  "recall_human_asked": 0.9322004564453831,
+  "n_evaluated": 1039,
+  "human_relevance": "data/oracle/test_human_relevance_v4_qwen36_27b_nvfp4.parquet",
+  "latency_p50_s": 0.47728618860022554,
+  "latency_p90_s": 0.47728618860022554,
+  "samples_per_second_estimate": 2.0951790013718563
+}

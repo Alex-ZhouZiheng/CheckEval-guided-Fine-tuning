@@ -1,0 +1,81 @@
+{
+  "n_total": 1073,
+  "n_valid": 750,
+  "n_tie": 323,
+  "n_unparseable": 0,
+  "parse_rate": 0.6989748369058714,
+  "accuracy": 0.784,
+  "macro_f1": 0.7839754212034791,
+  "classification_report": {
+    "A": {
+      "precision": 0.7880434782608695,
+      "recall": 0.7754010695187166,
+      "f1-score": 0.7816711590296496,
+      "support": 374.0
+    },
+    "B": {
+      "precision": 0.7801047120418848,
+      "recall": 0.7925531914893617,
+      "f1-score": 0.7862796833773087,
+      "support": 376.0
+    },
+    "accuracy": 0.784,
+    "macro avg": {
+      "precision": 0.7840740951513772,
+      "recall": 0.783977130504039,
+      "f1-score": 0.7839754212034791,
+      "support": 750.0
+    },
+    "weighted avg": {
+      "precision": 0.7840635101297518,
+      "recall": 0.784,
+      "f1-score": 0.7839815659026093,
+      "support": 750.0
+    }
+  },
+  "pred_distribution": {
+    "Tie": 323,
+    "B": 382,
+    "A": 368
+  },
+  "position_bias_A": 0.49066666666666664,
+  "per_domain": {
+    "code": {
+      "n": 209,
+      "accuracy": 0.8277511961722488,
+      "macro_f1": 0.8275577557755776
+    },
+    "general": {
+      "n": 435,
+      "accuracy": 0.7701149425287356,
+      "macro_f1": 0.7697633060930685
+    },
+    "stem": {
+      "n": 106,
+      "accuracy": 0.7547169811320755,
+      "macro_f1": 0.7546296296296297
+    }
+  },
+  "policy": "static_v3",
+  "k": 20,
+  "score_method": "compare_checklists_pairwise",
+  "tie_delta": 0.05,
+  "aggregate_na_policy": "as_no",
+  "aggregate_coverage_threshold": 0.8,
+  "tau_escalate": 0.05,
+  "tau_hard": 0.03,
+  "n_min": 8,
+  "avg_k": 49.131407269338304,
+  "tie_rate": 0.30102516309412863,
+  "parse_ok_rate": 0.9981360671015843,
+  "selector_inference_time_s": 0.0,
+  "selector_picks": null,
+  "judge_mode": "local",
+  "judge_url": null,
+  "judge_model": "/root/autodl-tmp/Thesis/models/Qwen3.5-9B",
+  "http_extra_body": null,
+  "http_reasoning_effort": null,
+  "latency_p50_s": 0.9711181266443372,
+  "latency_p90_s": 0.9711181266443372,
+  "samples_per_second_estimate": 1.029740844664761
+}

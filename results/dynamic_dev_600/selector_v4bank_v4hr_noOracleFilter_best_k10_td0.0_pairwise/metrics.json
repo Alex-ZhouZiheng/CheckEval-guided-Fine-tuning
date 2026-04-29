@@ -1,0 +1,81 @@
+{
+  "n_total": 600,
+  "n_valid": 417,
+  "n_tie": 183,
+  "n_unparseable": 0,
+  "parse_rate": 0.695,
+  "accuracy": 0.7793764988009593,
+  "macro_f1": 0.7787032764190125,
+  "classification_report": {
+    "A": {
+      "precision": 0.8074866310160428,
+      "recall": 0.7294685990338164,
+      "f1-score": 0.766497461928934,
+      "support": 207.0
+    },
+    "B": {
+      "precision": 0.7565217391304347,
+      "recall": 0.8285714285714286,
+      "f1-score": 0.7909090909090909,
+      "support": 210.0
+    },
+    "accuracy": 0.7793764988009593,
+    "macro avg": {
+      "precision": 0.7820041850732388,
+      "recall": 0.7790200138026225,
+      "f1-score": 0.7787032764190125,
+      "support": 417.0
+    },
+    "weighted avg": {
+      "precision": 0.7818208581240099,
+      "recall": 0.7793764988009593,
+      "f1-score": 0.778791088034049,
+      "support": 417.0
+    }
+  },
+  "pred_distribution": {
+    "B": 230,
+    "A": 187,
+    "Tie": 183
+  },
+  "position_bias_A": 0.44844124700239807,
+  "per_domain": {
+    "code": {
+      "n": 131,
+      "accuracy": 0.8091603053435115,
+      "macro_f1": 0.8089822105570137
+    },
+    "general": {
+      "n": 223,
+      "accuracy": 0.7713004484304933,
+      "macro_f1": 0.7706362811334073
+    },
+    "stem": {
+      "n": 63,
+      "accuracy": 0.746031746031746,
+      "macro_f1": 0.7428571428571429
+    }
+  },
+  "policy": "learned_topk",
+  "k": 10,
+  "score_method": "compare_checklists_pairwise",
+  "tie_delta": 0.0,
+  "aggregate_na_policy": "as_no",
+  "aggregate_coverage_threshold": 0.8,
+  "tau_escalate": 0.05,
+  "tau_hard": 0.03,
+  "n_min": 8,
+  "avg_k": 10.0,
+  "tie_rate": 0.305,
+  "parse_ok_rate": 0.9833333333333333,
+  "selector_inference_time_s": 0.0,
+  "selector_picks": "results/dynamic_dev_600/selector_v4bank_v4hr_noOracleFilter_best_dev600_k20_picks.parquet",
+  "judge_mode": "local",
+  "judge_url": null,
+  "judge_model": "/root/autodl-tmp/Thesis/models/Qwen3.5-9B",
+  "http_extra_body": null,
+  "http_reasoning_effort": null,
+  "latency_p50_s": 0.3808362150192261,
+  "latency_p90_s": 0.3808362150192261,
+  "samples_per_second_estimate": 2.625800700045074
+}

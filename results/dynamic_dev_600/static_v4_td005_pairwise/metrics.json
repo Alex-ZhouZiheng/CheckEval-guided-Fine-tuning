@@ -1,0 +1,81 @@
+{
+  "n_total": 600,
+  "n_valid": 414,
+  "n_tie": 186,
+  "n_unparseable": 0,
+  "parse_rate": 0.69,
+  "accuracy": 0.8043478260869565,
+  "macro_f1": 0.803843116609634,
+  "classification_report": {
+    "A": {
+      "precision": 0.8253968253968254,
+      "recall": 0.7647058823529411,
+      "f1-score": 0.7938931297709924,
+      "support": 204.0
+    },
+    "B": {
+      "precision": 0.7866666666666666,
+      "recall": 0.8428571428571429,
+      "f1-score": 0.8137931034482758,
+      "support": 210.0
+    },
+    "accuracy": 0.8043478260869565,
+    "macro avg": {
+      "precision": 0.806031746031746,
+      "recall": 0.803781512605042,
+      "f1-score": 0.803843116609634,
+      "support": 414.0
+    },
+    "weighted avg": {
+      "precision": 0.8057510927076144,
+      "recall": 0.8043478260869565,
+      "f1-score": 0.8039873193174405,
+      "support": 414.0
+    }
+  },
+  "pred_distribution": {
+    "B": 225,
+    "Tie": 186,
+    "A": 189
+  },
+  "position_bias_A": 0.45652173913043476,
+  "per_domain": {
+    "code": {
+      "n": 113,
+      "accuracy": 0.8407079646017699,
+      "macro_f1": 0.8406954887218046
+    },
+    "general": {
+      "n": 238,
+      "accuracy": 0.7941176470588235,
+      "macro_f1": 0.7932965844839505
+    },
+    "stem": {
+      "n": 63,
+      "accuracy": 0.7777777777777778,
+      "macro_f1": 0.776369168356998
+    }
+  },
+  "policy": "static_v3",
+  "k": 20,
+  "score_method": "compare_checklists_pairwise",
+  "tie_delta": 0.05,
+  "aggregate_na_policy": "as_no",
+  "aggregate_coverage_threshold": 0.8,
+  "tau_escalate": 0.05,
+  "tau_hard": 0.03,
+  "n_min": 8,
+  "avg_k": 49.22,
+  "tie_rate": 0.31,
+  "parse_ok_rate": 1.0,
+  "selector_inference_time_s": 0.0,
+  "selector_picks": null,
+  "judge_mode": "local",
+  "judge_url": null,
+  "judge_model": "/root/autodl-tmp/Thesis/models/Qwen3.5-9B",
+  "http_extra_body": null,
+  "http_reasoning_effort": null,
+  "latency_p50_s": 0.994288383324941,
+  "latency_p90_s": 0.994288383324941,
+  "samples_per_second_estimate": 1.0057444266380335
+}
