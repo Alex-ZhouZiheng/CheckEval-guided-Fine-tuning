@@ -939,6 +939,13 @@ def main() -> None:
 
     history: list[dict] = []
 
+    best_metric_key = (
+        "human_recall@20" if args.target_mode != "oracle_baseline" else "recall@20"
+    )
+    best_score: float = float("-inf")
+    best_epoch: int | None = None
+    best_state: dict | None = None
+
     for epoch in range(1, args.epochs + 1):
         head.train()
         epoch_loss = 0.0
@@ -1021,6 +1028,12 @@ def main() -> None:
             "  ".join(f"{k}={v:.4f}" for k, v in eval_metrics.items()) if eval_metrics else "",
         )
 
+        cur_score = float(eval_metrics.get(best_metric_key, float("-inf")))
+        if cur_score > best_score:
+            best_score = cur_score
+            best_epoch = epoch
+            best_state = {k: v.detach().cpu().clone() for k, v in head.state_dict().items()}
+
     out_dir = args.out.resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -1073,10 +1086,35 @@ def main() -> None:
 
     pd.DataFrame(history).to_csv(out_dir / "train_history.csv", index=False)
 
+    if best_state is not None:
+        best_dir = out_dir / "best"
+        best_dir.mkdir(parents=True, exist_ok=True)
+        torch.save(best_state, best_dir / "selector_head.pt")
+        torch.save(
+            {"qids": tensors.qids, "question_embeddings": q_emb},
+            best_dir / "q_embeds.pt",
+        )
+        tensors.bank_df.to_parquet(best_dir / "bank_index.parquet", index=False)
+        best_cfg = dict(cfg_payload)
+        best_cfg["selected_epoch"] = best_epoch
+        best_cfg["selected_metric_key"] = best_metric_key
+        best_cfg["selected_metric_value"] = best_score
+        with (best_dir / "config.json").open("w", encoding="utf-8") as f:
+            json.dump(best_cfg, f, indent=2, ensure_ascii=False)
+        log.info(
+            "Saved best checkpoint (epoch=%d, %s=%.4f) -> %s",
+            best_epoch, best_metric_key, best_score, best_dir,
+        )
+
     summary = {
         "last_epoch": history[-1] if history else {},
+        "best_metric_key": best_metric_key,
+        "best_metric_value": best_score if best_state is not None else None,
+        "best_epoch": best_epoch,
         "best_ndcg@20": float(max((h.get("ndcg@20", 0.0) for h in history), default=0.0)),
         "best_recall@20": float(max((h.get("recall@20", 0.0) for h in history), default=0.0)),
+        "best_human_recall@20": float(max((h.get("human_recall@20", 0.0) for h in history), default=0.0)),
+        "best_human_ndcg@20": float(max((h.get("human_ndcg@20", 0.0) for h in history), default=0.0)),
     }
     with (out_dir / "metrics.json").open("w", encoding="utf-8") as f:
         json.dump(summary, f, indent=2, ensure_ascii=False)
