@@ -257,6 +257,7 @@ def _vllm_extract(
         gpu_memory_utilization=gpu_memory_utilization,
         max_num_seqs=max_num_seqs,
         max_num_batched_tokens=max_num_batched_tokens,
+        enable_prefix_caching=True,
         speculative_config=speculative_config,
     )
 
@@ -272,7 +273,7 @@ def _vllm_extract(
                 max_new_tokens=max_new_tokens,
                 temperature=0.0,
                 seed=seed,
-                use_tqdm=False,
+                use_tqdm=True,
             )
         )
     return outputs
