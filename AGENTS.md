@@ -117,3 +117,78 @@ The current history uses short messages such as `add frozen`; prefer clearer imp
 ## Security & Configuration Tips
 
 Do not commit `.env`, model weights, raw private data, or large generated outputs. Keep server-specific paths and tokens in environment variables or local command arguments.
+
+
+<claude-mem-context>
+# Memory Context
+
+# [CheckEval-guided-Fine-tuning] recent context, 2026-04-30 8:14pm GMT+2
+
+Legend: 🎯session 🔴bugfix 🟣feature 🔄refactor ✅change 🔵discovery ⚖️decision 🚨security_alert 🔐security_note
+Format: ID TIME TYPE TITLE
+Fetch details: get_observations([IDs]) | Search: mem-search skill
+
+Stats: 50 obs (19,869t read) | 1,165,877t work | 98% savings
+
+### Apr 30, 2026
+S2 BSc thesis research strategy: closing retrieval gap between learned selector and HR oracle for checklist-guided LLM judge (Apr 30, 11:37 AM)
+S1 Caveman mode activation — user invoked caveman:caveman skill (Apr 30, 11:37 AM)
+2 3:13p ⚖️ Bachelor Thesis Research Scope: Checklist-Guided LLM-as-a-Judge on HelpSteer3
+S4 Initiate Lever 2.1 tiebreak second-pass on remote server using DeepSeek V3 Pro with thinking mode, concurrency 100 (Apr 30, 3:18 PM)
+3 3:30p ⚖️ Research Priority Reoriented: Accuracy-Maximizing over Cost-Minimizing
+4 " ⚖️ Tiebreak Second-Pass Experiment: DeepSeek V3 Pro + Thinking, Concurrency 100
+S6 Monitoring DeepSeek V4 Pro tiebreak run — waiting on 850-call job to complete before computing accuracy (Apr 30, 3:30 PM)
+S3 Accuracy-maximizing research strategy for BSc thesis: checklist-guided LLM judge with selector and tie handling (Apr 30, 3:30 PM)
+5 3:47p 🔵 DeepSeek Thinking Mode Already Supported in run_dynamic_eval.py
+6 " 🔵 No Parquet Raw Data in dynamic_test Results Dir — Only JSON Metrics
+7 3:48p 🔵 Server State Confirmed: predictions.parquet Exists, DEEPSEEK_API_KEY Set, venvmerge Active
+8 " 🔵 predictions.parquet Schema: 1073 Rows, predicted_winner Column for Tie Filtering
+9 " 🔵 Tie Rate 39.7% (425/1073), Perfectly Balanced by True Winner — Confirms Genuine Ambiguity
+10 3:49p 🔵 run_dynamic_eval.py Has --subset and --input-path Flags for Tie Subset Targeting
+11 " 🔵 Complete CLI Interface for DeepSeek Tiebreak Run Identified
+12 " 🔵 load_eval_pairs Requires context/response_a/response_b Columns — Tie Parquet Must Join with Split Data
+13 3:50p 🔵 DeepSeek V4 Pro Already Used in Past Runs — Model Name and URL Confirmed
+14 " 🟣 Tie Subset Extraction Script Written: scripts/extract_hr_oracle_tie_subset.py
+15 3:51p 🟣 Tie Subset Extraction Succeeded: 425/425 Rows Matched — Confirms Predictions Cover Test Split
+16 " 🔴 Picks Parquet Column Name Fixed: "qids" → "selected_qids"
+17 3:52p 🔵 Original HR Oracle Weighted Run Used Local Judge — Config Parameters Confirmed for Tiebreak Replication
+18 " 🚨 DEEPSEEK_API_KEY Exposed in Plaintext via SSH Command Output
+19 3:53p 🟣 DeepSeek V4 Pro Tiebreak Run Launched: 425 Tie Samples, Thinking On, Concurrency 100
+20 " 🔵 Tiebreak Run Active: 850 Total Judge Calls (425 samples × 2 sides), ~4h Estimated Runtime
+21 " 🔵 Tiebreak Run Throughput: 2.7 it/s at Concurrency 100 — Total Runtime ~9 min, Not 4h
+S7 Run rigor-reviewer Level 2 ARA Seal review on CheckEval-Guided Preference Evaluation research artifact (Apr 30, 3:53 PM)
+S5 Lever 2.1 tiebreak second-pass: extract tie subset, launch DeepSeek V4 Pro + thinking run on server, monitor progress (Apr 30, 3:53 PM)
+22 4:31p 🔵 Level 2.1 Tiebreak Second-Pass Analysis on 425 Tie Samples
+28 " 🔵 Root Cause of 39.61% Tie Rate in Weighted HR-Oracle Run Identified
+32 " 🔵 Tie Root Cause Fully Diagnosed: 300/425 Ties Have Exactly Zero Weighted Margin
+35 " 🔵 Lever 2.1 DeepSeek Tiebreak Full Metrics Confirmed on Remote Server
+36 " 🔵 Root Cause of 39.61% Tie Rate: 70.6% Are Exact-Zero Weighted Margin
+37 " 🔵 Full Per-Question Contribution Audit Blocked: predictions.parquet Lacks labels_a/labels_b
+38 " ✅ Lever 2.1 Tiebreak Analysis Section Added to Dynamic Eval Summary
+23 4:32p 🔵 Lever 2.1 Tiebreak: Residual Abstention Is Bottleneck, Not A/B Discrimination
+24 " ✅ Lever 2.1 Tiebreak Analysis Section Added to Dynamic Eval Summary
+25 5:10p ✅ Lever 2.1 Tiebreak Results Documented in Evidence Table
+26 " ⚖️ Next Experiment Priority: Forced Binary Tiebreak + Abstention Calibration
+27 " 🔵 Tie Generation Mechanism in Weighted Pairwise Scoring
+41 5:30p 🔵 Full per-question contribution audit reveals 69% of ties are all-zero-contribution
+42 " 🔵 Tie-causing checklist questions are high-frequency same-direction agreement questions
+43 " 🟣 Dynamic eval rerun with --save-raw-outputs flag for contribution audit
+44 " 🔵 Scoring rule sweep: top-1 decisive question is best tie-resolver but still only 57.9% effective accuracy
+29 " 🔵 70% of Tie Predictions Have Exact-Zero Margin, Not Threshold-Induced
+30 " 🔵 Sparse HelpSteer3 Rationale Structurally Incompatible With Dense Checklist Averaging
+31 " 🔵 predictions.parquet Does Not Save labels_a/labels_b By Default
+45 5:34p 🔵 question_contributions.parquet uses 'weighted_contribution' not 'contribution' column
+33 " 🔵 Margin-Level Tie Audit Completed on Remote Server
+34 " ⚖️ Rerun HR-Oracle Weighted Eval with --save-raw-outputs for Full Contribution Audit
+39 5:48p 🟣 HR-Oracle Weighted Dynamic Eval Rerun Completed with Raw Outputs Saved
+40 " 🟣 Full Per-Question Contribution Audit Script Built for Tie Decomposition
+46 6:56p 🟣 CheckEval-Guided Preference Evaluation ARA
+47 " ✅ Level 2 ARA rigor-review report produced
+S8 Research gap analysis and next-direction prioritization based on Level 2 review findings for CheckEval dynamic-evaluation ARA (Apr 30, 7:01 PM)
+48 7:17p 🔵 Discriminativeness Reranker Experiment Completed: Positive Direction, Coarse Mechanism
+49 " 🔵 Gentler Reranker Confirms Tradeoff: Less Harm But Lower Net Gain
+50 " 🔵 294 All-Zero Tie Samples: Root Cause Diagnosis Initiated
+51 7:23p 🔵 All-Zero 294 Tie Attribution Analysis Performed on Remote Server
+
+Access 1166k tokens of past work via get_observations([IDs]) or mem-search skill.
+</claude-mem-context>

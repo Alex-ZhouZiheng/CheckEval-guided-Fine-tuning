@@ -201,12 +201,13 @@ def _prepare_oracle_tensors(
     target_mode: str = "oracle_baseline",
     human_relevance_df: pd.DataFrame | None = None,
     oracle_fallback_eps: float = 0.1,
+    contrastive_bonus: float = 1.0,
     neg_per_pos: int = 2,
     min_neg: int = 5,
     neg_sample_seed: int = 42,
     exclude_zero_pos_from_neg: bool = False,
 ) -> OracleTensors:
-    if target_mode not in {"oracle_baseline", "pure_human", "human_oracle_fallback"}:
+    if target_mode not in {"oracle_baseline", "pure_human", "human_oracle_fallback", "human_contrastive"}:
         raise ValueError(f"unknown target_mode: {target_mode}")
     if target_mode != "oracle_baseline" and human_relevance_df is None:
         raise ValueError("human_relevance_df is required when target_mode != oracle_baseline")
@@ -230,6 +231,17 @@ def _prepare_oracle_tensors(
     sample_ids = sample_table["sample_id"].astype(str).tolist()
     n_s = len(sample_ids)
     sid_to_index = {sid: i for i, sid in enumerate(sample_ids)}
+    if target_mode == "human_contrastive":
+        missing_contrastive_cols = []
+        if "pair_contrib" not in q_df.columns:
+            missing_contrastive_cols.append("pair_contrib")
+        if "winner_gt" not in sample_table.columns:
+            missing_contrastive_cols.append("winner_gt")
+        if missing_contrastive_cols:
+            raise ValueError(
+                "human_contrastive target requires oracle columns: "
+                + ", ".join(missing_contrastive_cols)
+            )
 
     sample_texts = [
         _build_sample_text(r["context"], r["response_a"], r["response_b"])
@@ -238,10 +250,16 @@ def _prepare_oracle_tensors(
 
     rank_target = torch.zeros((n_s, n_q), dtype=torch.float32)
     human_target = torch.zeros((n_s, n_q), dtype=torch.float32)
+    contrastive_target = torch.zeros((n_s, n_q), dtype=torch.float32)
     u2_target = torch.zeros((n_s, n_q), dtype=torch.float32)
     ans_target = torch.zeros((n_s, n_q), dtype=torch.float32)
     active_mask = torch.zeros((n_s, n_q), dtype=torch.bool)
     rank_mask = torch.zeros((n_s, n_q), dtype=torch.bool)
+    winner_by_sid = {
+        str(row["sample_id"]): str(row["winner_gt"])
+        for _, row in sample_table.iterrows()
+        if "winner_gt" in sample_table.columns and str(row.get("winner_gt")) in {"A", "B"}
+    }
 
     n_skipped_parse_fail = 0
     n_skipped_null_util = 0
@@ -283,6 +301,13 @@ def _prepare_oracle_tensors(
         ans_target[i, j] = u1
         active_mask[i, j] = True
 
+        winner_gt = winner_by_sid.get(sid)
+        pair_contrib = row.get("pair_contrib")
+        if winner_gt is not None and not pd.isna(pair_contrib):
+            signed_contrib = float(pair_contrib)
+            if (winner_gt == "A" and signed_contrib > 0) or (winner_gt == "B" and signed_contrib < 0):
+                contrastive_target[i, j] = abs(signed_contrib)
+
     if target_mode != "oracle_baseline":
         h_mat = torch.zeros((n_s, n_q), dtype=torch.float32)
         n_h_used = 0
@@ -316,6 +341,12 @@ def _prepare_oracle_tensors(
                 h_mat,
                 rank_target.new_zeros(rank_target.shape),
             )
+        elif target_mode == "human_contrastive":
+            rank_target = torch.where(
+                active_mask,
+                h_mat + float(contrastive_bonus) * contrastive_target,
+                rank_target.new_zeros(rank_target.shape),
+            )
         else:
             fallback = oracle_fallback_eps * u2_target
             rank_target = torch.where(
@@ -329,6 +360,13 @@ def _prepare_oracle_tensors(
             target_mode,
             n_h_used,
         )
+        if target_mode == "human_contrastive":
+            n_contrastive = int((contrastive_target > 0).sum().item())
+            log.info(
+                "human_contrastive target: %d gold-aligned discriminative rows, bonus=%.3f",
+                n_contrastive,
+                float(contrastive_bonus),
+            )
 
     if n_skipped_parse_fail or n_skipped_null_util:
         log.info(
@@ -735,7 +773,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--target-mode",
-        choices=["oracle_baseline", "pure_human", "human_oracle_fallback"],
+        choices=["oracle_baseline", "pure_human", "human_oracle_fallback", "human_contrastive"],
         default="oracle_baseline",
         help="Source of the rank target.",
     )
@@ -753,6 +791,12 @@ def main() -> None:
         type=float,
         default=0.1,
         help="Used only when --target-mode == human_oracle_fallback.",
+    )
+    parser.add_argument(
+        "--contrastive-bonus",
+        type=float,
+        default=1.0,
+        help="Added to human relevance for gold-aligned discriminative rows when --target-mode == human_contrastive.",
     )
     parser.add_argument(
         "--neg-per-pos",
@@ -834,6 +878,7 @@ def main() -> None:
         target_mode=args.target_mode,
         human_relevance_df=human_df,
         oracle_fallback_eps=args.oracle_fallback_eps,
+        contrastive_bonus=args.contrastive_bonus,
         neg_per_pos=args.neg_per_pos,
         min_neg=args.min_neg,
         neg_sample_seed=args.seed if args.neg_sample_seed is None else args.neg_sample_seed,
@@ -941,7 +986,7 @@ def main() -> None:
     history: list[dict] = []
 
     best_metric_key = (
-        "human_recall@20" if args.target_mode != "oracle_baseline" else "recall@20"
+        "human_recall@20" if args.target_mode in {"pure_human", "human_oracle_fallback"} else "recall@20"
     )
     best_score: float = float("-inf")
     best_epoch: int | None = None
@@ -1073,6 +1118,7 @@ def main() -> None:
         "target_mode": args.target_mode,
         "human_relevance": str(args.human_relevance) if args.human_relevance else None,
         "oracle_fallback_eps": args.oracle_fallback_eps,
+        "contrastive_bonus": args.contrastive_bonus,
         "neg_per_pos": args.neg_per_pos,
         "min_neg": args.min_neg,
         "neg_sample_seed": args.seed if args.neg_sample_seed is None else args.neg_sample_seed,

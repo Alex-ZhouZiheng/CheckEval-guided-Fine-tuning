@@ -1,0 +1,264 @@
+{
+  "artifact": "CheckEval-Guided Preference Evaluation",
+  "artifact_dir": "D:/CheckEval-guided-Fine-tuning/ara",
+  "review_version": "3.0.0",
+  "prerequisite": "Level 1 passed",
+
+  "overall": {
+    "grade": "Weak Accept",
+    "mean_score": 3.5,
+    "one_line_summary": "Clear logical arc from problem to claims to evidence with honest limitations, but single-run results without variance and a mechanism-evidence mismatch in C04 prevent stronger acceptance.",
+    "strengths_summary": [
+      "Direct claim-to-experiment alignment: E01 provides targeted evidence for C01-C03 with same-split, same-judge controlled comparisons",
+      "Rich exploration tree with genuine dead-end (N02) and calibrated decisions (N04, N08) showing honest research process",
+      "Evidence table is unusually thorough: confusion matrices, ceiling analysis, per-QID contribution breakdown, and transparent caveats on exploratory reranker runs"
+    ],
+    "weaknesses_summary": [
+      "No statistical reporting: all metrics are single-run point estimates without variance, confidence intervals, or multiple seeds",
+      "C02 asserts a specific bottleneck mechanism (HR retrieval) without an ablation that isolates retrieval from other selector limitations",
+      "C04's cited experiment (E02) shows the solution works but does not document the claimed failure mechanism (zero-target ties diluting signal)"
+    ]
+  },
+
+  "dimensions": {
+    "D1_evidence_relevance": {
+      "score": 3,
+      "strengths": [
+        "C01-C03 all cite E01, which directly compares the relevant conditions (static vs learned vs oracle vs weighted) on the same test split with the same judge",
+        "The tiebreak, contribution audit, and reranker analyses in the evidence table provide deep secondary support for the claims without being cited as proof"
+      ],
+      "weaknesses": [
+        "C04 cites E02 as proof, but E02 only shows 'sampled-negative produced much stronger metrics' — it does not document zero-target ties or the noise mechanism the claim describes",
+        "C01's 'upper bound' framing rests on a single k value (top-15); multiple k values would strengthen the bound claim",
+        "C02's bottleneck diagnosis relies on a single gap comparison without an ablation that isolates retrieval quality from other selector failure modes"
+      ],
+      "suggestions": [
+        "For C04: add an explicit diagnostic experiment (e.g., histogram of per-qid targets in full-active training) to document the zero-target tie mechanism directly",
+        "For C01: run HR oracle at k=5, 10, 20 to show the bound holds across budgets",
+        "For C02: add an ablation experiment that uses oracle retrieval + learned ranking (or vice versa) to isolate the retrieval bottleneck from the ranking bottleneck"
+      ]
+    },
+    "D2_falsifiability": {
+      "score": 4,
+      "strengths": [
+        "C01-C03 have specific, actionable falsification criteria: same split, same metrics, explicit comparison conditions",
+        "C02 and C03's criteria are non-trivial and independently testable by anyone with access to the data and oracle labels"
+      ],
+      "weaknesses": [
+        "C04's falsification criterion ('matches or exceeds sampled-negative ListMLE') tests a performance outcome, but the claim asserts a causal mechanism (zero-target ties diluting signal). These are mismatched: the outcome could fail even if the mechanism is wrong, and vice versa",
+        "C01's 'or requires a comparable number of questions' is vague — 'comparable' is not operationalized"
+      ],
+      "suggestions": [
+        "C04: rewrite falsification to test the mechanism directly: 'A diagnostic inspection of training targets shows < threshold % of active questions have positive targets'",
+        "C01: sharpen 'comparable' to a specific ratio threshold (e.g., 'oracle k exceeds 50% of bank size')"
+      ]
+    },
+    "D3_scope_calibration": {
+      "score": 3,
+      "strengths": [
+        "Claims are generally well-hedged: 'can outperform', 'can improve', 'is a useful upper bound'",
+        "The evidence table explicitly acknowledges limitations: test-derived prior for reranker, need for dev calibration, single-split results",
+        "Claims are scoped to the v4 bank, HelpSteer3 test split, and Qwen3.5-9B judge — no overclaiming to other models or datasets"
+      ],
+      "weaknesses": [
+        "C02's 'primarily limited by human-relevance retrieval' overstates what a single gap comparison establishes. Other factors (selector architecture, question composition effects on the judge) could contribute equally without being tested",
+        "No explicit assumptions section in problem.md or constraint in constraints.md (which does not exist); the working hypothesis covers the gap but omits assumptions about human-relevance label quality, judge stability, or question independence",
+        "The evidence table contains significant analysis (tiebreak merge, contribution audit, reranker experiments) that has no corresponding claim in claims.md — evidence without a claim",
+        "C04 asserts a mechanism ('zero-target ties that dilute the positive signal') but cites evidence for an outcome (sampled-negative works better)"
+      ],
+      "suggestions": [
+        "C02: replace 'primarily' with 'a major' to match the evidence strength, or add an ablation to justify 'primarily'",
+        "Add an Assumptions heading to problem.md documenting: (1) human-relevance annotation quality is sufficient, (2) judge is stable across question subsets, (3) question independence",
+        "Add a claim (or expand C03) to cover the tiebreak analysis, contribution audit, and discriminativeness reranker findings"
+      ]
+    },
+    "D4_argument_coherence": {
+      "score": 4,
+      "strengths": [
+        "Clean logical arc: expensive full-bank eval (problem) → selector + aggregation gaps (gap) → HR oracle upper bound + learned selector comparison + weighting calibration (claims → evidence)",
+        "Exploration tree and claims tell the same story: dead-end N02 matches C04, experiment N06 matches C01, experiment N07 matches C03",
+        "Open threads and pending suggestions in the session file are transparently documented — no hidden assumptions about next steps",
+        "No contradictions across layers: the evidence table's interpretation sections align with the claims and exploration tree decisions"
+      ],
+      "weaknesses": [
+        "Problem.md does not have an explicit 'insight' section — the working hypothesis serves this role but the gap-to-solution leap is implicit rather than stated",
+        "The evidence table's Lever 2.1 tiebreak and discriminativeness reranker sections are rich with results but not connected back to any specific claim or gap — they exist as standalone analysis"
+      ],
+      "suggestions": [
+        "Add an explicit 'Insight' sentence or paragraph to problem.md between the gap and the solution: e.g., 'The key insight is that human-relevance annotation provides a free supervision signal for question selection, converting an unsupervised retrieval problem into a supervised ranking problem'",
+        "Consider adding a C05 covering the tiebreak and contribution audit results, or expanding C03 to encompass the full weighting+tiebreak story"
+      ]
+    },
+    "D5_exploration_integrity": {
+      "score": 4,
+      "strengths": [
+        "N02 (dead_end) has a specific failure mode ('Most active questions had zero human-relevance targets, creating many arbitrary ties') and a transferable lesson — this is a genuine negative result, not boilerplate",
+        "N04 and N08 document decisions with real alternatives and evidence for the choice, not strawman alternatives",
+        "The session file logs 3 open_threads and 1 pending suggestion — honest about unresolved issues",
+        "The evidence table's discriminativeness reranker section is clearly labeled as exploratory with a test-derived prior, explicitly noting the methodological caveat"
+      ],
+      "weaknesses": [
+        "Only one dead-end node (N02) for a 2-day project is reasonable but the tree does not explore alternatives to ListMLE ranking (e.g., pointwise binary classifiers for HR prediction, pairwise ranking losses like LambdaRank)",
+        "N04's decision rationale ('Selector metrics appeared close enough') is somewhat informal — no specific threshold or comparison metric cited"
+      ],
+      "suggestions": [
+        "Document at least one alternative training approach that was considered but rejected, even briefly (e.g., 'considered pointwise BCE classifier but chose listwise for end-to-end ranking')",
+        "N04: add a quantitative basis for the decision (e.g., 'Selector HR recall = X, within Y% of oracle HR recall')"
+      ]
+    },
+    "D6_methodological_rigor": {
+      "score": 3,
+      "strengths": [
+        "Strong baseline coverage: static full bank serves as the reference point for all conditions; HR oracle provides an upper bound",
+        "Evidence table includes proper confusion matrices, ceiling analysis, and per-condition accounting for the tiebreak experiment — methodologically thorough",
+        "Transparent about methodological limitations: test-derived reranker prior explicitly flagged, weighted td=0.05 identified as over-abstaining",
+        "Metric alignment: effective accuracy correctly captures the efficiency-quality tradeoff; HR recall measures retrieval quality"
+      ],
+      "weaknesses": [
+        "No variance or confidence intervals: all metrics are single-run point estimates. Differences between conditions (e.g., 54.80 vs 53.49 vs 56.57) could overlap under statistical uncertainty",
+        "C02's bottleneck claim lacks an ablation isolating retrieval quality from other factors — without component-wise intervention, 'retrieval is the bottleneck' is a conjecture supported by correlation, not causal identification",
+        "Experiment descriptions (E01, E02) are minimal: no hyperparameters, no hardware info, no training details beyond checkpoint paths"
+      ],
+      "suggestions": [
+        "Run at least 3 seeds for the learned selector and report mean ± std for all metrics. This is the single highest-impact methodological improvement available",
+        "For C02: add a partial-isolation ablation (e.g., replace learned qid scores with oracle scores but keep learned ranking order, or mix oracle + learned picks at varying ratios)",
+        "Expand E02's description to include selector architecture, learning rate, batch size, number of training steps, and validation metric"
+      ]
+    }
+  },
+
+  "findings": [
+    {
+      "finding_id": "F01",
+      "dimension": "D6_methodological_rigor",
+      "severity": "major",
+      "target_file": "logic/experiments.md",
+      "target_entity": "E01",
+      "evidence_span": "Static full bank reached 54.80 effective accuracy; learned top-15 reached 53.49 effective accuracy; human-relevance oracle top-15 reached 56.57 effective accuracy",
+      "observation": "All metrics in E01 and the evidence table are single-run point estimates without variance, confidence intervals, or multiple seeds.",
+      "reasoning": "The central comparisons of the ARA (learned vs oracle vs static) depend on metric differences that may be within noise. Without variance estimates, the reliability of these comparisons is unknown, weakening all claims that depend on relative ordering of conditions.",
+      "suggestion": "Run at least 3 seeds of the learned selector. Report mean, std, and ideally bootstrap confidence intervals for all metrics. This is the single highest-impact improvement available."
+    },
+    {
+      "finding_id": "F02",
+      "dimension": "D1_evidence_relevance",
+      "severity": "major",
+      "target_file": "logic/claims.md",
+      "target_entity": "C04",
+      "evidence_span": "Proof: [E02]",
+      "observation": "C04 asserts a causal mechanism: full-active ListMLE creates 'many zero-target ties that dilute the positive signal.' But its cited experiment E02 only shows that sampled-negative ListMLE 'produced much stronger human-relevance metrics' — it compares the solution against the problem, it does not document the problem's mechanism.",
+      "reasoning": "E02 supports the claim that sampled-negative is better, but the claim is about why full-active fails. The mechanism (zero-target ties) is documented only in exploration tree node N02, not in experimental evidence. This is a type mismatch: an outcome experiment cited for a mechanism claim.",
+      "suggestion": "Either add a diagnostic experiment to E02 that documents target sparsity (e.g., histogram of per-qid positive targets in full-active training), or reframe C04 as an outcome claim ('Full-active pure-human ListMLE underperforms sampled-negative') and move the mechanism to a separate claim with dedicated evidence."
+    },
+    {
+      "finding_id": "F03",
+      "dimension": "D3_scope_calibration",
+      "severity": "major",
+      "target_file": "logic/claims.md",
+      "target_entity": "C02",
+      "evidence_span": "The learned selector underperforms the human-relevance oracle at the same top-k budget, indicating that retrieval of human-relevant qids is a major bottleneck",
+      "observation": "C02 claims HR retrieval is 'primarily' the bottleneck, but only shows one comparison (learned vs oracle at top-15). No ablation isolates retrieval quality from other factors like selector architecture, question composition effects, or judge sensitivity.",
+      "reasoning": "Without isolating retrieval from other possible bottlenecks, 'primarily' overstates the evidence. The gap between learned and oracle could be driven by any component of the selector (embedding model, MLP head, ranking loss) or by downstream judge behavior with different question compositions.",
+      "suggestion": "Replace 'primarily' with 'a major' to match evidence strength, or add a partial-isolation ablation: e.g., use oracle qid scores but shuffle their ranking, or mix oracle and learned picks at varying ratios."
+    },
+    {
+      "finding_id": "F04",
+      "dimension": "D3_scope_calibration",
+      "severity": "minor",
+      "target_file": "evidence/tables/2026-04-30_dynamic_eval_summary.md",
+      "evidence_span": "",
+      "observation": "The evidence table contains substantial analysis that has no corresponding claim: tiebreak merge (+16.31 pp effective accuracy), contribution audit (69.3% ties have zero nonzero contributions), and discriminativeness reranker (+1.49 pp with beta1+cap2). None of these results are captured as claims in claims.md.",
+      "reasoning": "This represents evidence without a claim — the ARA has experimentally validated findings that are not formally asserted. This weakens the artifact's coverage of its own experimental output.",
+      "suggestion": "Consider adding a C05 covering the tiebreak and contribution audit (e.g., 'HR-oracle weighted tie rate is driven by zero-contribution questions, not by near-threshold margin'), or add a C06 for the reranker direction."
+    },
+    {
+      "finding_id": "F05",
+      "dimension": "D2_falsifiability",
+      "severity": "minor",
+      "target_file": "logic/claims.md",
+      "target_entity": "C04",
+      "evidence_span": "Falsification criteria: Full-active pure-human ListMLE matches or exceeds sampled-negative ListMLE on human-relevance retrieval metrics under the same selector architecture",
+      "observation": "C04's falsification criterion tests a performance outcome (matches or exceeds sampled-negative), but the claim's statement asserts a causal mechanism (zero-target ties diluting signal). These are mismatched: the outcome test could pass even if the mechanism diagnosis is wrong, or the mechanism could be correct but the outcome still fails.",
+      "reasoning": "A falsification criterion should test what the claim asserts. Testing an outcome for a mechanism claim means the criterion does not actually falsify the claim's core assertion.",
+      "suggestion": "Rewrite the falsification criterion to test the mechanism directly: e.g., 'A diagnostic inspection of training targets shows > X% of active questions have zero positive targets, with < Y% of total gradient mass concentrated on the top Z active questions.'"
+    },
+    {
+      "finding_id": "F06",
+      "dimension": "D5_exploration_integrity",
+      "severity": "minor",
+      "target_file": "trace/exploration_tree.yaml",
+      "target_entity": "N02",
+      "evidence_span": "Full-active pure-human ListMLE is too noisy",
+      "observation": "Only one dead-end exists in the tree. The tree does not explore alternatives to ListMLE ranking (e.g., pointwise binary classifiers, pairwise losses like LambdaRank) as competing training strategies.",
+      "reasoning": "For a research thread centered on selector training, the exploration tree would be stronger if it documented consideration of at least one alternative training formulation, even briefly, to show the design space was surveyed.",
+      "suggestion": "Add a brief note on why ListMLE was chosen over alternatives (e.g., 'Pointwise BCE considered: rejected because binary HR labels lose ranking information within active questions')."
+    },
+    {
+      "finding_id": "F07",
+      "dimension": "D4_argument_coherence",
+      "severity": "minor",
+      "target_file": "logic/problem.md",
+      "target_entity": "gap",
+      "evidence_span": "",
+      "observation": "Problem.md does not have an explicit 'insight' section. The working hypothesis ('a selector can choose a small, context-specific subset of questions') serves as the bridge from gap to solution, but the key intellectual leap — that human-relevance annotation provides free supervised signal for question selection — is not explicitly stated.",
+      "reasoning": "While the logical arc is clear to a reader familiar with the work, the absence of an explicit insight section makes the gap-to-solution connection less crisp than it could be.",
+      "suggestion": "Add a short 'Insight' paragraph to problem.md between the gap and the solution: e.g., 'The key insight is that human-relevance annotation, originally collected for judge calibration, doubles as supervision for question selection — converting unsupervised retrieval into supervised ranking.'"
+    },
+    {
+      "finding_id": "F08",
+      "dimension": "D3_scope_calibration",
+      "severity": "suggestion",
+      "target_file": "logic/problem.md",
+      "target_entity": "assumptions",
+      "evidence_span": "",
+      "observation": "No explicit assumptions are documented in the ARA. Problem.md states a working hypothesis but does not list assumptions about human-relevance label quality, judge stability across question subsets, or question independence.",
+      "reasoning": "Making assumptions explicit helps readers evaluate the claim's scope. For example, the contribution audit shows that 95.61% of tie-same-label questions are same-label — this violates an implicit independence assumption.",
+      "suggestion": "Add an 'Assumptions' section to problem.md documenting at least: (1) human-relevance labels are accurate enough to supervise selection, (2) the judge's accuracy is stable across different question subsets, (3) questions are treated independently in aggregation."
+    },
+    {
+      "finding_id": "F09",
+      "dimension": "D2_falsifiability",
+      "severity": "suggestion",
+      "target_file": "logic/claims.md",
+      "target_entity": "C01",
+      "evidence_span": "or requires a comparable number of questions",
+      "observation": "C01's falsification criterion uses 'comparable number of questions' without operationalizing what ratio or threshold constitutes 'comparable.'",
+      "reasoning": "Without a sharp boundary, an independent researcher cannot determine whether the criterion has been met or failed, reducing the claim's falsifiability.",
+      "suggestion": "Replace 'comparable' with a specific threshold: e.g., 'oracle requires > 50% of the full-bank question count to match its effective accuracy.'"
+    },
+    {
+      "finding_id": "F10",
+      "dimension": "D6_methodological_rigor",
+      "severity": "suggestion",
+      "target_file": "logic/experiments.md",
+      "target_entity": "E02",
+      "evidence_span": "Summary: Moving from full-active pure-human ListMLE to positive plus sampled-negative ListMLE directly targeted human-relevance retrieval and produced much stronger human-relevance metrics than the earlier pure-human run.",
+      "observation": "E02's summary is vague: 'much stronger human-relevance metrics' without specific numbers. The checkpoint paths are listed but the evaluation results that justify the claim are not included.",
+      "reasoning": "Without specific metric values, the reader cannot evaluate the magnitude of the improvement or assess whether it justifies switching training strategies.",
+      "suggestion": "Add quantitative results to E02: e.g., 'HR recall@15 improved from X to Y, HR nDCG@15 improved from A to B.'"
+    }
+  ],
+
+  "questions_for_authors": [
+    "What is the variance of your core metrics under different random seeds? All reported numbers are single-run point estimates — a 3-seed replication with mean±std would substantially increase confidence in the learned-vs-oracle gap.",
+    "The evidence table shows a rich discriminativeness reranker analysis with clear results, but none of this appears in claims.md. Are these preliminary explorations, or do you intend to add claims for them?",
+    "Has any analysis been done to check whether the learned selector's poor HR recall is a training issue (model didn't converge) or a fundamental limitation (HR labels are too sparse for reliable retrieval)?",
+    "The contribution audit shows that the tie issue is concentrated in a small number of broad-coverage questions. Would removing or downweighting those questions from the oracle selection improve things, or is the issue intrinsic to how HR oracle picks questions?"
+  ],
+
+  "read_order": [
+    "PAPER.md",
+    "logic/claims.md",
+    "logic/experiments.md",
+    "logic/problem.md",
+    "logic/concepts.md",
+    "logic/solution/heuristics.md",
+    "(related_work.md — does not exist, skipped)",
+    "trace/exploration_tree.yaml",
+    "evidence/README.md",
+    "staging/observations.yaml",
+    "trace/sessions/session_index.yaml",
+    "trace/sessions/2026-04-30_001.yaml",
+    "evidence/tables/2026-04-30_dynamic_eval_summary.md"
+  ]
+}

@@ -1,0 +1,5 @@
+sessions:
+  - id: "2026-04-30_001"
+    path: "ara/trace/sessions/2026-04-30_001.yaml"
+    timestamp: "2026-04-30T11:22"
+    summary: "Captured selector, human-relevance oracle, and question-importance weighting results."

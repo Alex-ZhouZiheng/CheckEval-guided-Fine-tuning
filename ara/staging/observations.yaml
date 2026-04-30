@@ -1,0 +1,15 @@
+observations:
+  - id: O01
+    timestamp: "2026-04-30T11:22"
+    provenance: ai-suggested
+    content: "Weighted pairwise scoring with delta=0.05 produced higher non-tie accuracy but much higher tie rate, lowering effective accuracy."
+    context: "Analysis of weighted dynamic-eval test metrics."
+    potential_type: claim
+    promoted: true
+  - id: O02
+    timestamp: "2026-04-30T11:22"
+    provenance: user
+    content: "Question importance should be estimated by a model from context and selected questions, not by directly using raw human-relevance mention counts."
+    context: "Design discussion for question-importance weighting."
+    potential_type: heuristic
+    promoted: true
