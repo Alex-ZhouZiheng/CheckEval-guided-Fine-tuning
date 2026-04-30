@@ -1,0 +1,75 @@
+session:
+  id: "2026-04-30_001"
+  timestamp: "2026-04-30T11:22"
+  summary: "Captured selector, human-relevance oracle, and question-importance weighting results."
+
+events_logged:
+  - type: claim
+    id: "C01"
+    provenance: ai-suggested
+    summary: "Human-relevance oracle top-15 can beat static full-bank effective accuracy with fewer questions."
+  - type: claim
+    id: "C02"
+    provenance: ai-suggested
+    summary: "The learned selector's main bottleneck is retrieving human-relevance qids."
+  - type: claim
+    id: "C03"
+    provenance: ai-suggested
+    summary: "Weighted scoring needs tie-threshold calibration."
+  - type: claim
+    id: "C04"
+    provenance: user
+    summary: "Full-active pure-human ListMLE is noisy under sparse human labels."
+  - type: heuristic
+    id: "H01"
+    provenance: user
+    summary: "Use positive plus sampled-negative ListMLE for sparse human-relevance training."
+  - type: heuristic
+    id: "H02"
+    provenance: ai-suggested
+    summary: "Calibrate tie thresholds separately for weighted aggregation."
+  - type: heuristic
+    id: "H03"
+    provenance: user
+    summary: "Estimate question importance from context and selected questions only."
+  - type: experiment
+    id: "E01"
+    provenance: ai-executed
+    summary: "Logged test dynamic-evaluation comparison across static, learned, oracle, and weighted policies."
+  - type: experiment
+    id: "E02"
+    provenance: ai-executed
+    summary: "Logged sampled-negative ListMLE selector-training direction."
+
+ai_actions:
+  - action: "Synced and ran dynamic-evaluation and question-weighting experiments on the remote server during the session."
+    provenance: ai-executed
+    files_changed: ["src/evaluation/run_dynamic_eval.py", "src/utils.py", "src/evaluation/build_question_importance_weights.py", "Process.md"]
+  - action: "Created a paper-ready LaTeX table from local metrics."
+    provenance: ai-executed
+    files_changed: ["results/paper_table_dynamic_eval_test.tex"]
+  - action: "Initialized ARA research artifact and recorded the session epilogue."
+    provenance: ai-executed
+    files_changed: ["ara/"]
+
+claims_touched:
+  - id: "C01"
+    action: created
+    provenance: ai-suggested
+  - id: "C02"
+    action: created
+    provenance: ai-suggested
+  - id: "C03"
+    action: created
+    provenance: ai-suggested
+  - id: "C04"
+    action: created
+    provenance: user
+
+open_threads:
+  - "Calibrate weighted tie_delta on dev before using weighted scoring as a primary test claim."
+  - "Improve learned selector retrieval of human-relevance qids to close the gap to the human-relevance oracle."
+  - "Decide whether the paper main table should include weighted rows or keep them in an ablation/appendix."
+
+ai_suggestions_pending:
+  - "Use unweighted human-relevance oracle top-15 as the clean main result and weighted scoring as an ablation until dev calibration is complete."

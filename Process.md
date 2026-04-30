@@ -1,6 +1,6 @@
 # Process: Experiments and Research Directions
 
-Last updated: 2026-04-29
+Last updated: 2026-04-30
 
 This document summarizes the experiment routes currently visible in this repository, with emphasis on artifacts under `results/`, `data/`, `checklists/`, and `wandb/`. The numbers below are copied from local result files, so they should be read as an inventory of explored directions rather than a single perfectly controlled leaderboard.
 
@@ -141,6 +141,69 @@ Representative dynamic results:
 | 8 | 0.08 | 440 / 600 | 0.7750 | 0.5683 | 0.2667 | No clear win over larger k. |
 
 Conclusion: dynamic selection is fast and promising as a cost-control method, but current accuracy does not beat the best static pairwise NA-aware result. The most defensible dynamic setting is top-15 with low or zero `tie_delta` if coverage matters; high `tie_delta` produces attractive valid accuracy by abstaining too often.
+
+### v4 Human-Relevance Selector Dynamic Eval
+
+On 2026-04-30, the selector checkpoint
+`results/checkpoints/selector_v4bank_v4hr_noOracleFilter/best` was evaluated on `dev_600`
+with `checklists/v4_frozen` and `compare_checklists_pairwise` scoring. Selector picks came
+from `results/dynamic_dev_600/selector_v4bank_v4hr_noOracleFilter_best_dev600_k20_picks.parquet`.
+
+| Artifact | Policy | k / avg_k | tie_delta | n_valid / n_total | Valid accuracy | Effective accuracy | Tie rate | Notes |
+|---|---|---:|---:|---:|---:|---:|---:|---|
+| `results/dynamic_dev_600/selector_v4bank_v4hr_noOracleFilter_best_k10_pairwise/metrics.json` | learned_topk | 10 / 10.00 | 0.05 | 398 / 600 | 0.7940 | 0.5267 | 0.3367 | Highest learned valid accuracy, but many ties. |
+| `results/dynamic_dev_600/selector_v4bank_v4hr_noOracleFilter_best_k10_td0.0_pairwise/metrics.json` | learned_topk | 10 / 10.00 | 0.00 | 417 / 600 | 0.7794 | 0.5417 | 0.3050 | Lower abstention, lower valid accuracy than `td=0.05`. |
+| `results/dynamic_dev_600/selector_v4bank_v4hr_noOracleFilter_best_k15_td005_pairwise/metrics.json` | learned_topk | 15 / 15.00 | 0.05 | 439 / 600 | 0.7790 | 0.5700 | 0.2683 | Best learned fixed-k tradeoff by effective accuracy. |
+| `results/dynamic_dev_600/selector_v4bank_v4hr_noOracleFilter_best_k20_td005_pairwise/metrics.json` | learned_topk | 20 / 20.00 | 0.05 | 405 / 600 | 0.7556 | 0.5100 | 0.3250 | Adding more selected questions degraded both accuracy and coverage. |
+| `results/dynamic_dev_600/selector_v4bank_v4hr_noOracleFilter_best_k10_escalate_td005_pairwise/metrics.json` | learned_topk_escalate | 10 / 13.93 | 0.05 | 444 / 600 | 0.7680 | 0.5683 | 0.2600 | Nearly matches k15 effective accuracy with slightly fewer questions on average. |
+| `results/dynamic_dev_600/random_k15_v4_td005_pairwise/metrics.json` | random_k | 15 / 15.00 | 0.05 | 411 / 600 | 0.7299 | 0.5000 | 0.3150 | Confirms learned selector ranking is useful at the same question budget. |
+| `results/dynamic_dev_600/static_v4_td005_pairwise/metrics.json` | static_v3 | all / 49.22 | 0.05 | 414 / 600 | 0.8043 | 0.5550 | 0.3100 | Best valid accuracy, but much higher question cost and lower effective accuracy than learned k15. |
+
+Interpretation:
+
+- The current selector should not be trained further before more evaluation analysis. It already beats random selection at the same `k=15` budget by about 4.9 valid-accuracy points and 7.0 effective-accuracy points.
+- `k=20` is not a free improvement. It likely adds lower-signal or conflicting questions that increase noise.
+- For reporting a compact dynamic setting, use learned `k=15, tie_delta=0.05`: it has the best effective accuracy among fixed learned top-k runs.
+- For a cost-aware adaptive setting, use `learned_topk_escalate` from `k=10`: it reaches almost the same effective accuracy as learned k15 while asking 13.93 questions on average.
+- Static full-bank v4 remains the high valid-accuracy reference, but it asks about 49 questions on average. Dynamic selection is therefore best framed as a cost-control method that preserves or improves effective coverage, not as a strict valid-accuracy win over full-bank static judging.
+
+### Test Human-Relevance Oracle and Importance Weighting
+
+On 2026-04-30, the test split was used to separate two questions:
+
+1. whether human-relevance qids are a useful selection target;
+2. whether selected qids should receive context-conditioned importance weights.
+
+Human-relevance oracle qids came from
+`data/oracle/test_human_relevance_v4_qwen36_27b_nvfp4.parquet`; the ranked picks were saved to
+`results/dynamic_test/human_relevance_oracle_test_v4_qwen36_27b_nvfp4_ranked_picks.parquet`.
+Question-importance weights were generated with `models/qwen3.6-27B-nvfp4` from context plus the selected
+questions only, then normalized with softmax.
+
+| Artifact | Setting | tie_delta | n_valid / n_total | Valid accuracy | Effective accuracy | Tie rate | Notes |
+|---|---|---:|---:|---:|---:|---:|---|
+| `results/dynamic_test/static_v4_td005_pairwise/metrics.json` | static full v4 | 0.05 | 750 / 1073 | 0.7840 | 0.5480 | 0.3010 | Full-bank reference, avg_k 49.13. |
+| `results/dynamic_test/selector_v4bank_v4hr_noOracleFilter_best_k15_td005_pairwise/metrics.json` | learned k15 uniform | 0.05 | 759 / 1073 | 0.7563 | 0.5349 | 0.2926 | Current learned selector baseline. |
+| `results/dynamic_test/human_relevance_oracle_qwen36_27b_k15_td005_pairwise/metrics.json` | HR-oracle k15 uniform | 0.05 | 765 / 1073 | 0.7935 | 0.5657 | 0.2870 | Shows human-relevance qids are a strong target. |
+| `results/dynamic_test/human_relevance_oracle_qwen36_27b_k15_td005_weighted_pairwise/metrics_td0_rescored.json` | HR-oracle k15 weighted | 0.00 | 773 / 1073 | 0.7943 | 0.5722 | 0.2796 | Best weighted HR-oracle point from threshold sweep. |
+| `results/dynamic_test/selector_v4bank_v4hr_noOracleFilter_best_k15_td005_weighted_pairwise/metrics_td0_rescored.json` | learned k15 weighted | 0.00 | 777 / 1073 | 0.7645 | 0.5536 | 0.2759 | Weighted learned selector improves effective accuracy over learned uniform. |
+| `results/dynamic_test/human_relevance_oracle_qwen36_27b_k15_td005_weighted_pairwise/metrics.json` | HR-oracle k15 weighted | 0.05 | 648 / 1073 | 0.8164 | 0.4930 | 0.3961 | Valid accuracy rises, but abstention is too high. |
+| `results/dynamic_test/selector_v4bank_v4hr_noOracleFilter_best_k15_td005_weighted_pairwise/metrics.json` | learned k15 weighted | 0.05 | 642 / 1073 | 0.7850 | 0.4697 | 0.4017 | Same over-abstention pattern. |
+
+Weight artifacts:
+
+- `results/dynamic_test/question_weights/hr_oracle_k15_qwen36_27b_weights.parquet`
+  - parse_ok_rate 0.9664, avg_missing_qids 0.512.
+- `results/dynamic_test/question_weights/learned_k15_qwen36_27b_weights.parquet`
+  - parse_ok_rate 0.9907, avg_missing_qids 0.141.
+- Threshold sweeps were saved as `threshold_sweep.json` in each weighted result directory.
+
+Interpretation:
+
+- Human-relevance qids are validated as a useful selection target: HR-oracle k15 beats static full v4 while asking far fewer questions.
+- Context-conditioned importance weighting is mildly positive only after threshold calibration. With `tie_delta=0`, HR-oracle weighted improves effective accuracy from 0.5657 to 0.5722, and learned weighted improves from 0.5349 to 0.5536.
+- `tie_delta=0.05` is not appropriate for the weighted pairwise margin because weights shrink many margins toward zero, creating too many ties.
+- Next selector work should focus on closing the retrieval gap to HR-oracle. Weighting can be kept as an ablation or secondary method, but not yet as the main claim unless calibrated thresholds are part of the method.
 
 ## 6. Stronger Judge and HTTP Judge Tests
 
@@ -509,10 +572,10 @@ What we learned:
 
 Based only on current artifacts, the cleanest next steps are:
 
-1. Treat `results/checkeval_pairwise_naaware_test_metrics.json` as the current main baseline.
-2. Run a controlled v4 static CheckEval test/dev comparison with the same scoring and model settings as the best 104-question result.
-3. Run the 27B pairwise NA-aware setup on test or a fixed random probe to check whether the dev gain transfers.
-4. Keep dynamic top-15 at low `tie_delta` as the efficiency branch; avoid claiming high-`tie_delta` gains without reporting effective accuracy and tie rate.
-5. Do not resume joint training from auto-detected checklist-SFT data until `data/checklist_sft/...` reports nonzero parsed-valid rows.
-6. Keep GRPO exploratory until content-damage perturbations lower reward consistently.
-
+1. Treat `results/checkeval_pairwise_naaware_test_metrics.json` as the current main test baseline until the v4 dev findings are mirrored on test.
+2. Carry the controlled v4 comparison to test: static full-bank v4, learned `k=15`, and learned `k10_escalate`, all with `compare_checklists_pairwise` and `tie_delta=0.05`.
+3. Use learned `k=15` as the fixed-budget dynamic branch and `k10_escalate` as the adaptive-cost branch; do not keep increasing `k` without inspecting which added questions create noise.
+4. Stop selector training for now. The current selector already beats random selection at the same `k=15` budget; the next bottleneck is scoring/noisy-question analysis and test transfer.
+5. Run the 27B pairwise NA-aware setup on test or a fixed random probe to check whether the dev gain transfers.
+6. Do not resume joint training from auto-detected checklist-SFT data until `data/checklist_sft/...` reports nonzero parsed-valid rows.
+7. Keep GRPO exploratory until content-damage perturbations lower reward consistently.

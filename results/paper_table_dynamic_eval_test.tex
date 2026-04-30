@@ -1,0 +1,37 @@
+\begin{table}[t]
+\centering
+\small
+\caption{Dynamic evaluation on the test split. The learned selector uses 15 selected questions from the frozen v4 checklist bank, while the static baseline evaluates the full bank. Accuracy and macro-F1 are computed on non-tie predictions; effective accuracy counts ties as abstentions over all 1,073 examples.}
+\label{tab:dynamic-eval-test}
+\begin{tabular}{lrrrrrrr}
+\toprule
+Method & \#Q & Valid & Acc. & Macro-F1 & Tie & Eff. Acc. & HR Recall \\
+\midrule
+Static full bank & 49.1 & 750 & 78.40 & 78.40 & 30.10 & 54.80 & -- \\
+Learned selector, top-15 & 15.0 & 759 & 75.63 & 75.61 & 29.26 & 53.49 & -- \\
+Human-relevance oracle, top-15 & 15.0 & \textbf{765} & 79.35 & 79.31 & \textbf{28.70} & \textbf{56.57} & 93.22 \\
+\midrule
+Learned selector + importance weights & 15.0 & 642 & 78.50 & 78.48 & 40.17 & 46.97 & 72.17 \\
+Human-relevance oracle + importance weights & 15.0 & 648 & \textbf{81.64} & \textbf{81.63} & 39.61 & 49.30 & \textbf{93.22} \\
+\bottomrule
+\end{tabular}
+\vspace{2pt}
+
+\footnotesize
+All percentage columns are reported in points. The weighted rows use context-conditioned question-importance weights and the same official tie threshold, $\delta=0.05$. HR Recall is reported only when human-relevance annotations are available for the selected questions.
+\end{table}
+
+\begin{table}[t]
+\centering
+\small
+\caption{Diagnostic weighted scoring rescore with $\delta=0$. These rows are not used as the primary test claim because the threshold was selected after inspecting weighted-score behavior, but they show that the weighting mechanism is useful once the compressed weighted margins are calibrated.}
+\label{tab:weighted-td0-diagnostic}
+\begin{tabular}{lrrrrrr}
+\toprule
+Method & \#Q & Valid & Acc. & Macro-F1 & Tie & Eff. Acc. \\
+\midrule
+Learned selector + importance weights & 15.0 & 777 & 76.45 & 76.44 & 27.59 & 55.36 \\
+Human-relevance oracle + importance weights & 15.0 & 773 & \textbf{79.43} & \textbf{79.43} & 27.96 & \textbf{57.22} \\
+\bottomrule
+\end{tabular}
+\end{table}

@@ -1,0 +1,93 @@
+tree:
+  - id: N01
+    type: question
+    title: "Can a selector replace full-bank checklist evaluation?"
+    provenance: user
+    timestamp: "2026-04-29T17:45"
+    description: >
+      Explore whether a learned selector can choose human-relevant checklist
+      questions and preserve dynamic evaluation quality with fewer questions.
+    children:
+      - id: N02
+        type: dead_end
+        title: "Full-active pure-human ListMLE is too noisy"
+        provenance: user
+        timestamp: "2026-04-29T18:06"
+        hypothesis: >
+          Training directly on pure human-relevance targets over the full active
+          question pool should teach the selector to rank relevant questions.
+        failure_mode: >
+          Most active questions had zero human-relevance targets, creating many
+          arbitrary ties and weak retrieval of the human-relevance positives.
+        lesson: >
+          Sparse human-relevance supervision needs a ranking candidate set that
+          emphasizes positives and a small number of sampled negatives.
+      - id: N03
+        type: experiment
+        title: "Sampled-negative ListMLE for human-relevance selector training"
+        provenance: ai-executed
+        timestamp: "2026-04-29T20:28"
+        result: >
+          Positive plus sampled-negative ListMLE improved human-relevance
+          retrieval metrics and became the preferred selector-training path.
+        evidence: [E02]
+        children:
+          - id: N04
+            type: decision
+            title: "Evaluate learned selector with dynamic eval"
+            provenance: user
+            timestamp: "2026-04-30T00:19"
+            choice: >
+              Run selector inference first, then run dynamic evaluation with
+              pairwise checklist scoring.
+            alternatives:
+              - "Continue training selector before downstream evaluation."
+            evidence: >
+              Selector metrics appeared close enough to test downstream utility.
+            children:
+              - id: N05
+                type: experiment
+                title: "Test static full-bank versus learned top-15 selector"
+                provenance: ai-executed
+                timestamp: "2026-04-30T01:13"
+                result: >
+                  Static full-bank reached 54.80 effective accuracy; learned
+                  top-15 reached 53.49 effective accuracy while asking 15.0
+                  questions instead of 49.1.
+                evidence: [E01]
+              - id: N06
+                type: experiment
+                title: "Human-relevance oracle dynamic evaluation"
+                provenance: ai-executed
+                timestamp: "2026-04-30T01:30"
+                result: >
+                  Human-relevance oracle top-15 reached 56.57 effective accuracy
+                  and 93.22 human-relevance recall, exceeding static full-bank
+                  accuracy with fewer questions.
+                evidence: [E01]
+      - id: N07
+        type: experiment
+        title: "Context-conditioned question-importance weighting"
+        also_depends_on: [N06]
+        provenance: ai-executed
+        timestamp: "2026-04-30T02:00"
+        result: >
+          Importance weighting improved non-tie accuracy but compressed margins;
+          delta=0.05 over-abstained, while diagnostic delta=0 rescoring improved
+          effective accuracy for both learned and oracle selectors.
+        evidence: [E01]
+        children:
+          - id: N08
+            type: decision
+            title: "Treat weighted scoring as an ablation until dev calibration"
+            provenance: ai-suggested
+            timestamp: "2026-04-30T11:22"
+            choice: >
+              Use unweighted human-relevance oracle as the main test claim and
+              report weighted scoring as diagnostic or ablation unless a
+              tie-threshold is calibrated on dev.
+            alternatives:
+              - "Use post-hoc td=0 test rescore as the primary result."
+            evidence: >
+              Weighted td=0.05 had high tie rates; td=0 was selected after
+              inspecting weighted-score behavior.
