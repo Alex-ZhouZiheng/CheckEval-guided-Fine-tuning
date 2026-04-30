@@ -202,6 +202,8 @@ def _prepare_oracle_tensors(
     human_relevance_df: pd.DataFrame | None = None,
     oracle_fallback_eps: float = 0.1,
     contrastive_bonus: float = 1.0,
+    contrastive_gate_threshold: int = 1,
+    contrastive_gate_topk: int = 15,
     neg_per_pos: int = 2,
     min_neg: int = 5,
     neg_sample_seed: int = 42,
@@ -342,10 +344,35 @@ def _prepare_oracle_tensors(
                 rank_target.new_zeros(rank_target.shape),
             )
         elif target_mode == "human_contrastive":
-            rank_target = torch.where(
-                active_mask,
-                h_mat + float(contrastive_bonus) * contrastive_target,
-                rank_target.new_zeros(rank_target.shape),
+            n_gate_on = 0
+            gate_topk = max(1, int(contrastive_gate_topk))
+            gate_thresh = max(0, int(contrastive_gate_threshold))
+            for i in range(n_s):
+                if not active_mask[i].any():
+                    continue
+                active_qidx = torch.nonzero(active_mask[i], as_tuple=False).squeeze(-1)
+                h_vals = h_mat[i, active_qidx]
+                topk_k = min(gate_topk, active_qidx.numel())
+                _, topk_local = torch.topk(h_vals, topk_k)
+                topk_qidx = active_qidx[topk_local]
+                gold_count = int((contrastive_target[i, topk_qidx] > 0).sum().item())
+                if gold_count < gate_thresh:
+                    n_gate_on += 1
+                    rank_target[i] = torch.where(
+                        active_mask[i],
+                        h_mat[i] + float(contrastive_bonus) * contrastive_target[i],
+                        rank_target.new_zeros(rank_target.shape)[i],
+                    )
+                else:
+                    rank_target[i] = torch.where(
+                        active_mask[i],
+                        h_mat[i],
+                        rank_target.new_zeros(rank_target.shape)[i],
+                    )
+            log.info(
+                "gated contrastive: gate open for %d / %d samples "
+                "(HR top-%d gold_signal_count < %d)",
+                n_gate_on, n_s, gate_topk, gate_thresh,
             )
         else:
             fallback = oracle_fallback_eps * u2_target
@@ -362,10 +389,17 @@ def _prepare_oracle_tensors(
         )
         if target_mode == "human_contrastive":
             n_contrastive = int((contrastive_target > 0).sum().item())
+            n_gated_contrastive = int(
+                ((contrastive_target > 0) & (rank_target != h_mat)).sum().item()
+            )
             log.info(
-                "human_contrastive target: %d gold-aligned discriminative rows, bonus=%.3f",
+                "human_contrastive target: %d gold-aligned discriminative rows "
+                "(%d in gated samples), bonus=%.3f, gate_threshold=%d, gate_topk=%d",
                 n_contrastive,
+                n_gated_contrastive,
                 float(contrastive_bonus),
+                int(contrastive_gate_threshold),
+                int(contrastive_gate_topk),
             )
 
     if n_skipped_parse_fail or n_skipped_null_util:
@@ -799,6 +833,22 @@ def main() -> None:
         help="Added to human relevance for gold-aligned discriminative rows when --target-mode == human_contrastive.",
     )
     parser.add_argument(
+        "--contrastive-gate-threshold",
+        type=int,
+        default=1,
+        help=(
+            "Gate fires when HR top-k gold_signal_count < threshold. "
+            "Default 1 = gate fires only for samples with zero gold-aligned signals. "
+            "Increase to make gate more permissive."
+        ),
+    )
+    parser.add_argument(
+        "--contrastive-gate-topk",
+        type=int,
+        default=15,
+        help="Number of top HR-ranked qids to inspect for the gate decision.",
+    )
+    parser.add_argument(
         "--neg-per-pos",
         type=int,
         default=2,
@@ -879,6 +929,8 @@ def main() -> None:
         human_relevance_df=human_df,
         oracle_fallback_eps=args.oracle_fallback_eps,
         contrastive_bonus=args.contrastive_bonus,
+        contrastive_gate_threshold=args.contrastive_gate_threshold,
+        contrastive_gate_topk=args.contrastive_gate_topk,
         neg_per_pos=args.neg_per_pos,
         min_neg=args.min_neg,
         neg_sample_seed=args.seed if args.neg_sample_seed is None else args.neg_sample_seed,
@@ -1119,6 +1171,8 @@ def main() -> None:
         "human_relevance": str(args.human_relevance) if args.human_relevance else None,
         "oracle_fallback_eps": args.oracle_fallback_eps,
         "contrastive_bonus": args.contrastive_bonus,
+        "contrastive_gate_threshold": args.contrastive_gate_threshold,
+        "contrastive_gate_topk": args.contrastive_gate_topk,
         "neg_per_pos": args.neg_per_pos,
         "min_neg": args.min_neg,
         "neg_sample_seed": args.seed if args.neg_sample_seed is None else args.neg_sample_seed,
