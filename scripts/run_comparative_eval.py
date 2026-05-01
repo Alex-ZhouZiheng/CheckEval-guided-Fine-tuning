@@ -27,7 +27,7 @@ import pandas as pd
 SRC_DIR = Path(__file__).resolve().parent.parent / "src"
 sys.path.insert(0, str(SRC_DIR))
 
-from config import BASE_DIR, CHECKLISTS_DIR, COMPARATIVE_QUESTIONS_CACHE
+from config import PROJECT_ROOT as BASE_DIR, CHECKLISTS_DIR, COMPARATIVE_QUESTIONS_CACHE
 from utils import (
     load_judge_model,
     generate_batch,
@@ -75,11 +75,40 @@ def load_generated_questions():
     path = parquets[-1]
     print(f"Loading generated questions from: {path}")
     df = pd.read_parquet(path)
-    # Expected columns: prompt_id, questions (list of str per row)
+    if "questions" not in df.columns and "generated_checklist" in df.columns:
+        df = df.copy()
+        df["questions"] = df["generated_checklist"].apply(parse_generated_questions)
     if "questions" not in df.columns:
-        print(f"Error: 'questions' column not found in {path}. Columns: {df.columns.tolist()}")
+        print(f"Error: no questions found in {path}. Columns: {df.columns.tolist()}")
+        sys.exit(1)
+    if "prompt_id" not in df.columns and "sample_id" not in df.columns:
+        print(f"Error: generated checklist file needs prompt_id or sample_id. Columns: {df.columns.tolist()}")
         sys.exit(1)
     return df
+
+
+def parse_generated_questions(text):
+    """Extract bullet questions from a canonical generated checklist string."""
+    questions = []
+    for line in str(text).splitlines():
+        line = line.strip()
+        if line.startswith("- "):
+            q = line[2:].strip()
+            if q:
+                questions.append(q)
+    return questions
+
+
+def load_generated_eval_rows(split):
+    """Load the row table that matches generated checklist ids."""
+    with_reason_path = BASE_DIR / "data" / "with_reason" / f"{split}_reasoning.parquet"
+    if with_reason_path.exists():
+        df = pd.read_parquet(with_reason_path)
+        if "swap_flag" in df.columns:
+            df = df[df["swap_flag"] == False].reset_index(drop=True)
+        return df
+    split_path = BASE_DIR / "data" / "splits" / f"{split}.parquet"
+    return pd.read_parquet(split_path)
 
 
 def load_hr_oracle_questions():
@@ -116,7 +145,7 @@ def load_hr_oracle_questions():
 
 def load_fullbank_questions():
     """Load all bank questions from v4_frozen bank_index.parquet."""
-    bank_path = CHECKLISTS_DIR / "v4_frozen" / "bank_index.parquet"
+    bank_path = CHECKLISTS_DIR / "bank_index.parquet"
     if not bank_path.exists():
         print(f"Error: bank index not found at {bank_path}")
         sys.exit(1)
@@ -236,16 +265,19 @@ def evaluate_generated(args, judge):
     gen_df = load_generated_questions()
     cache = load_comparative_cache()
 
-    split_path = BASE_DIR / "data" / "splits" / f"{args.split}.parquet"
-    split_df = pd.read_parquet(split_path)
+    split_df = load_generated_eval_rows(args.split)
+    id_col = "prompt_id" if "prompt_id" in gen_df.columns else "sample_id"
+    if id_col not in split_df.columns:
+        print(f"Error: generated ids use {id_col}, but eval rows have columns: {split_df.columns.tolist()}")
+        sys.exit(1)
 
     results = []
     limit = args.limit or len(split_df)
     for idx, row in split_df.iloc[:limit].iterrows():
-        prompt_id = row["prompt_id"]
+        sample_key = row[id_col]
 
         # Find generated questions for this sample
-        gen_row = gen_df[gen_df["prompt_id"] == prompt_id]
+        gen_row = gen_df[gen_df[id_col] == sample_key]
         if gen_row.empty:
             continue
         questions = gen_row.iloc[0].get("questions", [])
@@ -261,7 +293,7 @@ def evaluate_generated(args, judge):
             raw = generate_batch(judge, [[{"role": "user", "content": prompt}]],
                                  max_tokens=args.max_new_tokens)[0]
         except Exception as e:
-            print(f"  [ERROR] judge call failed for {prompt_id}: {e}")
+            print(f"  [ERROR] judge call failed for {sample_key}: {e}")
             continue
 
         parsed = parse_comparative_output(raw, len(comp_questions))
@@ -279,7 +311,7 @@ def evaluate_generated(args, judge):
             score_a, score_b = ws_a, ws_b
 
         results.append({
-            "sample_id": idx, "prompt_id": prompt_id,
+            "sample_id": row.get("sample_id", idx), "prompt_id": row.get("prompt_id", sample_key),
             "domain": row.get("domain", ""),
             "winner": row["winner"], "predicted_winner": predicted,
             "parse_ok": parse_ok, "answers_raw": raw,
