@@ -180,7 +180,7 @@ def compute_weighted_score(answers, weights):
 
 
 def compute_metrics(df):
-    """Compute accuracy, tie_rate, effective_accuracy, parse_ok_rate."""
+    """Compute accuracy, macro_f1, tie_rate, effective_accuracy, parse_ok_rate."""
     total = len(df)
     if total == 0:
         return {"error": "empty predictions"}
@@ -193,12 +193,26 @@ def compute_metrics(df):
     tie_rate = ties / total
     effective_accuracy = correct / (total - ties) if (total - ties) > 0 else 0.0
 
+    # Macro F1: precision/recall per class, averaged
+    classes = ["A", "B", "Tie"]
+    class_f1s = []
+    for c in classes:
+        tp = int(((df["predicted_winner"] == c) & (df["winner"] == c)).sum())
+        fp = int(((df["predicted_winner"] == c) & (df["winner"] != c)).sum())
+        fn = int(((df["predicted_winner"] != c) & (df["winner"] == c)).sum())
+        prec = tp / (tp + fp) if (tp + fp) > 0 else 0.0
+        rec = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+        f1 = 2 * prec * rec / (prec + rec) if (prec + rec) > 0 else 0.0
+        class_f1s.append(f1)
+    macro_f1 = sum(class_f1s) / len(class_f1s)
+
     avg_a = float(df["score_a"].mean()) if "score_a" in df.columns else 0.0
     avg_b = float(df["score_b"].mean()) if "score_b" in df.columns else 0.0
     avg_tie = float(df["n_ties"].mean()) if "n_ties" in df.columns else 0.0
 
     return {
         "accuracy": round(accuracy, 4),
+        "macro_f1": round(macro_f1, 4),
         "tie_rate": round(tie_rate, 4),
         "effective_accuracy": round(effective_accuracy, 4),
         "correct": correct,
@@ -207,6 +221,7 @@ def compute_metrics(df):
         "n_valid": valid,
         "n_total": total,
         "parse_ok_rate": round(valid / total, 4),
+        "avg_answers_per_sample": round(avg_a + avg_b + avg_tie, 2),
         "avg_a_count": round(avg_a, 2),
         "avg_b_count": round(avg_b, 2),
         "avg_tie_count": round(avg_tie, 2),
@@ -242,8 +257,12 @@ def evaluate_generated(args, judge):
             row["context"], row["response_a"], row["response_b"], comp_questions
         )
 
-        raw = generate_batch(judge, [[{"role": "user", "content": prompt}]],
-                             max_tokens=args.max_new_tokens)[0][0]
+        try:
+            raw = generate_batch(judge, [[{"role": "user", "content": prompt}]],
+                                 max_tokens=args.max_new_tokens)[0]
+        except Exception as e:
+            print(f"  [ERROR] judge call failed for {prompt_id}: {e}")
+            continue
 
         parsed = parse_comparative_output(raw, len(comp_questions))
         parse_ok = comparative_parse_ok(parsed, len(comp_questions))
@@ -252,16 +271,21 @@ def evaluate_generated(args, judge):
         uniform = {i+1: 1.0/len(comp_questions) for i in range(len(comp_questions))}
         ws_a, ws_b, ws_win = compute_weighted_score(parsed, uniform)
 
-        predicted = count_win if args.aggregation in ("count", "both") else ws_win
-        score_a = count_a if args.aggregation in ("count", "both") else ws_a
-        score_b = count_b if args.aggregation in ("count", "both") else ws_b
+        if args.aggregation in ("count", "both"):
+            predicted = count_win
+            score_a, score_b = count_a, count_b
+        else:
+            predicted = ws_win
+            score_a, score_b = ws_a, ws_b
 
         results.append({
             "sample_id": idx, "prompt_id": prompt_id,
             "domain": row.get("domain", ""),
             "winner": row["winner"], "predicted_winner": predicted,
             "parse_ok": parse_ok, "answers_raw": raw,
+            "answers_parsed": str(parsed),
             "score_a": score_a, "score_b": score_b,
+            "weighted_score_a": ws_a, "weighted_score_b": ws_b,
             "n_questions": len(comp_questions),
             "n_ties": sum(1 for v in parsed.values() if v == "Tie"),
         })
@@ -295,6 +319,8 @@ def evaluate_hr_oracle(args, judge):
         qids = pred.get("selected_qids", [])
         if isinstance(qids, np.ndarray):
             qids = qids.tolist()
+        elif isinstance(qids, float) and np.isnan(qids):
+            continue
         if not qids:
             continue
 
@@ -307,8 +333,12 @@ def evaluate_hr_oracle(args, judge):
             row["context"], row["response_a"], row["response_b"], comp_qs
         )
 
-        raw = generate_batch(judge, [[{"role": "user", "content": prompt}]],
-                             max_tokens=args.max_new_tokens)[0][0]
+        try:
+            raw = generate_batch(judge, [[{"role": "user", "content": prompt}]],
+                                 max_tokens=args.max_new_tokens)[0]
+        except Exception as e:
+            print(f"  [ERROR] judge call failed for {prompt_id}: {e}")
+            continue
 
         parsed = parse_comparative_output(raw, len(comp_qs))
         parse_ok = comparative_parse_ok(parsed, len(comp_qs))
@@ -322,16 +352,21 @@ def evaluate_hr_oracle(args, judge):
             qnum_weights[i + 1] = wmap.get(qid, 1.0 / len(qids))
         ws_a, ws_b, ws_win = compute_weighted_score(parsed, qnum_weights)
 
-        predicted = count_win if args.aggregation in ("count", "both") else ws_win
-        score_a = count_a if args.aggregation in ("count", "both") else ws_a
-        score_b = count_b if args.aggregation in ("count", "both") else ws_b
+        if args.aggregation in ("count", "both"):
+            predicted = count_win
+            score_a, score_b = count_a, count_b
+        else:
+            predicted = ws_win
+            score_a, score_b = ws_a, ws_b
 
         results.append({
             "sample_id": idx, "prompt_id": prompt_id,
             "domain": row.get("domain", ""),
             "winner": row["winner"], "predicted_winner": predicted,
             "parse_ok": parse_ok, "answers_raw": raw,
+            "answers_parsed": str(parsed),
             "score_a": score_a, "score_b": score_b,
+            "weighted_score_a": ws_a, "weighted_score_b": ws_b,
             "n_questions": len(comp_qs),
             "n_ties": sum(1 for v in parsed.values() if v == "Tie"),
         })
@@ -362,8 +397,12 @@ def evaluate_fullbank(args, judge):
             row["context"], row["response_a"], row["response_b"], comp_qs
         )
 
-        raw = generate_batch(judge, [[{"role": "user", "content": prompt}]],
-                             max_tokens=args.max_new_tokens)[0][0]
+        try:
+            raw = generate_batch(judge, [[{"role": "user", "content": prompt}]],
+                                 max_tokens=args.max_new_tokens)[0]
+        except Exception as e:
+            print(f"  [ERROR] judge call failed for {row.get('prompt_id', '?')}: {e}")
+            continue
 
         parsed = parse_comparative_output(raw, n_q)
         parse_ok = comparative_parse_ok(parsed, n_q)
@@ -371,16 +410,21 @@ def evaluate_fullbank(args, judge):
         count_a, count_b, count_win = compute_simple_count(parsed)
         ws_a, ws_b, ws_win = compute_weighted_score(parsed, uniform)
 
-        predicted = count_win if args.aggregation in ("count", "both") else ws_win
-        score_a = count_a if args.aggregation in ("count", "both") else ws_a
-        score_b = count_b if args.aggregation in ("count", "both") else ws_b
+        if args.aggregation in ("count", "both"):
+            predicted = count_win
+            score_a, score_b = count_a, count_b
+        else:
+            predicted = ws_win
+            score_a, score_b = ws_a, ws_b
 
         results.append({
             "sample_id": idx, "prompt_id": row["prompt_id"],
             "domain": row.get("domain", ""),
             "winner": row["winner"], "predicted_winner": predicted,
             "parse_ok": parse_ok, "answers_raw": raw,
+            "answers_parsed": str(parsed),
             "score_a": score_a, "score_b": score_b,
+            "weighted_score_a": ws_a, "weighted_score_b": ws_b,
             "n_questions": n_q,
             "n_ties": sum(1 for v in parsed.values() if v == "Tie"),
         })
