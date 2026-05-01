@@ -117,7 +117,15 @@ def load_hr_oracle_questions():
     """Load HR-oracle top-15 qids and weights from predictions + review parquets."""
     pred_dir = BASE_DIR / "results" / "dynamic_test"
     pred_paths = list(pred_dir.glob("**/predictions.parquet"))
-    hr_pred = [p for p in pred_paths if "hroracle" in str(p).lower()]
+    hr_pred = [
+        p for p in pred_paths
+        if "human_relevance_oracle" in str(p).lower()
+        and "weighted_pairwise" in str(p).lower()
+        and "raw_for_audit" not in str(p).lower()
+        and "discriminative_rerank" not in str(p).lower()
+    ]
+    if not hr_pred:
+        hr_pred = [p for p in pred_paths if "hroracle" in str(p).lower()]
     if not hr_pred:
         print("Error: No HR-oracle predictions.parquet found.")
         sys.exit(1)
@@ -176,6 +184,8 @@ def get_comparative_text(original, cache):
         return cached
     # Naive fallback: prepend "Which response better..."
     lower = original.lower()
+    if lower.startswith("which response"):
+        return original
     if lower.startswith("does the response"):
         return original.replace("Does the response", "Which response", 1).replace(
             "does the response", "which response", 1
