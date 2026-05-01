@@ -55,7 +55,11 @@ def parse_args():
                         help="Judge model ID")
     parser.add_argument("--max-new-tokens", type=int, default=512)
     parser.add_argument("--batch-size", type=int, default=1,
-                        help="Not used by llamacpp backend (parallel handled server-side)")
+                        help="Number of prompts per generate_batch call")
+    parser.add_argument("--max-model-len", type=int, default=None)
+    parser.add_argument("--max-num-seqs", type=int, default=None)
+    parser.add_argument("--max-num-batched-tokens", type=int, default=None)
+    parser.add_argument("--gpu-memory-utilization", type=float, default=None)
     parser.add_argument("--limit", type=int, default=0,
                         help="Limit samples for debugging (0=all)")
     return parser.parse_args()
@@ -272,6 +276,13 @@ def compute_metrics(df):
 # ── Evaluation loops ──
 
 
+def iter_batches(items, batch_size):
+    """Yield fixed-size batches."""
+    size = max(1, batch_size)
+    for start in range(0, len(items), size):
+        yield items[start:start + size]
+
+
 def evaluate_generated(args, judge):
     """Evaluate on per-sample generated checklists."""
     gen_df = load_generated_questions(args.split)
@@ -283,7 +294,7 @@ def evaluate_generated(args, judge):
         print(f"Error: generated ids use {id_col}, but eval rows have columns: {split_df.columns.tolist()}")
         sys.exit(1)
 
-    results = []
+    work_items = []
     limit = args.limit or len(split_df)
     for idx, row in split_df.iloc[:limit].iterrows():
         sample_key = row[id_col]
@@ -300,42 +311,50 @@ def evaluate_generated(args, judge):
         prompt = build_comparative_prompt(
             row["context"], row["response_a"], row["response_b"], comp_questions
         )
+        work_items.append((idx, row, sample_key, comp_questions, prompt))
 
+    results = []
+    processed = 0
+    for batch in iter_batches(work_items, args.batch_size):
+        messages = [[{"role": "user", "content": prompt}] for _, _, _, _, prompt in batch]
         try:
-            raw = generate_batch(judge, [[{"role": "user", "content": prompt}]],
-                                 max_tokens=args.max_new_tokens)[0]
+            raws = generate_batch(
+                judge, messages, batch_size=args.batch_size, max_tokens=args.max_new_tokens
+            )
         except Exception as e:
-            print(f"  [ERROR] judge call failed for {sample_key}: {e}")
+            print(f"  [ERROR] judge batch failed near {batch[0][2]}: {e}")
             continue
 
-        parsed = parse_comparative_output(raw, len(comp_questions))
-        parse_ok = comparative_parse_ok(parsed, len(comp_questions))
+        for (idx, row, sample_key, comp_questions, _), raw in zip(batch, raws):
+            parsed = parse_comparative_output(raw, len(comp_questions))
+            parse_ok = comparative_parse_ok(parsed, len(comp_questions))
 
-        count_a, count_b, count_win = compute_simple_count(parsed)
-        uniform = {i+1: 1.0/len(comp_questions) for i in range(len(comp_questions))}
-        ws_a, ws_b, ws_win = compute_weighted_score(parsed, uniform)
+            count_a, count_b, count_win = compute_simple_count(parsed)
+            uniform = {i+1: 1.0/len(comp_questions) for i in range(len(comp_questions))}
+            ws_a, ws_b, ws_win = compute_weighted_score(parsed, uniform)
 
-        if args.aggregation in ("count", "both"):
-            predicted = count_win
-            score_a, score_b = count_a, count_b
-        else:
-            predicted = ws_win
-            score_a, score_b = ws_a, ws_b
+            if args.aggregation in ("count", "both"):
+                predicted = count_win
+                score_a, score_b = count_a, count_b
+            else:
+                predicted = ws_win
+                score_a, score_b = ws_a, ws_b
 
-        results.append({
-            "sample_id": row.get("sample_id", idx), "prompt_id": row.get("prompt_id", sample_key),
-            "domain": row.get("domain", ""),
-            "winner": row["winner"], "predicted_winner": predicted,
-            "parse_ok": parse_ok, "answers_raw": raw,
-            "answers_parsed": str(parsed),
-            "score_a": score_a, "score_b": score_b,
-            "weighted_score_a": ws_a, "weighted_score_b": ws_b,
-            "n_questions": len(comp_questions),
-            "n_ties": sum(1 for v in parsed.values() if v == "Tie"),
-        })
+            results.append({
+                "sample_id": row.get("sample_id", idx), "prompt_id": row.get("prompt_id", sample_key),
+                "domain": row.get("domain", ""),
+                "winner": row["winner"], "predicted_winner": predicted,
+                "parse_ok": parse_ok, "answers_raw": raw,
+                "answers_parsed": str(parsed),
+                "score_a": score_a, "score_b": score_b,
+                "weighted_score_a": ws_a, "weighted_score_b": ws_b,
+                "n_questions": len(comp_questions),
+                "n_ties": sum(1 for v in parsed.values() if v == "Tie"),
+            })
 
-        if (idx + 1) % 50 == 0:
-            print(f"  [{idx+1}/{limit}] ok={parse_ok} win={predicted}")
+            processed += 1
+            if processed % 50 == 0:
+                print(f"  [{processed}/{len(work_items)}] ok={parse_ok} win={predicted}")
 
     return pd.DataFrame(results)
 
@@ -351,7 +370,7 @@ def evaluate_hr_oracle(args, judge):
     split_path = BASE_DIR / "data" / "splits" / f"{args.split}.parquet"
     split_df = pd.read_parquet(split_path)
 
-    results = []
+    work_items = []
     limit = args.limit or len(split_df)
     for idx, row in split_df.iloc[:limit].iterrows():
         prompt_id = row["prompt_id"]
@@ -376,47 +395,55 @@ def evaluate_hr_oracle(args, judge):
         prompt = build_comparative_prompt(
             row["context"], row["response_a"], row["response_b"], comp_qs
         )
+        work_items.append((idx, row, prompt_id, qids, comp_qs, prompt))
 
+    results = []
+    processed = 0
+    for batch in iter_batches(work_items, args.batch_size):
+        messages = [[{"role": "user", "content": prompt}] for _, _, _, _, _, prompt in batch]
         try:
-            raw = generate_batch(judge, [[{"role": "user", "content": prompt}]],
-                                 max_tokens=args.max_new_tokens)[0]
+            raws = generate_batch(
+                judge, messages, batch_size=args.batch_size, max_tokens=args.max_new_tokens
+            )
         except Exception as e:
-            print(f"  [ERROR] judge call failed for {prompt_id}: {e}")
+            print(f"  [ERROR] judge batch failed near {batch[0][2]}: {e}")
             continue
 
-        parsed = parse_comparative_output(raw, len(comp_qs))
-        parse_ok = comparative_parse_ok(parsed, len(comp_qs))
+        for (idx, row, prompt_id, qids, comp_qs, _), raw in zip(batch, raws):
+            parsed = parse_comparative_output(raw, len(comp_qs))
+            parse_ok = comparative_parse_ok(parsed, len(comp_qs))
 
-        count_a, count_b, count_win = compute_simple_count(parsed)
+            count_a, count_b, count_win = compute_simple_count(parsed)
 
-        # Weighted: use existing weights if available in lookup
-        wmap = weight_lookup.get(prompt_id, {})
-        qnum_weights = {}
-        for i, qid in enumerate(qids):
-            qnum_weights[i + 1] = wmap.get(qid, 1.0 / len(qids))
-        ws_a, ws_b, ws_win = compute_weighted_score(parsed, qnum_weights)
+            # Weighted: use existing weights if available in lookup
+            wmap = weight_lookup.get(prompt_id, {})
+            qnum_weights = {}
+            for i, qid in enumerate(qids):
+                qnum_weights[i + 1] = wmap.get(qid, 1.0 / len(qids))
+            ws_a, ws_b, ws_win = compute_weighted_score(parsed, qnum_weights)
 
-        if args.aggregation in ("count", "both"):
-            predicted = count_win
-            score_a, score_b = count_a, count_b
-        else:
-            predicted = ws_win
-            score_a, score_b = ws_a, ws_b
+            if args.aggregation in ("count", "both"):
+                predicted = count_win
+                score_a, score_b = count_a, count_b
+            else:
+                predicted = ws_win
+                score_a, score_b = ws_a, ws_b
 
-        results.append({
-            "sample_id": idx, "prompt_id": prompt_id,
-            "domain": row.get("domain", ""),
-            "winner": row["winner"], "predicted_winner": predicted,
-            "parse_ok": parse_ok, "answers_raw": raw,
-            "answers_parsed": str(parsed),
-            "score_a": score_a, "score_b": score_b,
-            "weighted_score_a": ws_a, "weighted_score_b": ws_b,
-            "n_questions": len(comp_qs),
-            "n_ties": sum(1 for v in parsed.values() if v == "Tie"),
-        })
+            results.append({
+                "sample_id": idx, "prompt_id": prompt_id,
+                "domain": row.get("domain", ""),
+                "winner": row["winner"], "predicted_winner": predicted,
+                "parse_ok": parse_ok, "answers_raw": raw,
+                "answers_parsed": str(parsed),
+                "score_a": score_a, "score_b": score_b,
+                "weighted_score_a": ws_a, "weighted_score_b": ws_b,
+                "n_questions": len(comp_qs),
+                "n_ties": sum(1 for v in parsed.values() if v == "Tie"),
+            })
 
-        if (idx + 1) % 50 == 0:
-            print(f"  [{idx+1}/{limit}] ok={parse_ok} win={predicted}")
+            processed += 1
+            if processed % 50 == 0:
+                print(f"  [{processed}/{len(work_items)}] ok={parse_ok} win={predicted}")
 
     return pd.DataFrame(results)
 
@@ -434,47 +461,55 @@ def evaluate_fullbank(args, judge):
     split_path = BASE_DIR / "data" / "splits" / f"{args.split}.parquet"
     split_df = pd.read_parquet(split_path)
 
-    results = []
+    work_items = []
     limit = args.limit or len(split_df)
     for idx, row in split_df.iloc[:limit].iterrows():
         prompt = build_comparative_prompt(
             row["context"], row["response_a"], row["response_b"], comp_qs
         )
+        work_items.append((idx, row, prompt))
 
+    results = []
+    processed = 0
+    for batch in iter_batches(work_items, args.batch_size):
+        messages = [[{"role": "user", "content": prompt}] for _, _, prompt in batch]
         try:
-            raw = generate_batch(judge, [[{"role": "user", "content": prompt}]],
-                                 max_tokens=args.max_new_tokens)[0]
+            raws = generate_batch(
+                judge, messages, batch_size=args.batch_size, max_tokens=args.max_new_tokens
+            )
         except Exception as e:
-            print(f"  [ERROR] judge call failed for {row.get('prompt_id', '?')}: {e}")
+            print(f"  [ERROR] judge batch failed near {batch[0][1].get('prompt_id', '?')}: {e}")
             continue
 
-        parsed = parse_comparative_output(raw, n_q)
-        parse_ok = comparative_parse_ok(parsed, n_q)
+        for (idx, row, _), raw in zip(batch, raws):
+            parsed = parse_comparative_output(raw, n_q)
+            parse_ok = comparative_parse_ok(parsed, n_q)
 
-        count_a, count_b, count_win = compute_simple_count(parsed)
-        ws_a, ws_b, ws_win = compute_weighted_score(parsed, uniform)
+            count_a, count_b, count_win = compute_simple_count(parsed)
+            ws_a, ws_b, ws_win = compute_weighted_score(parsed, uniform)
 
-        if args.aggregation in ("count", "both"):
-            predicted = count_win
-            score_a, score_b = count_a, count_b
-        else:
-            predicted = ws_win
-            score_a, score_b = ws_a, ws_b
+            if args.aggregation in ("count", "both"):
+                predicted = count_win
+                score_a, score_b = count_a, count_b
+            else:
+                predicted = ws_win
+                score_a, score_b = ws_a, ws_b
 
-        results.append({
-            "sample_id": idx, "prompt_id": row["prompt_id"],
-            "domain": row.get("domain", ""),
-            "winner": row["winner"], "predicted_winner": predicted,
-            "parse_ok": parse_ok, "answers_raw": raw,
-            "answers_parsed": str(parsed),
-            "score_a": score_a, "score_b": score_b,
-            "weighted_score_a": ws_a, "weighted_score_b": ws_b,
-            "n_questions": n_q,
-            "n_ties": sum(1 for v in parsed.values() if v == "Tie"),
-        })
+            results.append({
+                "sample_id": idx, "prompt_id": row["prompt_id"],
+                "domain": row.get("domain", ""),
+                "winner": row["winner"], "predicted_winner": predicted,
+                "parse_ok": parse_ok, "answers_raw": raw,
+                "answers_parsed": str(parsed),
+                "score_a": score_a, "score_b": score_b,
+                "weighted_score_a": ws_a, "weighted_score_b": ws_b,
+                "n_questions": n_q,
+                "n_ties": sum(1 for v in parsed.values() if v == "Tie"),
+            })
 
-        if (idx + 1) % 50 == 0:
-            print(f"  [{idx+1}/{limit}] ok={parse_ok} win={predicted}")
+            processed += 1
+            if processed % 50 == 0:
+                print(f"  [{processed}/{len(work_items)}] ok={parse_ok} win={predicted}")
 
     return pd.DataFrame(results)
 
@@ -487,7 +522,14 @@ def main():
     args.output.mkdir(parents=True, exist_ok=True)
 
     print(f"Loading judge: {args.model_id} (backend={args.backend})")
-    judge = load_judge_model(args.model_id, backend=args.backend)
+    judge = load_judge_model(
+        args.model_id,
+        backend=args.backend,
+        gpu_memory_utilization=args.gpu_memory_utilization,
+        max_model_len=args.max_model_len,
+        max_num_seqs=args.max_num_seqs,
+        max_num_batched_tokens=args.max_num_batched_tokens,
+    )
 
     print(f"Eval: source={args.question_source}, agg={args.aggregation}")
     if args.question_source == "generated":
