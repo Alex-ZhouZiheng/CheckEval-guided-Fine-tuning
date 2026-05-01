@@ -27,7 +27,7 @@ import pandas as pd
 SRC_DIR = Path(__file__).resolve().parent.parent / "src"
 sys.path.insert(0, str(SRC_DIR))
 
-from config import BASE_DIR, CHECKLISTS_DIR, COMPARATIVE_QUESTIONS_CACHE
+from config import PROJECT_ROOT as BASE_DIR, CHECKLISTS_DIR, COMPARATIVE_QUESTIONS_CACHE
 from utils import (
     load_judge_model,
     generate_batch,
@@ -116,7 +116,7 @@ def load_hr_oracle_questions():
 
 def load_fullbank_questions():
     """Load all bank questions from v4_frozen bank_index.parquet."""
-    bank_path = CHECKLISTS_DIR / "v4_frozen" / "bank_index.parquet"
+    bank_path = CHECKLISTS_DIR / "bank_index.parquet"
     if not bank_path.exists():
         print(f"Error: bank index not found at {bank_path}")
         sys.exit(1)
