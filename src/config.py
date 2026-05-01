@@ -25,6 +25,7 @@ SPLITS_DIR = DATA_DIR / "splits"
 WITH_REASON_DIR = DATA_DIR / "with_reason"
 RESULTS_DIR = PROJECT_ROOT / "results"
 CHECKLISTS_DIR = PROJECT_ROOT / "checklists" / "v4_frozen"
+COMPARATIVE_QUESTIONS_CACHE = DATA_DIR / "comparative_questions.json"
 
 HUMAN_RELEVANCE_DIR = DATA_DIR / "oracle"  # co-located with oracle parquets
 HUMAN_RELEVANCE_FILENAMES = {
