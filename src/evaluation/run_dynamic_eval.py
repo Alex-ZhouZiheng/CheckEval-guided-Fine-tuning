@@ -30,8 +30,9 @@ import hashlib
 import json
 import logging
 import time
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
+from threading import Lock
 from typing import Any
 
 import pandas as pd
@@ -129,6 +130,8 @@ def _http_judge_generate(
     concurrency: int = 32,
     extra_body_mode: str = "qwen-thinking-off",
     reasoning_effort: str | None = None,
+    request_keys: list[str] | None = None,
+    resume_cache: Path | None = None,
 ) -> list[dict[str, Any]]:
     from openai import OpenAI
 
@@ -142,6 +145,39 @@ def _http_judge_generate(
         extra_body = {"thinking": {"type": "disabled"}}
     elif extra_body_mode != "none":
         raise ValueError(f"Unknown HTTP extra body mode: {extra_body_mode}")
+    if request_keys is None:
+        request_keys = [str(i) for i in range(len(messages_list))]
+    if len(request_keys) != len(messages_list):
+        raise ValueError("request_keys length must match messages_list length")
+
+    signature = _http_request_signature(
+        url=url,
+        model=model,
+        max_new_tokens=max_new_tokens,
+        temperature=temperature,
+        extra_body=extra_body,
+        reasoning_effort=reasoning_effort,
+    )
+    prompt_hashes = [_prompt_hash(msgs) for msgs in messages_list]
+    cached = _load_http_resume_cache(resume_cache, signature)
+    out: list[dict[str, Any] | None] = [None] * len(messages_list)
+    pending: list[int] = []
+    for idx, (key, prompt_sha) in enumerate(zip(request_keys, prompt_hashes)):
+        response = cached.get((key, prompt_sha))
+        if response is None:
+            pending.append(idx)
+        else:
+            out[idx] = response
+
+    if resume_cache is not None:
+        log.info(
+            "HTTP resume cache %s: %d cached, %d pending",
+            resume_cache,
+            len(messages_list) - len(pending),
+            len(pending),
+        )
+        resume_cache.parent.mkdir(parents=True, exist_ok=True)
+    write_lock = Lock()
 
     def dump_obj(obj: Any) -> Any:
         if obj is None:
@@ -163,7 +199,24 @@ def _http_judge_generate(
             kwargs["extra_body"] = extra_body
         if reasoning_effort is not None:
             kwargs["reasoning_effort"] = reasoning_effort
-        resp = client.chat.completions.create(**kwargs)
+        last_err: Exception | None = None
+        for attempt in range(5):
+            try:
+                resp = client.chat.completions.create(**kwargs)
+                break
+            except Exception as exc:
+                last_err = exc
+                sleep_s = min(30.0, 2.0 * (2**attempt))
+                log.warning(
+                    "HTTP judge request failed (attempt %d/5); retrying in %.1fs: %s",
+                    attempt + 1,
+                    sleep_s,
+                    exc,
+                )
+                time.sleep(sleep_s)
+        else:
+            assert last_err is not None
+            raise last_err
         choice = resp.choices[0]
         msg = choice.message
         content = msg.content or ""
@@ -178,10 +231,103 @@ def _http_judge_generate(
             "message": dump_obj(msg),
         }
 
-    with ThreadPoolExecutor(max_workers=concurrency) as ex:
-        return list(
-            tqdm(ex.map(one, messages_list), total=len(messages_list), desc="Judge HTTP")
-        )
+    def save_cache(idx: int, response: dict[str, Any]) -> None:
+        if resume_cache is None:
+            return
+        record = {
+            "request_key": request_keys[idx],
+            "prompt_sha256": prompt_hashes[idx],
+            "signature": signature,
+            "response": response,
+        }
+        line = json.dumps(record, ensure_ascii=False, default=str)
+        with write_lock:
+            with resume_cache.open("a", encoding="utf-8") as f:
+                f.write(line + "\n")
+
+    if pending:
+        with ThreadPoolExecutor(max_workers=concurrency) as ex:
+            futures = {ex.submit(one, messages_list[idx]): idx for idx in pending}
+            errors: list[tuple[int, BaseException]] = []
+            with tqdm(total=len(pending), desc="Judge HTTP") as pbar:
+                for fut in as_completed(futures):
+                    idx = futures[fut]
+                    try:
+                        response = fut.result()
+                    except BaseException as exc:
+                        errors.append((idx, exc))
+                    else:
+                        out[idx] = response
+                        save_cache(idx, response)
+                    pbar.update(1)
+            if errors:
+                first_idx, first_error = errors[0]
+                log.error(
+                    "HTTP judge failed for %d/%d pending requests; completed requests were cached.",
+                    len(errors),
+                    len(pending),
+                )
+                raise RuntimeError(
+                    f"HTTP request failed for {request_keys[first_idx]}"
+                ) from first_error
+
+    missing = [request_keys[idx] for idx, response in enumerate(out) if response is None]
+    if missing:
+        raise RuntimeError(f"Missing HTTP responses after generation: {missing[:5]}")
+    return [response for response in out if response is not None]
+
+
+def _http_request_signature(
+    url: str,
+    model: str,
+    max_new_tokens: int,
+    temperature: float,
+    extra_body: dict[str, Any] | None,
+    reasoning_effort: str | None,
+) -> str:
+    payload = {
+        "url": url,
+        "model": model,
+        "max_new_tokens": max_new_tokens,
+        "temperature": temperature,
+        "extra_body": extra_body,
+        "reasoning_effort": reasoning_effort,
+    }
+    return json.dumps(payload, sort_keys=True, ensure_ascii=False, default=str)
+
+
+def _prompt_hash(messages: list[dict[str, str]]) -> str:
+    payload = json.dumps(messages, sort_keys=True, ensure_ascii=False)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _load_http_resume_cache(
+    cache_path: Path | None,
+    signature: str,
+) -> dict[tuple[str, str], dict[str, Any]]:
+    if cache_path is None or not cache_path.exists():
+        return {}
+
+    out: dict[tuple[str, str], dict[str, Any]] = {}
+    with cache_path.open("r", encoding="utf-8") as f:
+        for line_no, line in enumerate(f, start=1):
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                record = json.loads(line)
+            except json.JSONDecodeError:
+                log.warning("Skipping malformed cache line %s in %s", line_no, cache_path)
+                continue
+            if record.get("signature") != signature:
+                continue
+            key = record.get("request_key")
+            prompt_sha = record.get("prompt_sha256")
+            response = record.get("response")
+            if not key or not prompt_sha or not isinstance(response, dict):
+                continue
+            out[(str(key), str(prompt_sha))] = response
+    return out
 
 
 def _local_judge_response(raw: str) -> dict[str, Any]:
@@ -466,6 +612,7 @@ def _run_stage(
     http_concurrency: int,
     http_extra_body: str,
     http_reasoning_effort: str | None,
+    http_resume_cache: Path | None,
 ) -> tuple[dict[str, dict[str, Any]], float]:
     metas: list[dict[str, Any]] = []
     messages_a: list[list[dict[str, str]]] = []
@@ -486,6 +633,10 @@ def _run_stage(
         return {}, 0.0
 
     all_messages = messages_a + messages_b
+    request_keys = (
+        [f"{stage_name}:A:{m['sid']}" for m in metas]
+        + [f"{stage_name}:B:{m['sid']}" for m in metas]
+    )
     t0 = time.time()
     if judge_mode == "http":
         if not judge_model:
@@ -500,6 +651,8 @@ def _run_stage(
             concurrency=http_concurrency,
             extra_body_mode=http_extra_body,
             reasoning_effort=http_reasoning_effort,
+            request_keys=request_keys,
+            resume_cache=http_resume_cache,
         )
     else:
         raw = _generate_local(
@@ -885,6 +1038,17 @@ def main() -> None:
     )
     parser.add_argument("--http-concurrency", type=int, default=32)
     parser.add_argument(
+        "--http-resume-cache",
+        type=Path,
+        default=None,
+        help="JSONL cache for completed HTTP judge requests (default: <out>/http_cache.jsonl).",
+    )
+    parser.add_argument(
+        "--no-http-resume",
+        action="store_true",
+        help="Disable HTTP resume cache.",
+    )
+    parser.add_argument(
         "--http-extra-body",
         choices=["qwen-thinking-off", "deepseek-thinking-on", "deepseek-thinking-off", "none"],
         default="qwen-thinking-off",
@@ -935,6 +1099,14 @@ def main() -> None:
             raise SystemExit(
                 "DEEPSEEK_API_KEY is not set. Put it in .env, export it, or pass --judge-api-key."
             )
+
+    http_resume_cache = None
+    if args.judge_mode == "http" and not args.no_http_resume:
+        http_resume_cache = (
+            args.http_resume_cache.resolve()
+            if args.http_resume_cache is not None
+            else (args.out / "http_cache.jsonl").resolve()
+        )
 
     weighted_methods = {
         "compare_checklists_pairwise_weighted",
@@ -1112,6 +1284,7 @@ def main() -> None:
         http_concurrency=args.http_concurrency,
         http_extra_body=args.http_extra_body,
         http_reasoning_effort=args.http_reasoning_effort,
+        http_resume_cache=http_resume_cache,
     )
     if stage1_out:
         stage1_avg = t_stage1 / len(stage1_out)
@@ -1182,6 +1355,7 @@ def main() -> None:
             http_concurrency=args.http_concurrency,
             http_extra_body=args.http_extra_body,
             http_reasoning_effort=args.http_reasoning_effort,
+            http_resume_cache=http_resume_cache,
         )
 
         stage2_avg = t_stage2 / len(stage2_out) if stage2_out else 0.0
@@ -1243,6 +1417,7 @@ def main() -> None:
             http_concurrency=args.http_concurrency,
             http_extra_body=args.http_extra_body,
             http_reasoning_effort=args.http_reasoning_effort,
+            http_resume_cache=http_resume_cache,
         )
 
         stage3_avg = t_stage3 / len(stage3_out) if stage3_out else 0.0
@@ -1348,6 +1523,7 @@ def main() -> None:
     metrics["judge_model"] = args.judge_model if args.judge_mode == "http" else args.base_model
     metrics["http_extra_body"] = args.http_extra_body if args.judge_mode == "http" else None
     metrics["http_reasoning_effort"] = args.http_reasoning_effort if args.judge_mode == "http" else None
+    metrics["http_resume_cache"] = str(http_resume_cache) if http_resume_cache is not None else None
 
     if args.human_relevance is not None:
         if not args.human_relevance.exists():

@@ -1,14 +1,16 @@
-"""Rewrite pointwise checklist questions into comparative format via ChatGPT-5.5.
+"""Rewrite pointwise bank checklist questions into comparative format via ChatGPT-5.5.
 
 Usage:
     python scripts/rewrite_comparative_questions.py
 
 Reads all unique pointwise questions from:
-    1. Generated checklists: data/generated_checklists/*.parquet
-    2. Bank questions: checklists/v4_frozen/bank_index.parquet
+    - Bank questions: checklists/v4_frozen/bank_index.parquet
 
 Output: data/comparative_questions.json  {original_text: comparative_text}
 Skips already-cached questions on re-run.
+
+Note: Per-sample generated checklists use the rule-based fallback in
+get_comparative_text() and are NOT rewritten via API.
 """
 
 import argparse
@@ -43,25 +45,11 @@ Comparative:"""
 
 
 def load_unique_questions():
-    """Collect all unique pointwise questions from all sources."""
+    """Collect all unique pointwise questions from bank index."""
     questions = set()
 
-    # 1. Generated checklists (per-sample)
-    gen_dir = BASE_DIR / "data" / "generated_checklists"
-    if gen_dir.exists():
-        for f in sorted(gen_dir.glob("*.parquet")):
-            try:
-                df = pd.read_parquet(f)
-                if "questions" in df.columns:
-                    for q_list in df["questions"]:
-                        if isinstance(q_list, list):
-                            for q in q_list:
-                                if isinstance(q, str) and q.strip():
-                                    questions.add(q.strip())
-            except Exception as e:
-                print(f"  [warn] skipping {f.name}: {e}")
-
-    # 2. Bank questions (v4_frozen)
+    # Bank questions (v4_frozen) — the only source needing LLM rewrite.
+    # Per-sample generated checklists use the fallback in get_comparative_text().
     bank_path = BASE_DIR / "checklists" / "v4_frozen" / "bank_index.parquet"
     if bank_path.exists():
         try:
@@ -101,8 +89,7 @@ def rewrite_question(client, question, model="gpt-4.1-nano"):
         messages=[
             {"role": "user", "content": REWRITE_PROMPT.format(question=question)},
         ],
-        temperature=0.0,
-        max_tokens=100,
+        max_completion_tokens=100,
     )
     rewritten = response.choices[0].message.content.strip()
     # Strip leading "Comparative:" if model echoes it
@@ -113,7 +100,7 @@ def rewrite_question(client, question, model="gpt-4.1-nano"):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model", default="gpt-4.1-nano",
+    parser.add_argument("--model", default="gpt-5.5",
                         help="OpenAI model for rewriting")
     parser.add_argument("--api-key", default=None,
                         help="OpenAI API key (default: env OPENAI_API_KEY)")

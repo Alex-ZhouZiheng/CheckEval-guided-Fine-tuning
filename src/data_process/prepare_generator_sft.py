@@ -88,20 +88,60 @@ Rules:
 
 # Checklist"""
 
+# ── Comparative generator variants ──
+
+GENERATOR_SYSTEM_PROMPT_COMPARATIVE = (
+    "You are a checklist writer for LLM response evaluation. Given a user "
+    "request, produce a list of comparative evaluation questions, grouped by "
+    "quality dimension, that could be used to compare two candidate responses. "
+    "Each question must be phrased so that it asks which response is better "
+    "on the criterion, e.g. 'Which response better explains...' rather than "
+    "'Does the response explain...'. Output ONLY the checklist in the required "
+    "format."
+)
+
+GENERATOR_USER_TEMPLATE_COMPARATIVE = """\
+Produce a comparative evaluation checklist for judging responses to the following request.
+Each question should compare two candidate responses, e.g. "Which response better..." instead of "Does the response..."
+
+Group questions under these section headers (skip a section if it does not apply):
+{domain}
+
+Output format:
+### <domain>
+- Which response better <criterion>?
+- Which response provides more <criterion>?
+
+### <domain>
+- ...
+
+Rules:
+- Phrase each question as "Which response..." comparing two candidates.
+- Do not reference any specific response; questions must apply to any candidate pair.
+- Keep each question under ~40 words.
+- Output only the checklist, no commentary.
+
+# Conversation Context
+{context}
+
+# Checklist"""
+
 def _domain_block() -> str:
     lines = []
     for name in DOMAINS:
         lines.append(f"- {name}: {DOMAIN_DESCRIPTIONS[name]}")
     return "\n".join(lines)
 
-def build_generator_messages(row: dict | pd.Series) -> list[dict[str, str]]:
+def build_generator_messages(row: dict | pd.Series, comparative: bool = False) -> list[dict[str, str]]:
     """Chat-template messages consumed by the generator model at both train and eval."""
-    user = GENERATOR_USER_TEMPLATE.format(
+    template = GENERATOR_USER_TEMPLATE_COMPARATIVE if comparative else GENERATOR_USER_TEMPLATE
+    system = GENERATOR_SYSTEM_PROMPT_COMPARATIVE if comparative else GENERATOR_SYSTEM_PROMPT
+    user = template.format(
         context=row["context"],
         domain=_domain_block(),
     )
     return [
-        {"role": "system", "content": GENERATOR_SYSTEM_PROMPT},
+        {"role": "system", "content": system},
         {"role": "user", "content": user},
     ]
 

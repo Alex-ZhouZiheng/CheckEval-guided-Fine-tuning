@@ -122,73 +122,76 @@ Do not commit `.env`, model weights, raw private data, or large generated output
 <claude-mem-context>
 # Memory Context
 
-# [CheckEval-guided-Fine-tuning] recent context, 2026-04-30 8:14pm GMT+2
+# [CheckEval-guided-Fine-tuning] recent context, 2026-05-01 2:26pm GMT+2
 
 Legend: 🎯session 🔴bugfix 🟣feature 🔄refactor ✅change 🔵discovery ⚖️decision 🚨security_alert 🔐security_note
 Format: ID TIME TYPE TITLE
 Fetch details: get_observations([IDs]) | Search: mem-search skill
 
-Stats: 50 obs (19,869t read) | 1,165,877t work | 98% savings
+Stats: 50 obs (18,766t read) | 490,114t work | 96% savings
 
 ### Apr 30, 2026
-S2 BSc thesis research strategy: closing retrieval gap between learned selector and HR oracle for checklist-guided LLM judge (Apr 30, 11:37 AM)
-S1 Caveman mode activation — user invoked caveman:caveman skill (Apr 30, 11:37 AM)
-2 3:13p ⚖️ Bachelor Thesis Research Scope: Checklist-Guided LLM-as-a-Judge on HelpSteer3
-S4 Initiate Lever 2.1 tiebreak second-pass on remote server using DeepSeek V3 Pro with thinking mode, concurrency 100 (Apr 30, 3:18 PM)
-3 3:30p ⚖️ Research Priority Reoriented: Accuracy-Maximizing over Cost-Minimizing
-4 " ⚖️ Tiebreak Second-Pass Experiment: DeepSeek V3 Pro + Thinking, Concurrency 100
-S6 Monitoring DeepSeek V4 Pro tiebreak run — waiting on 850-call job to complete before computing accuracy (Apr 30, 3:30 PM)
-S3 Accuracy-maximizing research strategy for BSc thesis: checklist-guided LLM judge with selector and tie handling (Apr 30, 3:30 PM)
-5 3:47p 🔵 DeepSeek Thinking Mode Already Supported in run_dynamic_eval.py
-6 " 🔵 No Parquet Raw Data in dynamic_test Results Dir — Only JSON Metrics
-7 3:48p 🔵 Server State Confirmed: predictions.parquet Exists, DEEPSEEK_API_KEY Set, venvmerge Active
-8 " 🔵 predictions.parquet Schema: 1073 Rows, predicted_winner Column for Tie Filtering
-9 " 🔵 Tie Rate 39.7% (425/1073), Perfectly Balanced by True Winner — Confirms Genuine Ambiguity
-10 3:49p 🔵 run_dynamic_eval.py Has --subset and --input-path Flags for Tie Subset Targeting
-11 " 🔵 Complete CLI Interface for DeepSeek Tiebreak Run Identified
-12 " 🔵 load_eval_pairs Requires context/response_a/response_b Columns — Tie Parquet Must Join with Split Data
-13 3:50p 🔵 DeepSeek V4 Pro Already Used in Past Runs — Model Name and URL Confirmed
-14 " 🟣 Tie Subset Extraction Script Written: scripts/extract_hr_oracle_tie_subset.py
-15 3:51p 🟣 Tie Subset Extraction Succeeded: 425/425 Rows Matched — Confirms Predictions Cover Test Split
-16 " 🔴 Picks Parquet Column Name Fixed: "qids" → "selected_qids"
-17 3:52p 🔵 Original HR Oracle Weighted Run Used Local Judge — Config Parameters Confirmed for Tiebreak Replication
-18 " 🚨 DEEPSEEK_API_KEY Exposed in Plaintext via SSH Command Output
-19 3:53p 🟣 DeepSeek V4 Pro Tiebreak Run Launched: 425 Tie Samples, Thinking On, Concurrency 100
-20 " 🔵 Tiebreak Run Active: 850 Total Judge Calls (425 samples × 2 sides), ~4h Estimated Runtime
-21 " 🔵 Tiebreak Run Throughput: 2.7 it/s at Concurrency 100 — Total Runtime ~9 min, Not 4h
-S7 Run rigor-reviewer Level 2 ARA Seal review on CheckEval-Guided Preference Evaluation research artifact (Apr 30, 3:53 PM)
-S5 Lever 2.1 tiebreak second-pass: extract tie subset, launch DeepSeek V4 Pro + thinking run on server, monitor progress (Apr 30, 3:53 PM)
-22 4:31p 🔵 Level 2.1 Tiebreak Second-Pass Analysis on 425 Tie Samples
-28 " 🔵 Root Cause of 39.61% Tie Rate in Weighted HR-Oracle Run Identified
-32 " 🔵 Tie Root Cause Fully Diagnosed: 300/425 Ties Have Exactly Zero Weighted Margin
-35 " 🔵 Lever 2.1 DeepSeek Tiebreak Full Metrics Confirmed on Remote Server
-36 " 🔵 Root Cause of 39.61% Tie Rate: 70.6% Are Exact-Zero Weighted Margin
-37 " 🔵 Full Per-Question Contribution Audit Blocked: predictions.parquet Lacks labels_a/labels_b
-38 " ✅ Lever 2.1 Tiebreak Analysis Section Added to Dynamic Eval Summary
-23 4:32p 🔵 Lever 2.1 Tiebreak: Residual Abstention Is Bottleneck, Not A/B Discrimination
-24 " ✅ Lever 2.1 Tiebreak Analysis Section Added to Dynamic Eval Summary
-25 5:10p ✅ Lever 2.1 Tiebreak Results Documented in Evidence Table
-26 " ⚖️ Next Experiment Priority: Forced Binary Tiebreak + Abstention Calibration
-27 " 🔵 Tie Generation Mechanism in Weighted Pairwise Scoring
-41 5:30p 🔵 Full per-question contribution audit reveals 69% of ties are all-zero-contribution
-42 " 🔵 Tie-causing checklist questions are high-frequency same-direction agreement questions
-43 " 🟣 Dynamic eval rerun with --save-raw-outputs flag for contribution audit
-44 " 🔵 Scoring rule sweep: top-1 decisive question is best tie-resolver but still only 57.9% effective accuracy
-29 " 🔵 70% of Tie Predictions Have Exact-Zero Margin, Not Threshold-Induced
-30 " 🔵 Sparse HelpSteer3 Rationale Structurally Incompatible With Dense Checklist Averaging
-31 " 🔵 predictions.parquet Does Not Save labels_a/labels_b By Default
-45 5:34p 🔵 question_contributions.parquet uses 'weighted_contribution' not 'contribution' column
-33 " 🔵 Margin-Level Tie Audit Completed on Remote Server
-34 " ⚖️ Rerun HR-Oracle Weighted Eval with --save-raw-outputs for Full Contribution Audit
-39 5:48p 🟣 HR-Oracle Weighted Dynamic Eval Rerun Completed with Raw Outputs Saved
-40 " 🟣 Full Per-Question Contribution Audit Script Built for Tie Decomposition
-46 6:56p 🟣 CheckEval-Guided Preference Evaluation ARA
-47 " ✅ Level 2 ARA rigor-review report produced
-S8 Research gap analysis and next-direction prioritization based on Level 2 review findings for CheckEval dynamic-evaluation ARA (Apr 30, 7:01 PM)
-48 7:17p 🔵 Discriminativeness Reranker Experiment Completed: Positive Direction, Coarse Mechanism
-49 " 🔵 Gentler Reranker Confirms Tradeoff: Less Harm But Lower Net Gain
-50 " 🔵 294 All-Zero Tie Samples: Root Cause Diagnosis Initiated
-51 7:23p 🔵 All-Zero 294 Tie Attribution Analysis Performed on Remote Server
+S13 Gated contrastive selector — full design spec written and presented for user approval before implementation (Apr 30, 10:12 PM)
+S14 Gated/conditional contrastive selector implementation for CheckEval bi-encoder checklist selector — complete wiring of contrastive_gate_threshold and contrastive_gate_topk params through run_selector_train.py (Apr 30, 10:13 PM)
+S15 Analyze ARA experiment results and identify next research steps for Checklist-Guided Fine-Tuning thesis (Apr 30, 10:37 PM)
+### May 1, 2026
+S16 Analyse current experiment results in ara/ folder and determine next steps for CheckEval-guided Preference Evaluation research (May 1, 11:09 AM)
+S17 Analyse current experiment results in ara/ folder and determine next steps for CheckEval-guided Preference Evaluation research (May 1, 11:24 AM)
+S20 Analyse current experiment results in ara/ folder and determine next steps for CheckEval-guided Preference Evaluation research (May 1, 11:25 AM)
+S19 Analyse current experiment results in ara/ folder and determine next steps for CheckEval-guided Preference Evaluation research (May 1, 11:26 AM)
+S18 Analyse current experiment results in ara/ folder and determine next steps for CheckEval-guided Preference Evaluation research (May 1, 11:26 AM)
+S21 Benchmark DeepSeek V4 Pro as judge for HR top-15 evaluation on full test split (1073 samples), then distill into 9B model (May 1, 11:26 AM)
+134 1:15p 🔵 DeepSeek V4 Pro HTTP Judge Runs: 100% Tie Rate, 0% Parse Rate
+135 " 🔵 Review App Encoding Corruption from PowerShell Set-Content
+136 " 🔵 Local Project Missing Three Key HR Oracle Input Files
+146 1:27p 🔵 DeepSeek V4 Pro 5-sample smoke test produces no output after 604s timeout
+138 " 🔵 DeepSeek V4 Pro Judge Successfully Parses with Thinking Mode Enabled
+139 " ⚖️ Judge-Ceiling Experiment: DeepSeek V4 Pro on Full 1073-Sample Test Set
+147 1:38p 🔵 DeepSeek V4 Pro smoke test succeeds with http-concurrency=100 in 131s
+152 " 🔵 DeepSeek V4 Pro smoke test succeeds — 100% parse rate, 100% accuracy on 5 samples
+144 " 🔵 DeepSeek V4 Pro smoke test times out after 604s with thinking-on
+145 " 🔵 DeepSeek V4 Pro Judge Ceiling Experiment: Serial Throughput Too Slow
+154 1:39p 🔵 Full DeepSeek V4 Pro HR-oracle experiment now feasible with concurrency=100
+148 1:41p 🔵 No observable work completed yet
+149 " 🔵 Target parquet file confirmed at 6.9MB
+156 " 🔴 Added retry logic with exponential backoff to HTTP judge requests
+158 1:42p 🔵 Retry logic recovers from transient HTTP failures but full experiment still crashes
+150 " 🔵 Parquet schema inspected: 595 rows, 42 columns
+151 " 🔵 Dataset composition: 71% ties, 20% wrong winners, 9% correct
+153 " 🔵 97.5% of weight arrays contain NaN values; 21 weight parse failures
+159 " 🔵 Primary session re-running exploration commands
+160 " 🔵 Question bank index loaded: 58 questions with dimension/sub_aspect mapping
+166 " 🟣 Comprehensive tie/error analysis script created and executed
+167 " 🔴 Critical bug: classify_failure_modes reads wrong key names for computed stats
+161 1:44p 🔵 build_oracle_labels.py has HTTP resume cache — run_dynamic_eval.py lacks it
+155 " 🔵 Full DeepSeek V4 Pro experiment crashes after initial API burst — rate limit or OOM
+162 1:45p 🔵 run_dynamic_eval.py uses fragile ex.map — build_oracle_labels.py has robust as_completed + resume cache
+157 " ✅ No new primary session activity to record
+163 " 🟣 Port HTTP resume cache from build_oracle_labels.py to run_dynamic_eval.py
+176 1:48p 🟣 HTTP resume cache added to run_dynamic_eval.py
+177 " 🔵 DeepSeek V4 Pro concurrency=100 hits 429 rate limit after ~53s
+178 " 🔵 Cache writes survive process exit in detached process but not foreground
+164 1:50p 🟣 HTTP Resume Cache Added to run_dynamic_eval.py
+165 " ✅ _http_judge_generate Signature Updated with as_completed and Lock
+171 1:54p 🔴 All 10 failure modes firing after _calc_ prefix bug fixes
+179 1:57p 🔵 Background DeepSeek experiment at 591/2146 (27%) after 6.5 minutes
+168 " 🔵 HTTP Resume Cache Not Writing Despite Successful DeepSeek API Responses
+169 " 🔵 DeepSeek V4 Pro Thinking Latency: 3s to 56s Per Request at Concurrency=100
+170 " ✅ DeepSeek Judge Run Relaunched as Hidden Background Process via Start-Process
+180 1:58p 🔵 DeepSeek experiment at 1279/2146 (60%) after 15 minutes
+172 2:00p 🔵 Zero annotator sign-disagreement across all 595 samples
+173 " 🟣 All 9 failure mode case files and 9 analysis tables generated
+174 " 🔵 FM1 case confirmed: all-yes-yes with 0.000 nonzero rate masks clear annotator preference
+175 2:02p 🔵 Even task-specific questions show poor discrimination (lowest nonzero rates)
+S22 Bug fix verification and output validation for HR-oracle tie/error analysis script (May 1, 2:02 PM)
+181 2:04p 🔵 DeepSeek V4 Pro HR evaluation at 93% completion under sustained rate limiting
+185 2:11p 🔵 DeepSeek V4 Pro HR top-15 evaluation completed — accuracy 0.805 vs Qwen3.5-9B baseline 0.816
+187 2:18p 🔵 DeepSeek V4 Pro vs Qwen3.5-9B cross-comparison — DS rescues 229, regresses 134, net +95
+188 2:23p ✅ HR oracle baseline matched test split exported for reuse
+182 " 🔵 DeepSeek V4 Pro Judge Ceiling: Tie Rate Down, Valid Accuracy Slightly Down
+183 " 🟣 HTTP Resume Cache Proven: 2146/2146 Prompts Survived 429 Rate Limits
+184 " 🔵 DeepSeek V4 Pro Latency: ~1.3s Median at Concurrency=100, $0.75/1K Samples Estimated
+186 2:24p ✅ Baseline predictions downloaded from remote server for DeepSeek cross-comparison
 
-Access 1166k tokens of past work via get_observations([IDs]) or mem-search skill.
+Access 490k tokens of past work via get_observations([IDs]) or mem-search skill.
 </claude-mem-context>

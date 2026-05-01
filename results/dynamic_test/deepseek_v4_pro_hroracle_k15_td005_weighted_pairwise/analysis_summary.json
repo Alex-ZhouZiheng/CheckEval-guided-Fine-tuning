@@ -1,0 +1,25 @@
+{
+  "baseline": {
+    "n_total": 1073,
+    "n_valid": 648,
+    "n_tie": 425,
+    "valid_accuracy": 0.816358024691358,
+    "effective_accuracy": 0.4930102516309413,
+    "tie_rate": 0.3960857409133271
+  },
+  "deepseek": {
+    "n_total": 1098,
+    "n_valid": 789,
+    "n_tie": 309,
+    "valid_accuracy": 0.8048162230671736,
+    "effective_accuracy": 0.5783242258652095,
+    "tie_rate": 0.2814207650273224,
+    "parse_ok_rate": 0.9735883424408015
+  },
+  "movement": {
+    "rescued_from_base_wrong_or_tie": 229,
+    "regressed_from_base_correct": 134,
+    "base_ties_resolved_correct_by_deepseek": 187,
+    "base_ties_remaining_tie_by_deepseek": 176
+  }
+}

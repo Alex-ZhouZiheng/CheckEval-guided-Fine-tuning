@@ -1,0 +1,26 @@
+{
+  "baseline_qwen9b": {
+    "n_total": 1073,
+    "n_valid": 648,
+    "n_tie": 425,
+    "valid_accuracy": 0.816358024691358,
+    "effective_accuracy": 0.4930102516309413,
+    "tie_rate": 0.3960857409133271,
+    "parse_ok_rate": 0.9953401677539608
+  },
+  "deepseek_v4_pro": {
+    "n_total": 1073,
+    "n_valid": 769,
+    "n_tie": 304,
+    "valid_accuracy": 0.8049414824447334,
+    "effective_accuracy": 0.5768872320596459,
+    "tie_rate": 0.2833178005591799,
+    "parse_ok_rate": 0.972972972972973
+  },
+  "movement": {
+    "rescued_from_base_wrong_or_tie": 221,
+    "regressed_from_base_correct": 131,
+    "base_ties_resolved_correct_by_deepseek": 183,
+    "base_ties_remaining_tie_by_deepseek": 176
+  }
+}
