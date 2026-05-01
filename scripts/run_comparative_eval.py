@@ -64,10 +64,12 @@ def parse_args():
 # ── Question loading ──
 
 
-def load_generated_questions():
+def load_generated_questions(split):
     """Load per-sample generated checklists from data/generated_checklists/."""
     gen_dir = BASE_DIR / "data" / "generated_checklists"
-    parquets = sorted(gen_dir.glob("*.parquet"))
+    parquets = sorted(gen_dir.glob(f"{split}*.parquet"))
+    if not parquets:
+        parquets = sorted(gen_dir.glob("*.parquet"))
     if not parquets:
         print("Error: No generated checklist parquet found in", gen_dir)
         print("Regenerate via run_generator_infer.py or copy from server.")
@@ -262,7 +264,7 @@ def compute_metrics(df):
 
 def evaluate_generated(args, judge):
     """Evaluate on per-sample generated checklists."""
-    gen_df = load_generated_questions()
+    gen_df = load_generated_questions(args.split)
     cache = load_comparative_cache()
 
     split_df = load_generated_eval_rows(args.split)
