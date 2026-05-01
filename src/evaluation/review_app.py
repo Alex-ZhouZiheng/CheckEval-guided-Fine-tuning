@@ -7,6 +7,7 @@ Launch:
 """
 
 import argparse
+import ast
 import json
 import sys
 from pathlib import Path
@@ -65,15 +66,44 @@ def _cached_question_meta_by_qid() -> dict:
 def load_data(path: Path, mtime: float) -> pd.DataFrame:  # mtime busts cache on file change
     df = pd.read_parquet(path)
     # ensure list columns are lists not strings
-    for col in ("na_qnums_a", "na_qnums_b", "selected_qids", "asked_qids"):
+    list_cols = (
+        "na_qnums_a",
+        "na_qnums_b",
+        "selected_qids",
+        "asked_qids",
+        "selected_question_weights",
+        "selected_question_importance_raw",
+    )
+    for col in list_cols:
         if col in df.columns and df[col].dtype == object:
             if col in {"selected_qids", "asked_qids"}:
                 df[col] = df[col].apply(_parse_qid_list)
+            elif col in {"selected_question_weights", "selected_question_importance_raw"}:
+                df[col] = df[col].apply(_parse_float_list)
             else:
                 df[col] = df[col].apply(
                     lambda x: json.loads(x) if isinstance(x, str) else x
                 )
     return df
+
+
+def _parse_float_list(value) -> list[float]:
+    if value is None:
+        return []
+    if isinstance(value, float) and pd.isna(value):
+        return []
+    if isinstance(value, list):
+        return [float(x) for x in value if x is not None]
+    if isinstance(value, tuple):
+        return [float(x) for x in value if x is not None]
+    if hasattr(value, "tolist"):
+        return _parse_float_list(value.tolist())
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return []
+        return _parse_float_list(ast.literal_eval(text))
+    return []
 
 
 results_path = _parse_args()
@@ -119,6 +149,10 @@ with st.sidebar:
     show_raw = st.checkbox("Show raw model output", value=True)
     show_parsed = st.checkbox("Show parsed answers", value=True)
     show_selector = st.checkbox("Show selector questions", value=True)
+    show_weights = st.checkbox(
+        "Show question weights",
+        value="selected_question_weights" in df.columns,
+    )
     show_diff = st.checkbox("Show differing questions", value=True)
     show_human = st.checkbox("Show human reasoning", value=True)
 
@@ -296,6 +330,9 @@ for i, (_, row) in enumerate(view.iterrows()):
             parsed_b_for_selector = json.loads(row["parsed_b_json"]) if "parsed_b_json" in row else {}
             ans_a_map = _answer_map(parsed_a_for_selector)
             ans_b_map = _answer_map(parsed_b_for_selector)
+            q_weights = _parse_float_list(row.get("selected_question_weights"))
+            q_raw_weights = _parse_float_list(row.get("selected_question_importance_raw"))
+            has_weights = show_weights and bool(q_weights)
 
             if not asked_qids:
                 st.info("No selector qids saved for this example.")
@@ -316,29 +353,44 @@ for i, (_, row) in enumerate(view.iterrows()):
                         bad_for_winner = ans_b.lower() == "no" and ans_a.lower() in ("yes", "n/a")
                     stage = "initial" if int(global_qid) in selected_set or not selected_set else "added"
                     flag = "bad_for_winner" if bad_for_winner else ("diff" if differs else "")
-                    table_rows.append(
-                        "| "
-                        + " | ".join(
+                    cells = [
+                        str(local_q),
+                        str(global_qid),
+                        stage,
+                        q_text.replace("|", "\\|"),
+                        str(ans_a),
+                        str(ans_b),
+                    ]
+                    if has_weights:
+                        weight = q_weights[local_q - 1] if local_q <= len(q_weights) else None
+                        raw_weight = q_raw_weights[local_q - 1] if local_q <= len(q_raw_weights) else None
+                        cells.extend(
                             [
-                                str(local_q),
-                                str(global_qid),
-                                stage,
-                                q_text.replace("|", "\\|"),
-                                str(ans_a),
-                                str(ans_b),
-                                dim.replace("|", "\\|"),
-                                sub.replace("|", "\\|"),
-                                flag,
+                                f"{weight:.4f}" if weight is not None else "",
+                                f"{raw_weight:.2f}" if raw_weight is not None else "",
                             ]
                         )
+                    cells.extend(
+                        [
+                            dim.replace("|", "\\|"),
+                            sub.replace("|", "\\|"),
+                            flag,
+                        ]
+                    )
+                    table_rows.append(
+                        "| "
+                        + " | ".join(cells)
                         + " |"
                     )
 
-                table = (
-                    "| Local Q | Global qid | Stage | Question | A | B | Dimension | Sub-aspect | Flag |\n"
-                    "|---:|---:|---|---|---|---|---|---|---|\n"
-                    + "\n".join(table_rows)
-                )
+                header = "| Local Q | Global qid | Stage | Question | A | B |"
+                align = "|---:|---:|---|---|---|---|"
+                if has_weights:
+                    header += " Weight | Raw importance |"
+                    align += "---:|---:|"
+                header += " Dimension | Sub-aspect | Flag |"
+                align += "---|---|---|"
+                table = header + "\n" + align + "\n" + "\n".join(table_rows)
                 st.markdown(table)
 
         # ── differing questions ──
@@ -352,6 +404,10 @@ for i, (_, row) in enumerate(view.iterrows()):
                 st.info("No differing answers between A and B.")
             else:
                 q_texts = _extract_questions(str(row.get("prompt_a", "")))
+                asked_qids_for_diff = _parse_qid_list(row.get("asked_qids"))
+                q_weights_for_diff = _parse_float_list(row.get("selected_question_weights"))
+                q_raw_for_diff = _parse_float_list(row.get("selected_question_importance_raw"))
+                has_diff_weights = show_weights and bool(q_weights_for_diff)
                 table_rows = []
                 n_flagged = 0
                 for q, ans_a, ans_b in diffs:
@@ -364,19 +420,46 @@ for i, (_, row) in enumerate(view.iterrows()):
                     if flagged:
                         n_flagged += 1
                     flag = "⚠️" if flagged else ""
-                    table_rows.append(
-                        f"| {flag} | Q{q} | {q_text} | {ans_a} | {ans_b} | {dim} | {sub} |"
-                    )
+                    cells = [flag, f"Q{q}", q_text.replace("|", "\\|"), ans_a, ans_b]
+                    if has_diff_weights:
+                        local_idx = q - 1
+                        global_qid = (
+                            asked_qids_for_diff[local_idx]
+                            if 0 <= local_idx < len(asked_qids_for_diff)
+                            else ""
+                        )
+                        weight = (
+                            q_weights_for_diff[local_idx]
+                            if 0 <= local_idx < len(q_weights_for_diff)
+                            else None
+                        )
+                        raw_weight = (
+                            q_raw_for_diff[local_idx]
+                            if 0 <= local_idx < len(q_raw_for_diff)
+                            else None
+                        )
+                        cells.extend(
+                            [
+                                str(global_qid),
+                                f"{weight:.4f}" if weight is not None else "",
+                                f"{raw_weight:.2f}" if raw_weight is not None else "",
+                            ]
+                        )
+                    cells.extend([dim.replace("|", "\\|"), sub.replace("|", "\\|")])
+                    table_rows.append("| " + " | ".join(cells) + " |")
                 st.markdown(
                     f"**Differing Questions ({len(diffs)}"
                     + (f", ⚠️ {n_flagged} bad for winner" if n_flagged else "")
                     + ")**"
                 )
-                table = (
-                    "| | Q# | Question | A | B | Domain | Sub-aspect |\n"
-                    "|---|-----|----------|---|---|--------|------------|\n"
-                    + "\n".join(table_rows)
-                )
+                header = "| | Q# | Question | A | B |"
+                align = "|---|-----|----------|---|---|"
+                if has_diff_weights:
+                    header += " Global qid | Weight | Raw importance |"
+                    align += "---:|---:|---:|"
+                header += " Domain | Sub-aspect |"
+                align += "--------|------------|"
+                table = header + "\n" + align + "\n" + "\n".join(table_rows)
                 st.markdown(table)
 
         # ── human reasoning ──

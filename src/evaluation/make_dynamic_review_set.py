@@ -34,6 +34,8 @@ log = logging.getLogger(__name__)
 def _parse_list(value: Any) -> list[int]:
     if value is None:
         return []
+    if isinstance(value, float) and pd.isna(value):
+        return []
     if isinstance(value, list):
         return [int(x) for x in value]
     if isinstance(value, tuple):
@@ -46,6 +48,25 @@ def _parse_list(value: Any) -> list[int]:
             return []
         return _parse_list(ast.literal_eval(text))
     raise TypeError(f"Unsupported qid list value: {type(value).__name__}")
+
+
+def _parse_float_list(value: Any) -> list[float]:
+    if value is None:
+        return []
+    if isinstance(value, float) and pd.isna(value):
+        return []
+    if isinstance(value, list):
+        return [float(x) for x in value]
+    if isinstance(value, tuple):
+        return [float(x) for x in value]
+    if hasattr(value, "tolist"):
+        return [float(x) for x in value.tolist()]
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return []
+        return _parse_float_list(ast.literal_eval(text))
+    raise TypeError(f"Unsupported weight list value: {type(value).__name__}")
 
 
 def _load_qmeta(bank_dir: Path) -> dict[int, dict[str, str]]:
@@ -121,6 +142,55 @@ def _attach_source_fields(
         split,
         subset,
         input_path,
+    )
+    return out
+
+
+def _attach_question_weights(
+    df: pd.DataFrame,
+    weights_path: Path | None,
+    weight_column: str,
+) -> pd.DataFrame:
+    if weights_path is None:
+        return df
+    if not weights_path.exists():
+        raise FileNotFoundError(weights_path)
+
+    wdf = pd.read_parquet(weights_path)
+    required = {"sample_id", "selected_qids", weight_column}
+    missing = required - set(wdf.columns)
+    if missing:
+        raise ValueError(f"{weights_path} missing columns: {sorted(missing)}")
+
+    keep_cols = ["sample_id", "selected_qids", weight_column]
+    if "importance_raw" in wdf.columns and "importance_raw" != weight_column:
+        keep_cols.append("importance_raw")
+    if "parse_ok" in wdf.columns:
+        keep_cols.append("parse_ok")
+    if "n_missing_qids" in wdf.columns:
+        keep_cols.append("n_missing_qids")
+
+    weights = wdf[keep_cols].drop_duplicates(subset=["sample_id"], keep="first").copy()
+    rename = {
+        "selected_qids": "weight_qids",
+        weight_column: "question_weights",
+    }
+    if "importance_raw" in weights.columns:
+        rename["importance_raw"] = "question_importance_raw"
+    if "parse_ok" in weights.columns:
+        rename["parse_ok"] = "weight_parse_ok"
+    if "n_missing_qids" in weights.columns:
+        rename["n_missing_qids"] = "weight_n_missing_qids"
+    weights = weights.rename(columns=rename)
+
+    out = df.merge(weights, on="sample_id", how="left", validate="many_to_one")
+    matched = int(out["question_weights"].notna().sum())
+    log.info(
+        "Attached question weights: %d/%d rows from %s using %s",
+        matched,
+        len(out),
+        weights_path,
+        weight_column,
     )
     return out
 
@@ -351,6 +421,18 @@ def _make_review_row(
     prompt_a = build_pointwise_prompt_from_qids(row=row, qids=qids, qmeta=qmeta, side="A")
     prompt_b = build_pointwise_prompt_from_qids(row=row, qids=qids, qmeta=qmeta, side="B")
 
+    weight_qids = _parse_list(row.get("weight_qids")) if "weight_qids" in row else []
+    weight_vals = _parse_float_list(row.get("question_weights")) if "question_weights" in row else []
+    weight_raw_vals = (
+        _parse_float_list(row.get("question_importance_raw"))
+        if "question_importance_raw" in row
+        else []
+    )
+    weight_by_qid = dict(zip(weight_qids, weight_vals))
+    raw_weight_by_qid = dict(zip(weight_qids, weight_raw_vals))
+    selected_weights = [weight_by_qid.get(q) for q in qids]
+    selected_raw_weights = [raw_weight_by_qid.get(q) for q in qids] if raw_weight_by_qid else []
+
     return {
         "sample_id": row.get("sample_id"),
         "prompt_id": row.get("prompt_id"),
@@ -376,6 +458,10 @@ def _make_review_row(
         "expected_n_questions": len(qids),
         "selected_qids": _parse_list(row.get("selected_qids")) if "selected_qids" in row else qids,
         "asked_qids": qids,
+        "selected_question_weights": selected_weights,
+        "selected_question_importance_raw": selected_raw_weights,
+        "weight_parse_ok": row.get("weight_parse_ok"),
+        "weight_n_missing_qids": row.get("weight_n_missing_qids"),
         "k_selected": row.get("k_selected"),
         "k_after_escalation": row.get("k_after_escalation"),
         "escalated": row.get("escalated"),
@@ -397,6 +483,18 @@ def main() -> None:
     parser.add_argument("--predictions", type=Path, required=True)
     parser.add_argument("--bank", type=Path, required=True)
     parser.add_argument("--out", type=Path, required=True)
+    parser.add_argument(
+        "--question-weights",
+        type=Path,
+        default=None,
+        help="Optional parquet from build_question_importance_weights.py.",
+    )
+    parser.add_argument(
+        "--weight-column",
+        type=str,
+        default="importance_softmax",
+        help="Weight list column to show in review_app.",
+    )
     parser.add_argument("--split", type=str, default="dev_600")
     parser.add_argument("--subset", type=str, default=None)
     parser.add_argument("--input-path", type=Path, default=None)
@@ -433,6 +531,11 @@ def main() -> None:
         raise FileNotFoundError(pred_path)
 
     df = pd.read_parquet(pred_path)
+    df = _attach_question_weights(
+        df,
+        weights_path=args.question_weights.resolve() if args.question_weights else None,
+        weight_column=args.weight_column,
+    )
     df = _attach_source_fields(
         df,
         split=args.split,
@@ -506,6 +609,8 @@ def main() -> None:
         "split": args.split,
         "subset": args.subset,
         "input_path": str(args.input_path) if args.input_path else None,
+        "question_weights": str(args.question_weights.resolve()) if args.question_weights else None,
+        "weight_column": args.weight_column,
         "n_rows": len(review),
         "n_wrong": int((review["error_category"] == "wrong_winner").sum()) if len(review) else 0,
         "n_tie": int((review["error_category"] == "tie").sum()) if len(review) else 0,
