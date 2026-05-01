@@ -96,7 +96,7 @@ def parse_generated_questions(text):
         line = line.strip()
         if line.startswith("- "):
             q = line[2:].strip()
-            if q:
+            if q and q.upper() not in {"NA", "N/A"}:
                 questions.append(q)
     return questions
 
