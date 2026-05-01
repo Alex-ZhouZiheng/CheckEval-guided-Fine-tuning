@@ -119,6 +119,9 @@ def main() -> None:
                         help="Training tier (e.g. tier_10k). Overrides --split.")
     parser.add_argument("--output-path", type=str, default=None,
                         help="Output parquet (default: data/generated_checklists/<split>.parquet)")
+    parser.add_argument("--comparative", action="store_true",
+                        help="Use comparative prompt template ('Which response better...') "
+                             "instead of pointwise ('Does the response...').")
     parser.add_argument("--batch-size", type=int, default=16)
     parser.add_argument("--max-new-tokens", type=int, default=1024)
     parser.add_argument("--max-samples", type=int, default=None)
@@ -151,6 +154,8 @@ def main() -> None:
     split_tag = args.subset or args.split
     model_tag = adapter_path.name if adapter_path else Path(args.base_model).name
     default_fname = f"{split_tag}_{model_tag}.parquet" if adapter_path else f"{split_tag}_base_{model_tag}.parquet"
+    if args.comparative:
+        default_fname = default_fname.replace(".parquet", "_comparative.parquet")
     output_path = (
         Path(args.output_path)
         if args.output_path
@@ -178,7 +183,7 @@ def main() -> None:
         lora_int_id=1,
     )
 
-    all_messages = [build_generator_messages(r) for _, r in df.iterrows()]
+    all_messages = [build_generator_messages(r, comparative=args.comparative) for _, r in df.iterrows()]
 
     t0 = time.time()
     raw_outputs = generate_batch(

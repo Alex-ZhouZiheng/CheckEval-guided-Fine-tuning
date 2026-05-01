@@ -557,6 +557,63 @@ Following the specified Answer Format.
 Think silently, then output ONLY the final answer lines.
 """
 
+CHECKEVAL_COMPARATIVE_PROMPT = """<Task Overview>
+You will be given a conversation between a user and an assistant, followed by
+two candidate responses (Response A and Response B). For each quality criterion
+below, decide which response better satisfies that criterion. Answer 'A', 'B',
+or 'Tie' for each question.
+
+<Instructions>
+1. Read the conversation history and both responses carefully.
+2. For each question, compare the two responses on that specific criterion.
+3. Answer 'A' if Response A is better on this criterion.
+4. Answer 'B' if Response B is better on this criterion.
+5. Answer 'Tie' if both are equally good (or equally bad) on this criterion.
+6. Do not provide explanations, rationale, notes, or extra text.
+7. Output only the answer lines.
+
+<Answer Format>
+Q1: A
+Q2: Tie
+Q3: B
+...
+
+# Conversation History #
+{context}
+
+# Response A #
+{response_a}
+
+# Response B #
+{response_b}
+
+# Questions #
+{checklist_text}
+
+# Your Answer #"""
+
+
+def build_comparative_prompt(context, response_a, response_b, questions):
+    """Build comparative prompt from conversation + both responses + comparative questions.
+
+    Args:
+        context: Conversation history string.
+        response_a: Response A text.
+        response_b: Response B text.
+        questions: List of strings, each a comparative-format question.
+
+    Returns:
+        Formatted prompt string with numbered questions (Q1, Q2, ...).
+    """
+    checklist_lines = [f"Q{i+1}: {q}" for i, q in enumerate(questions)]
+    checklist_text = "\n".join(checklist_lines)
+    return CHECKEVAL_COMPARATIVE_PROMPT.format(
+        context=context.strip(),
+        response_a=response_a.strip(),
+        response_b=response_b.strip(),
+        checklist_text=checklist_text,
+    )
+
 
 def load_checklists(checklists_dir: Path = cfg.CHECKLISTS_DIR) -> dict[str, list[str]]:
     """Load filtered checklist questions from YAML files.
@@ -894,6 +951,45 @@ def expected_question_count(domain: str, checklists: dict[str, list[str]]) -> in
         if dim_name in allowed or dim_name.lower() in allowed_lower:
             total += len(questions)
     return total
+
+_AB_TIE_RE = re.compile(r"Q(\d+):\s*(A|B|Tie)", re.IGNORECASE)
+
+
+def parse_comparative_output(raw_text, n_expected):
+    """Parse comparative judge output into per-question A/B/Tie answers.
+
+    Args:
+        raw_text: Judge output string.
+        n_expected: Number of questions expected.
+
+    Returns:
+        dict[int, str] mapping qnum (1-indexed) to answer label ("A", "B", or "Tie").
+        Only includes successfully parsed answers.
+    """
+    answers = {}
+    for match in _AB_TIE_RE.finditer(raw_text):
+        qnum = int(match.group(1))
+        label = match.group(2)
+        if label.upper() == "TIE":
+            label = "Tie"
+        answers[qnum] = label
+    return answers
+
+
+def comparative_parse_ok(parsed, n_expected):
+    """Check if parse rate meets 80% threshold.
+
+    Args:
+        parsed: dict from parse_comparative_output.
+        n_expected: Number of questions expected.
+
+    Returns:
+        True if >= 80% of expected questions have valid labels.
+    """
+    if n_expected == 0:
+        return False
+    return len(parsed) / n_expected >= 0.8
+
 
 def build_question_index(
     checklists: dict[str, list[str]],
