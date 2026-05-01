@@ -146,8 +146,8 @@ with st.sidebar:
     domain_filter = st.selectbox("Domain", domain_options)
 
     show_prompt = st.checkbox("Show full prompts", value=False)
-    show_raw = st.checkbox("Show raw model output", value=True)
-    show_parsed = st.checkbox("Show parsed answers", value=True)
+    show_raw = st.checkbox("Show raw model output", value=False)
+    show_parsed = st.checkbox("Show parsed answers", value=False)
     show_selector = st.checkbox("Show selector questions", value=True)
     show_weights = st.checkbox(
         "Show question weights",
@@ -166,7 +166,32 @@ elif split_filter == "Correct predictions":
 if domain_filter != "All":
     view = view[view["domain"] == domain_filter]
 
-st.markdown(f"### Showing **{len(view)}** examples")
+total_view_rows = len(view)
+with st.sidebar:
+    page_size = st.number_input(
+        "Page size",
+        min_value=1,
+        max_value=50,
+        value=10,
+        step=1,
+        help="Use 1-5 for the smoothest manual review.",
+    )
+    n_pages = max(1, (total_view_rows + int(page_size) - 1) // int(page_size))
+    page = st.number_input(
+        "Page",
+        min_value=1,
+        max_value=n_pages,
+        value=1,
+        step=1,
+    )
+
+page_start = (int(page) - 1) * int(page_size)
+page_end = page_start + int(page_size)
+view = view.iloc[page_start:page_end]
+st.markdown(
+    f"### Showing **{len(view)}** examples "
+    f"({page_start + 1}-{min(page_end, total_view_rows)} of **{total_view_rows}**)"
+)
 
 if len(view) == 0:
     st.info("No examples match the current filter.")
