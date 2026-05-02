@@ -517,6 +517,8 @@ def main() -> None:
     parser.add_argument("--split", type=str, default="train", help="Split name under data/splits")
     parser.add_argument("--tier", type=str, default=None, help="Optional train tier, e.g. tier_10k")
     parser.add_argument("--input-path", type=Path, default=None, help="Optional explicit parquet input")
+    parser.add_argument("--qid-subset", type=Path, default=None,
+        help="Optional parquet with column 'qid'. Restrict per-sample question set to intersection of domain-active qids and this list.")
     parser.add_argument("--out", type=Path, required=True, help="Per-question oracle parquet output")
     parser.add_argument(
         "--sample-out",
@@ -656,6 +658,12 @@ def main() -> None:
     bank_df = _load_bank_index(bank_dir)
     definitions = _load_dimension_definitions(bank_dir)
 
+    qid_filter: set[int] | None = None
+    if args.qid_subset is not None:
+        sub = pd.read_parquet(args.qid_subset)
+        qid_filter = set(sub["qid"].astype(int).tolist())
+        log.info("Restricting to %d qids from --qid-subset (%s)", len(qid_filter), args.qid_subset)
+
     pairs = _load_pairs(
         split=args.split,
         tier=args.tier,
@@ -672,6 +680,10 @@ def main() -> None:
 
     for _, row in pairs.iterrows():
         active_qids = _active_qids_for_domain(bank_df, row["domain"])
+        if qid_filter is not None:
+            active_qids = [q for q in active_qids if q in qid_filter]
+            if not active_qids:
+                continue
         qrows = bank_df[bank_df["qid"].isin(active_qids)].sort_values("qid", kind="stable")
         n_q = len(qrows)
         if n_q == 0:

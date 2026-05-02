@@ -1,0 +1,99 @@
+definition: The response communicates its content clearly and in the requested style, with enough structure, tone control,
+  and artifact-specific presentation for the user to understand and use the answer. v5 adds discriminative creative/script,
+  persona-continuity, and style-preservation questions because many pairwise failures were caused by two broadly adequate
+  answers differing only in scene structure, voice, dialogue quality, or specificity.
+dimension: clarity_and_communication
+sub_aspects:
+  Coherence:
+    filtered_questions:
+    - Can the response be read from start to finish without encountering statements that contradict each other, sections that
+      seem out of place, or transitions that break the logical flow?
+    original_count: 8
+    removed_count: 7
+    seed_question: Can the response be read from start to finish without encountering statements that contradict each other,
+      sections that seem out of place, or transitions that break the logical flow?
+  Explanation Sufficiency:
+    filtered_questions:
+    - Does the response provide enough explanation for the user to act on the answer without leaving important points implicit?
+    - Does the response present enough detail to be useful without overexplaining straightforward points?
+    original_count: 6
+    removed_count: 4
+    seed_question: Does the response provide enough explanation for the user to act on the answer without leaving important
+      points implicit?
+  Information Efficiency:
+    filtered_questions:
+    - Does the response convey its content without unnecessary repetition, filler, or tangential material that dilutes the
+      useful information?
+    - Does the response stay focused on the user's request rather than spending space on loosely related background or side
+      points?
+    original_count: 7
+    removed_count: 5
+    seed_question: Does the response convey its content without unnecessary repetition, filler, or tangential material that
+      dilutes the useful information?
+  Structural Effectiveness:
+    filtered_questions:
+    - If the response contains three or more distinct steps, sections, or items, are they delineated through headings, numbering,
+      or spacing in a way that genuinely aids navigation rather than fragmenting otherwise simple content?
+    - If the response is longer than roughly 200 words, does its structure aid comprehension, rather than imposing bullets
+      or headings on content that would read more naturally as prose?
+    original_count: 7
+    removed_count: 5
+    seed_question: If the response contains three or more distinct steps, sections, or items, are they delineated through
+      headings, numbering, or spacing in a way that genuinely aids navigation rather than fragmenting otherwise simple content?
+  Tone and Register Match:
+    filtered_questions:
+    - Does the response match the tone, style, and register established by the prompt or prior turns, including formality
+      level, technical depth, and conversational stance?
+    - If the prompt is creative writing, role-play, or persona continuation, does the response sustain the established voice,
+      perspective, and narrative continuity rather than breaking character into generic explanatory mode?
+    - If the prompt asks for a specific authorial, genre, or character style, does the response imitate that style without
+      explicitly restating or exposing the style instructions?
+    - Does the response avoid abrupt shifts in voice, tense, format, or narration that make it feel disconnected from the
+      prompt or prior context?
+    original_count: 4
+    removed_count: 0
+    seed_question: Does the response match the tone, style, and register established by the prompt or prior turns, including
+      formality level, technical depth, and conversational stance?
+  Creative Scene and Dialogue Quality:
+    filtered_questions:
+    - If the user asks for a script, scene, role-play, or dialogue, does the response use a scene-like structure with character
+      turns, actions, and setting details rather than only summarizing events?
+    - If the user asks for a creative continuation, does the response develop the scene through concrete actions, reactions,
+      or events rather than only exposition or introductions?
+    - Does the response give the requested characters meaningful participation in the scene rather than merely naming them
+      or giving them brief generic lines?
+    - Does the response balance dialogue with stage directions, actions, or situational details in a way appropriate for the
+      requested script or scene?
+    - Does the response preserve the interaction style implied by the prompt, such as dialogue-only continuation, screenplay
+      format, log format, or prose narration?
+    - Does the response avoid turning a requested creative artifact into meta-commentary, planning notes, or a high-level
+      episode summary?
+    original_count: 6
+    removed_count: 0
+    seed_question: If the user asks for a script, scene, role-play, or dialogue, does the response use a scene-like structure
+      with character turns, actions, and setting details rather than only summarizing events?
+  Specificity and Vividness:
+    filtered_questions:
+    - Does the response include concrete details that make the answer specific to the user request rather than relying on
+      vague generic wording?
+    - When the task is creative or descriptive, does the response use specific imagery, actions, or scenario details that
+      add substance without drifting away from the prompt?
+    - When the task is explanatory or advisory, does the response use specific examples, distinctions, or details that clarify
+      the answer rather than adding filler?
+    original_count: 3
+    removed_count: 0
+    seed_question: Does the response include concrete details that make the answer specific to the user request rather than
+      relying on vague generic wording?
+  Conciseness and Detail Calibration:
+    filtered_questions:
+    - If the user requests a concise answer, does the response avoid unnecessary elaboration beyond the requested scope?
+    - If the task requires completeness, does the response include necessary detail without padding the answer with generic
+      or repetitive content?
+    - Does the response provide more detail only where it improves usefulness rather than adding side explanations that dilute
+      the answer?
+    - Does the response avoid being so brief that it omits required constraints, examples, reasoning, or context needed for
+      the task?
+    original_count: 4
+    removed_count: 0
+    seed_question: If the user requests a concise answer, does the response avoid unnecessary elaboration beyond the requested
+      scope?
