@@ -5,6 +5,7 @@ SFT the checklist-conditioned judge with LoRA on (instruction+responses+checklis
 Usage:
     python run_judge_sft.py --tier debug_5k --no-wandb
     python run_judge_sft.py --tier tier_10k --lr 1e-5 --epochs 1
+    python run_judge_sft.py --sft-path data/judge_sft/train_tier_10k_selfcheck.parquet
 """
 from __future__ import annotations
 import os as _os, sys as _sys
@@ -105,12 +106,19 @@ class _AssistantOnlyCollator:
         return {"input_ids": batch_ids, "attention_mask": batch_attn, "labels": batch_labels}
 
 
-def load_sft_dataset(tier: str) -> Dataset:
-    path = cfg.JUDGE_SFT_DIR / f"train_{tier}.parquet"
-    if not path.exists():
-        raise FileNotFoundError(
-            f"{path} not found. Run prepare_judge_sft.py --tier {tier} first."
-        )
+def load_sft_dataset(tier: str, sft_path: str | None = None) -> Dataset:
+    if sft_path is not None:
+        path = Path(sft_path)
+        if not path.exists():
+            raise FileNotFoundError(
+                f"{path} not found. Check --sft-path argument."
+            )
+    else:
+        path = cfg.JUDGE_SFT_DIR / f"train_{tier}.parquet"
+        if not path.exists():
+            raise FileNotFoundError(
+                f"{path} not found. Run prepare_judge_sft.py --tier {tier} first."
+            )
     df = pd.read_parquet(path)
     log.info("Loaded %d judge SFT rows from %s", len(df), path)
 
@@ -180,6 +188,9 @@ def load_base(model_id: str, qlora: bool = False):
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--tier", type=str, default="debug_5k")
+    parser.add_argument("--sft-path", type=str, default=None,
+                        help="When set, load SFT data from this parquet path instead of the "
+                             "tier-based path (--tier is still used for the run name).")
     parser.add_argument("--model-id", type=str, default=str(cfg.JUDGE_MODEL_ID))
     parser.add_argument("--lr", type=float, default=1e-5)
     parser.add_argument("--epochs", type=int, default=1)
@@ -210,7 +221,7 @@ def main() -> None:
     if use_tb:
         os.environ["TENSORBOARD_LOGGING_DIR"] = str(cfg.TENSORBOARD_DIR / run_name)
 
-    train_ds = load_sft_dataset(args.tier)
+    train_ds = load_sft_dataset(args.tier, args.sft_path)
     model, tokenizer = load_base(args.model_id, qlora=args.qlora)
     lora_config = build_lora_config(args.lora_rank, args.lora_alpha, args.lora_dropout)
     data_collator = _AssistantOnlyCollator(tokenizer)
@@ -274,6 +285,7 @@ def main() -> None:
 
     meta = {
         "tier": args.tier,
+        "sft_path": args.sft_path,
         "model_id": args.model_id,
         "lora_rank": args.lora_rank,
         "lora_alpha": args.lora_alpha,
