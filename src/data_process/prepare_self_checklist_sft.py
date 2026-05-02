@@ -358,6 +358,7 @@ def build_rows(
     n_not_matched = 0
     n_no_winner = 0
     n_winner_mismatch = 0
+    n_no_think_tags = 0
 
     for m, raw in zip(metas, raws):
         parsed = parse_self_checklist_trace(raw)
@@ -382,6 +383,11 @@ def build_rows(
             n_winner_mismatch += 1
             continue
 
+        # Drop rows missing <think> tags (student prompt asks for them)
+        if "<think>" not in raw or "</think>" not in raw:
+            n_no_think_tags += 1
+            continue
+
         messages = [{"role": "user", "content": m["student_prompt"]}]
         rows.append({
             "sample_id": m["sample_id"],
@@ -389,12 +395,8 @@ def build_rows(
             "winner": m["winner"],
             "n_questions": parsed["n_questions"],
             "n_verdicts": parsed["n_verdicts"],
-            "n_checklist_items": parsed["n_questions"],
-            "checklist_matched": parsed["checklist_matched"],
             "messages": json.dumps(messages, ensure_ascii=False),
             "target_output": raw,
-            "teacher_raw": raw,
-            "parse_error": None,
         })
 
     stats = {
@@ -403,12 +405,13 @@ def build_rows(
         "n_not_matched": n_not_matched,
         "n_no_winner": n_no_winner,
         "n_winner_mismatch": n_winner_mismatch,
+        "n_no_think_tags": n_no_think_tags,
         "n_rows_kept": len(rows),
         "teacher_inference_seconds": elapsed,
     }
     log.info(
-        "Teacher parse results: kept=%d  parse_fail=%d  not_matched=%d  no_winner=%d  mismatch=%d",
-        len(rows), n_parse_fail, n_not_matched, n_no_winner, n_winner_mismatch,
+        "Teacher parse results: kept=%d  parse_fail=%d  not_matched=%d  no_winner=%d  mismatch=%d  no_think=%d",
+        len(rows), n_parse_fail, n_not_matched, n_no_winner, n_winner_mismatch, n_no_think_tags,
     )
     return pd.DataFrame(rows), stats
 
@@ -426,6 +429,7 @@ def print_summary(df: pd.DataFrame, stats: dict, output_path: Path) -> None:
     table.add_row("Checklist/verdict mismatch", f"{stats.get('n_not_matched', 0):,}")
     table.add_row("No winner", f"{stats.get('n_no_winner', 0):,}")
     table.add_row("Winner != gold", f"{stats.get('n_winner_mismatch', 0):,}")
+    table.add_row("Missing <think> tags", f"{stats.get('n_no_think_tags', 0):,}")
 
     if len(df):
         table.add_row("Avg questions", f"{df['n_questions'].mean():.1f}")
