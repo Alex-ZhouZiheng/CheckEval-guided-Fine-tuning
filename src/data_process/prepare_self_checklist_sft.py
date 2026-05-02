@@ -193,7 +193,8 @@ def parse_self_checklist_trace(raw: str) -> dict:
         return result
 
     verdicts_block = verdicts_match.group(1)
-    for m in re.finditer(r'^Q(\d+):\s*(A|B|Tie)\s*$', verdicts_block, re.MULTILINE | re.IGNORECASE):
+    # Match verdicts with optional inline explanation e.g. "Q1: A (reasoning...)"
+    for m in re.finditer(r'^Q(\d+):\s*(A|B|Tie)\b', verdicts_block, re.MULTILINE | re.IGNORECASE):
         q_num = int(m.group(1))
         verdict = m.group(2).strip().upper()  # Normalize to uppercase
         if verdict == "TIE":
