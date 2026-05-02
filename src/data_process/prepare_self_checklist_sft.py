@@ -474,6 +474,15 @@ def main() -> None:
     parser.add_argument("--max-num-seqs", type=int, default=16)
     parser.add_argument("--cache-dir", type=str, default=None)
     parser.add_argument("--quantization", type=str, default=None)
+    parser.add_argument("--max-num-batched-tokens", type=int,
+                        default=cfg.VLLM_ENGINE_KWARGS.get("max_num_batched_tokens", 12288))
+    # MTP (Multi-Token Prediction) speculative decoding
+    parser.add_argument("--enable-mtp", action="store_true",
+                        help="Enable vLLM MTP speculative decoding.")
+    parser.add_argument("--mtp-method", type=str, default="mtp",
+                        help="vLLM speculative_config method (default: mtp).")
+    parser.add_argument("--mtp-num-speculative-tokens", type=int, default=1,
+                        help="MTP speculative depth (default: 1).")
 
     args = parser.parse_args()
 
@@ -503,8 +512,12 @@ def main() -> None:
 
     # ── load teacher ──
     quantization = args.quantization
-    log.info("Teacher: %s  (quantization=%s)",
-             args.teacher_model_id, quantization or "auto")
+    speculative_config = {
+        "method": args.mtp_method,
+        "num_speculative_tokens": args.mtp_num_speculative_tokens,
+    } if args.enable_mtp else None
+    log.info("Teacher: %s  (quantization=%s  mtp=%s)",
+             args.teacher_model_id, quantization or "auto", bool(args.enable_mtp))
 
     teacher = load_judge_model(
         model_id=args.teacher_model_id,
@@ -513,7 +526,9 @@ def main() -> None:
         max_model_len=args.max_model_len,
         gpu_memory_utilization=args.gpu_memory_utilization,
         max_num_seqs=args.max_num_seqs,
+        max_num_batched_tokens=args.max_num_batched_tokens,
         quantization=quantization,
+        speculative_config=speculative_config,
     )
 
     # ── run teacher and collect rows ──
