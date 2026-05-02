@@ -358,7 +358,8 @@ def build_rows(
     n_not_matched = 0
     n_no_winner = 0
     n_winner_mismatch = 0
-    n_no_think_tags = 0
+    n_native_think = 0
+    n_injected_think = 0
 
     for m, raw in zip(metas, raws):
         parsed = parse_self_checklist_trace(raw)
@@ -383,10 +384,19 @@ def build_rows(
             n_winner_mismatch += 1
             continue
 
-        # Drop rows missing <think> tags (student prompt asks for them)
-        if "<think>" not in raw or "</think>" not in raw:
-            n_no_think_tags += 1
-            continue
+        # Auto-inject <think> tags if model omitted them (common with NVFP4 models
+        # that jump straight to ### Checklist). Wrap everything before ### Final.
+        has_think = "<think>" in raw and "</think>" in raw
+        if has_think:
+            n_native_think += 1
+            target = raw
+        else:
+            n_injected_think += 1
+            final_pos = raw.rfind("### Final")
+            if final_pos != -1:
+                target = "<think>\n" + raw[:final_pos].rstrip() + "\n</think>\n\n" + raw[final_pos:].lstrip()
+            else:
+                target = "<think>\n" + raw + "\n</think>"
 
         messages = [{"role": "user", "content": m["student_prompt"]}]
         rows.append({
@@ -396,7 +406,7 @@ def build_rows(
             "n_questions": parsed["n_questions"],
             "n_verdicts": parsed["n_verdicts"],
             "messages": json.dumps(messages, ensure_ascii=False),
-            "target_output": raw,
+            "target_output": target,
         })
 
     stats = {
@@ -405,13 +415,14 @@ def build_rows(
         "n_not_matched": n_not_matched,
         "n_no_winner": n_no_winner,
         "n_winner_mismatch": n_winner_mismatch,
-        "n_no_think_tags": n_no_think_tags,
+        "n_native_think": n_native_think,
+        "n_injected_think": n_injected_think,
         "n_rows_kept": len(rows),
         "teacher_inference_seconds": elapsed,
     }
     log.info(
-        "Teacher parse results: kept=%d  parse_fail=%d  not_matched=%d  no_winner=%d  mismatch=%d  no_think=%d",
-        len(rows), n_parse_fail, n_not_matched, n_no_winner, n_winner_mismatch, n_no_think_tags,
+        "Teacher parse results: kept=%d  parse_fail=%d  not_matched=%d  no_winner=%d  mismatch=%d  native_think=%d  injected_think=%d",
+        len(rows), n_parse_fail, n_not_matched, n_no_winner, n_winner_mismatch, n_native_think, n_injected_think,
     )
     return pd.DataFrame(rows), stats
 
@@ -429,7 +440,8 @@ def print_summary(df: pd.DataFrame, stats: dict, output_path: Path) -> None:
     table.add_row("Checklist/verdict mismatch", f"{stats.get('n_not_matched', 0):,}")
     table.add_row("No winner", f"{stats.get('n_no_winner', 0):,}")
     table.add_row("Winner != gold", f"{stats.get('n_winner_mismatch', 0):,}")
-    table.add_row("Missing <think> tags", f"{stats.get('n_no_think_tags', 0):,}")
+    table.add_row("Native <think> tags", f"{stats.get('n_native_think', 0):,}")
+    table.add_row("Injected <think> tags", f"{stats.get('n_injected_think', 0):,}")
 
     if len(df):
         table.add_row("Avg questions", f"{df['n_questions'].mean():.1f}")
