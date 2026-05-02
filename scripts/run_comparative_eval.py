@@ -27,7 +27,7 @@ import pandas as pd
 SRC_DIR = Path(__file__).resolve().parent.parent / "src"
 sys.path.insert(0, str(SRC_DIR))
 
-from config import BASE_DIR, CHECKLISTS_DIR, COMPARATIVE_QUESTIONS_CACHE
+from config import PROJECT_ROOT as BASE_DIR, CHECKLISTS_DIR, COMPARATIVE_QUESTIONS_CACHE
 from utils import (
     load_judge_model,
     generate_batch,
@@ -55,7 +55,11 @@ def parse_args():
                         help="Judge model ID")
     parser.add_argument("--max-new-tokens", type=int, default=512)
     parser.add_argument("--batch-size", type=int, default=1,
-                        help="Not used by llamacpp backend (parallel handled server-side)")
+                        help="Number of prompts per generate_batch call")
+    parser.add_argument("--max-model-len", type=int, default=None)
+    parser.add_argument("--max-num-seqs", type=int, default=None)
+    parser.add_argument("--max-num-batched-tokens", type=int, default=None)
+    parser.add_argument("--gpu-memory-utilization", type=float, default=None)
     parser.add_argument("--limit", type=int, default=0,
                         help="Limit samples for debugging (0=all)")
     return parser.parse_args()
@@ -64,10 +68,12 @@ def parse_args():
 # ── Question loading ──
 
 
-def load_generated_questions():
+def load_generated_questions(split):
     """Load per-sample generated checklists from data/generated_checklists/."""
     gen_dir = BASE_DIR / "data" / "generated_checklists"
-    parquets = sorted(gen_dir.glob("*.parquet"))
+    parquets = sorted(gen_dir.glob(f"{split}*.parquet"))
+    if not parquets:
+        parquets = sorted(gen_dir.glob("*.parquet"))
     if not parquets:
         print("Error: No generated checklist parquet found in", gen_dir)
         print("Regenerate via run_generator_infer.py or copy from server.")
@@ -75,18 +81,55 @@ def load_generated_questions():
     path = parquets[-1]
     print(f"Loading generated questions from: {path}")
     df = pd.read_parquet(path)
-    # Expected columns: prompt_id, questions (list of str per row)
+    if "questions" not in df.columns and "generated_checklist" in df.columns:
+        df = df.copy()
+        df["questions"] = df["generated_checklist"].apply(parse_generated_questions)
     if "questions" not in df.columns:
-        print(f"Error: 'questions' column not found in {path}. Columns: {df.columns.tolist()}")
+        print(f"Error: no questions found in {path}. Columns: {df.columns.tolist()}")
+        sys.exit(1)
+    if "prompt_id" not in df.columns and "sample_id" not in df.columns:
+        print(f"Error: generated checklist file needs prompt_id or sample_id. Columns: {df.columns.tolist()}")
         sys.exit(1)
     return df
+
+
+def parse_generated_questions(text):
+    """Extract bullet questions from a canonical generated checklist string."""
+    questions = []
+    for line in str(text).splitlines():
+        line = line.strip()
+        if line.startswith("- "):
+            q = line[2:].strip()
+            if q and q.upper() not in {"NA", "N/A"}:
+                questions.append(q)
+    return questions
+
+
+def load_generated_eval_rows(split):
+    """Load the row table that matches generated checklist ids."""
+    with_reason_path = BASE_DIR / "data" / "with_reason" / f"{split}_reasoning.parquet"
+    if with_reason_path.exists():
+        df = pd.read_parquet(with_reason_path)
+        if "swap_flag" in df.columns:
+            df = df[df["swap_flag"] == False].reset_index(drop=True)
+        return df
+    split_path = BASE_DIR / "data" / "splits" / f"{split}.parquet"
+    return pd.read_parquet(split_path)
 
 
 def load_hr_oracle_questions():
     """Load HR-oracle top-15 qids and weights from predictions + review parquets."""
     pred_dir = BASE_DIR / "results" / "dynamic_test"
     pred_paths = list(pred_dir.glob("**/predictions.parquet"))
-    hr_pred = [p for p in pred_paths if "hroracle" in str(p).lower()]
+    hr_pred = [
+        p for p in pred_paths
+        if "human_relevance_oracle" in str(p).lower()
+        and "weighted_pairwise" in str(p).lower()
+        and "raw_for_audit" not in str(p).lower()
+        and "discriminative_rerank" not in str(p).lower()
+    ]
+    if not hr_pred:
+        hr_pred = [p for p in pred_paths if "hroracle" in str(p).lower()]
     if not hr_pred:
         print("Error: No HR-oracle predictions.parquet found.")
         sys.exit(1)
@@ -116,7 +159,7 @@ def load_hr_oracle_questions():
 
 def load_fullbank_questions():
     """Load all bank questions from v4_frozen bank_index.parquet."""
-    bank_path = CHECKLISTS_DIR / "v4_frozen" / "bank_index.parquet"
+    bank_path = CHECKLISTS_DIR / "bank_index.parquet"
     if not bank_path.exists():
         print(f"Error: bank index not found at {bank_path}")
         sys.exit(1)
@@ -145,6 +188,8 @@ def get_comparative_text(original, cache):
         return cached
     # Naive fallback: prepend "Which response better..."
     lower = original.lower()
+    if lower.startswith("which response"):
+        return original
     if lower.startswith("does the response"):
         return original.replace("Does the response", "Which response", 1).replace(
             "does the response", "which response", 1
@@ -231,21 +276,31 @@ def compute_metrics(df):
 # ── Evaluation loops ──
 
 
+def iter_batches(items, batch_size):
+    """Yield fixed-size batches."""
+    size = max(1, batch_size)
+    for start in range(0, len(items), size):
+        yield items[start:start + size]
+
+
 def evaluate_generated(args, judge):
     """Evaluate on per-sample generated checklists."""
-    gen_df = load_generated_questions()
+    gen_df = load_generated_questions(args.split)
     cache = load_comparative_cache()
 
-    split_path = BASE_DIR / "data" / "splits" / f"{args.split}.parquet"
-    split_df = pd.read_parquet(split_path)
+    split_df = load_generated_eval_rows(args.split)
+    id_col = "prompt_id" if "prompt_id" in gen_df.columns else "sample_id"
+    if id_col not in split_df.columns:
+        print(f"Error: generated ids use {id_col}, but eval rows have columns: {split_df.columns.tolist()}")
+        sys.exit(1)
 
-    results = []
+    work_items = []
     limit = args.limit or len(split_df)
     for idx, row in split_df.iloc[:limit].iterrows():
-        prompt_id = row["prompt_id"]
+        sample_key = row[id_col]
 
         # Find generated questions for this sample
-        gen_row = gen_df[gen_df["prompt_id"] == prompt_id]
+        gen_row = gen_df[gen_df[id_col] == sample_key]
         if gen_row.empty:
             continue
         questions = gen_row.iloc[0].get("questions", [])
@@ -256,42 +311,50 @@ def evaluate_generated(args, judge):
         prompt = build_comparative_prompt(
             row["context"], row["response_a"], row["response_b"], comp_questions
         )
+        work_items.append((idx, row, sample_key, comp_questions, prompt))
 
+    results = []
+    processed = 0
+    for batch in iter_batches(work_items, args.batch_size):
+        messages = [[{"role": "user", "content": prompt}] for _, _, _, _, prompt in batch]
         try:
-            raw = generate_batch(judge, [[{"role": "user", "content": prompt}]],
-                                 max_tokens=args.max_new_tokens)[0]
+            raws = generate_batch(
+                judge, messages, batch_size=args.batch_size, max_tokens=args.max_new_tokens
+            )
         except Exception as e:
-            print(f"  [ERROR] judge call failed for {prompt_id}: {e}")
+            print(f"  [ERROR] judge batch failed near {batch[0][2]}: {e}")
             continue
 
-        parsed = parse_comparative_output(raw, len(comp_questions))
-        parse_ok = comparative_parse_ok(parsed, len(comp_questions))
+        for (idx, row, sample_key, comp_questions, _), raw in zip(batch, raws):
+            parsed = parse_comparative_output(raw, len(comp_questions))
+            parse_ok = comparative_parse_ok(parsed, len(comp_questions))
 
-        count_a, count_b, count_win = compute_simple_count(parsed)
-        uniform = {i+1: 1.0/len(comp_questions) for i in range(len(comp_questions))}
-        ws_a, ws_b, ws_win = compute_weighted_score(parsed, uniform)
+            count_a, count_b, count_win = compute_simple_count(parsed)
+            uniform = {i+1: 1.0/len(comp_questions) for i in range(len(comp_questions))}
+            ws_a, ws_b, ws_win = compute_weighted_score(parsed, uniform)
 
-        if args.aggregation in ("count", "both"):
-            predicted = count_win
-            score_a, score_b = count_a, count_b
-        else:
-            predicted = ws_win
-            score_a, score_b = ws_a, ws_b
+            if args.aggregation in ("count", "both"):
+                predicted = count_win
+                score_a, score_b = count_a, count_b
+            else:
+                predicted = ws_win
+                score_a, score_b = ws_a, ws_b
 
-        results.append({
-            "sample_id": idx, "prompt_id": prompt_id,
-            "domain": row.get("domain", ""),
-            "winner": row["winner"], "predicted_winner": predicted,
-            "parse_ok": parse_ok, "answers_raw": raw,
-            "answers_parsed": str(parsed),
-            "score_a": score_a, "score_b": score_b,
-            "weighted_score_a": ws_a, "weighted_score_b": ws_b,
-            "n_questions": len(comp_questions),
-            "n_ties": sum(1 for v in parsed.values() if v == "Tie"),
-        })
+            results.append({
+                "sample_id": row.get("sample_id", idx), "prompt_id": row.get("prompt_id", sample_key),
+                "domain": row.get("domain", ""),
+                "winner": row["winner"], "predicted_winner": predicted,
+                "parse_ok": parse_ok, "answers_raw": raw,
+                "answers_parsed": str(parsed),
+                "score_a": score_a, "score_b": score_b,
+                "weighted_score_a": ws_a, "weighted_score_b": ws_b,
+                "n_questions": len(comp_questions),
+                "n_ties": sum(1 for v in parsed.values() if v == "Tie"),
+            })
 
-        if (idx + 1) % 50 == 0:
-            print(f"  [{idx+1}/{limit}] ok={parse_ok} win={predicted}")
+            processed += 1
+            if processed % 50 == 0:
+                print(f"  [{processed}/{len(work_items)}] ok={parse_ok} win={predicted}")
 
     return pd.DataFrame(results)
 
@@ -307,7 +370,7 @@ def evaluate_hr_oracle(args, judge):
     split_path = BASE_DIR / "data" / "splits" / f"{args.split}.parquet"
     split_df = pd.read_parquet(split_path)
 
-    results = []
+    work_items = []
     limit = args.limit or len(split_df)
     for idx, row in split_df.iloc[:limit].iterrows():
         prompt_id = row["prompt_id"]
@@ -332,47 +395,55 @@ def evaluate_hr_oracle(args, judge):
         prompt = build_comparative_prompt(
             row["context"], row["response_a"], row["response_b"], comp_qs
         )
+        work_items.append((idx, row, prompt_id, qids, comp_qs, prompt))
 
+    results = []
+    processed = 0
+    for batch in iter_batches(work_items, args.batch_size):
+        messages = [[{"role": "user", "content": prompt}] for _, _, _, _, _, prompt in batch]
         try:
-            raw = generate_batch(judge, [[{"role": "user", "content": prompt}]],
-                                 max_tokens=args.max_new_tokens)[0]
+            raws = generate_batch(
+                judge, messages, batch_size=args.batch_size, max_tokens=args.max_new_tokens
+            )
         except Exception as e:
-            print(f"  [ERROR] judge call failed for {prompt_id}: {e}")
+            print(f"  [ERROR] judge batch failed near {batch[0][2]}: {e}")
             continue
 
-        parsed = parse_comparative_output(raw, len(comp_qs))
-        parse_ok = comparative_parse_ok(parsed, len(comp_qs))
+        for (idx, row, prompt_id, qids, comp_qs, _), raw in zip(batch, raws):
+            parsed = parse_comparative_output(raw, len(comp_qs))
+            parse_ok = comparative_parse_ok(parsed, len(comp_qs))
 
-        count_a, count_b, count_win = compute_simple_count(parsed)
+            count_a, count_b, count_win = compute_simple_count(parsed)
 
-        # Weighted: use existing weights if available in lookup
-        wmap = weight_lookup.get(prompt_id, {})
-        qnum_weights = {}
-        for i, qid in enumerate(qids):
-            qnum_weights[i + 1] = wmap.get(qid, 1.0 / len(qids))
-        ws_a, ws_b, ws_win = compute_weighted_score(parsed, qnum_weights)
+            # Weighted: use existing weights if available in lookup
+            wmap = weight_lookup.get(prompt_id, {})
+            qnum_weights = {}
+            for i, qid in enumerate(qids):
+                qnum_weights[i + 1] = wmap.get(qid, 1.0 / len(qids))
+            ws_a, ws_b, ws_win = compute_weighted_score(parsed, qnum_weights)
 
-        if args.aggregation in ("count", "both"):
-            predicted = count_win
-            score_a, score_b = count_a, count_b
-        else:
-            predicted = ws_win
-            score_a, score_b = ws_a, ws_b
+            if args.aggregation in ("count", "both"):
+                predicted = count_win
+                score_a, score_b = count_a, count_b
+            else:
+                predicted = ws_win
+                score_a, score_b = ws_a, ws_b
 
-        results.append({
-            "sample_id": idx, "prompt_id": prompt_id,
-            "domain": row.get("domain", ""),
-            "winner": row["winner"], "predicted_winner": predicted,
-            "parse_ok": parse_ok, "answers_raw": raw,
-            "answers_parsed": str(parsed),
-            "score_a": score_a, "score_b": score_b,
-            "weighted_score_a": ws_a, "weighted_score_b": ws_b,
-            "n_questions": len(comp_qs),
-            "n_ties": sum(1 for v in parsed.values() if v == "Tie"),
-        })
+            results.append({
+                "sample_id": idx, "prompt_id": prompt_id,
+                "domain": row.get("domain", ""),
+                "winner": row["winner"], "predicted_winner": predicted,
+                "parse_ok": parse_ok, "answers_raw": raw,
+                "answers_parsed": str(parsed),
+                "score_a": score_a, "score_b": score_b,
+                "weighted_score_a": ws_a, "weighted_score_b": ws_b,
+                "n_questions": len(comp_qs),
+                "n_ties": sum(1 for v in parsed.values() if v == "Tie"),
+            })
 
-        if (idx + 1) % 50 == 0:
-            print(f"  [{idx+1}/{limit}] ok={parse_ok} win={predicted}")
+            processed += 1
+            if processed % 50 == 0:
+                print(f"  [{processed}/{len(work_items)}] ok={parse_ok} win={predicted}")
 
     return pd.DataFrame(results)
 
@@ -390,47 +461,55 @@ def evaluate_fullbank(args, judge):
     split_path = BASE_DIR / "data" / "splits" / f"{args.split}.parquet"
     split_df = pd.read_parquet(split_path)
 
-    results = []
+    work_items = []
     limit = args.limit or len(split_df)
     for idx, row in split_df.iloc[:limit].iterrows():
         prompt = build_comparative_prompt(
             row["context"], row["response_a"], row["response_b"], comp_qs
         )
+        work_items.append((idx, row, prompt))
 
+    results = []
+    processed = 0
+    for batch in iter_batches(work_items, args.batch_size):
+        messages = [[{"role": "user", "content": prompt}] for _, _, prompt in batch]
         try:
-            raw = generate_batch(judge, [[{"role": "user", "content": prompt}]],
-                                 max_tokens=args.max_new_tokens)[0]
+            raws = generate_batch(
+                judge, messages, batch_size=args.batch_size, max_tokens=args.max_new_tokens
+            )
         except Exception as e:
-            print(f"  [ERROR] judge call failed for {row.get('prompt_id', '?')}: {e}")
+            print(f"  [ERROR] judge batch failed near {batch[0][1].get('prompt_id', '?')}: {e}")
             continue
 
-        parsed = parse_comparative_output(raw, n_q)
-        parse_ok = comparative_parse_ok(parsed, n_q)
+        for (idx, row, _), raw in zip(batch, raws):
+            parsed = parse_comparative_output(raw, n_q)
+            parse_ok = comparative_parse_ok(parsed, n_q)
 
-        count_a, count_b, count_win = compute_simple_count(parsed)
-        ws_a, ws_b, ws_win = compute_weighted_score(parsed, uniform)
+            count_a, count_b, count_win = compute_simple_count(parsed)
+            ws_a, ws_b, ws_win = compute_weighted_score(parsed, uniform)
 
-        if args.aggregation in ("count", "both"):
-            predicted = count_win
-            score_a, score_b = count_a, count_b
-        else:
-            predicted = ws_win
-            score_a, score_b = ws_a, ws_b
+            if args.aggregation in ("count", "both"):
+                predicted = count_win
+                score_a, score_b = count_a, count_b
+            else:
+                predicted = ws_win
+                score_a, score_b = ws_a, ws_b
 
-        results.append({
-            "sample_id": idx, "prompt_id": row["prompt_id"],
-            "domain": row.get("domain", ""),
-            "winner": row["winner"], "predicted_winner": predicted,
-            "parse_ok": parse_ok, "answers_raw": raw,
-            "answers_parsed": str(parsed),
-            "score_a": score_a, "score_b": score_b,
-            "weighted_score_a": ws_a, "weighted_score_b": ws_b,
-            "n_questions": n_q,
-            "n_ties": sum(1 for v in parsed.values() if v == "Tie"),
-        })
+            results.append({
+                "sample_id": idx, "prompt_id": row["prompt_id"],
+                "domain": row.get("domain", ""),
+                "winner": row["winner"], "predicted_winner": predicted,
+                "parse_ok": parse_ok, "answers_raw": raw,
+                "answers_parsed": str(parsed),
+                "score_a": score_a, "score_b": score_b,
+                "weighted_score_a": ws_a, "weighted_score_b": ws_b,
+                "n_questions": n_q,
+                "n_ties": sum(1 for v in parsed.values() if v == "Tie"),
+            })
 
-        if (idx + 1) % 50 == 0:
-            print(f"  [{idx+1}/{limit}] ok={parse_ok} win={predicted}")
+            processed += 1
+            if processed % 50 == 0:
+                print(f"  [{processed}/{len(work_items)}] ok={parse_ok} win={predicted}")
 
     return pd.DataFrame(results)
 
@@ -443,7 +522,14 @@ def main():
     args.output.mkdir(parents=True, exist_ok=True)
 
     print(f"Loading judge: {args.model_id} (backend={args.backend})")
-    judge = load_judge_model(args.model_id, backend=args.backend)
+    judge = load_judge_model(
+        args.model_id,
+        backend=args.backend,
+        gpu_memory_utilization=args.gpu_memory_utilization,
+        max_model_len=args.max_model_len,
+        max_num_seqs=args.max_num_seqs,
+        max_num_batched_tokens=args.max_num_batched_tokens,
+    )
 
     print(f"Eval: source={args.question_source}, agg={args.aggregation}")
     if args.question_source == "generated":
