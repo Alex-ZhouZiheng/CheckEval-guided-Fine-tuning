@@ -58,21 +58,25 @@ console = Console()
 
 SELF_CHECKLIST_EVAL_PROMPT = """\
 <Task Overview>
-You will evaluate two candidate responses to a user request. Think step by step
-using a structured checklist, then output the final winner.
+You will evaluate two candidate responses to a user request. Your task is to:
+1. Generate a checklist of specific quality criteria for comparing these two responses.
+2. For each criterion, decide which response is better (A, B, or Tie).
+3. Based on your evaluation, output the final winner.
 
 <Instructions>
 1. Read the conversation history and both responses carefully.
-2. Generate a checklist of specific quality criteria comparing the two responses.
-3. For each criterion, decide which response is better (A, B, or Tie).
-4. Based on your evaluation, decide the final winner.
+2. Generate 8-20 specific, targeted comparison questions about these two specific responses.
+   - Questions should compare the responses on different quality dimensions.
+   - Each question should be answerable with A, B, or Tie.
+3. For each question, compare the two responses and answer A, B, or Tie.
+4. Based on your checklist evaluation, decide the final winner.
 5. Output in the required format.
 
 <Answer Format>
 <think>
 ### Checklist
-Q1: [your comparison question]
-Q2: [your comparison question]
+Q1: [your comparison question here]
+Q2: [your comparison question here]
 ...
 
 ### Item Verdicts
@@ -148,8 +152,10 @@ def build_eval_prompts(df: pd.DataFrame) -> tuple[list[list[dict]], list[int]]:
     """
     messages_list: list[list[dict]] = []
     keep_idx: list[int] = []
+    n_swapped = 0
     for i, (_, row) in enumerate(df.iterrows()):
         if "swap_flag" in df.columns and row.get("swap_flag") is True:
+            n_swapped += 1
             continue
         prompt = SELF_CHECKLIST_EVAL_PROMPT.format(
             context=row["context"],
@@ -158,6 +164,8 @@ def build_eval_prompts(df: pd.DataFrame) -> tuple[list[list[dict]], list[int]]:
         )
         messages_list.append([{"role": "user", "content": prompt}])
         keep_idx.append(i)
+    if n_swapped:
+        log.info("Skipped %d swap_flag rows", n_swapped)
     return messages_list, keep_idx
 
 
@@ -210,6 +218,8 @@ def main() -> None:
     parser.add_argument("--backend", type=str, default=None,
                         choices=["llamacpp", "vllm"],
                         help="Inference backend; defaults to cfg.INFERENCE_BACKEND.")
+    parser.add_argument("--http-concurrency", type=int, default=32,
+                        help="Concurrent HTTP requests for judge_mode=http (default: 32).")
     parser.add_argument("--experiment-suffix", type=str, default=str(date.today()))
     parser.add_argument("--tensor-parallel-size", type=int,
                         default=cfg.VLLM_ENGINE_KWARGS["tensor_parallel_size"])
@@ -259,6 +269,7 @@ def main() -> None:
         raw_outputs = _http_judge_generate(
             messages_list, url, judge_model_name, api_key,
             max_new_tokens=args.max_new_tokens,
+            concurrency=args.http_concurrency,
         )
         elapsed = time.time() - t0
     else:
