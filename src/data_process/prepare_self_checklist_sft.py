@@ -42,7 +42,9 @@ console = Console()
 DEFAULT_TEACHER_MODEL = "/root/autodl-tmp/Thesis/models/Qwen3.5-27B-AWQ-4bit"
 
 
-# ── Prompt ──
+# ── Prompts ──
+# Teacher prompt includes gold winner so the teacher can generate a coherent
+# trace. Student prompt omits it to avoid distribution mismatch at inference.
 
 SELF_CHECKLIST_TEACHER_PROMPT = """\
 <Task Overview>
@@ -61,6 +63,50 @@ You will evaluate two candidate responses to a user request. Your task is to:
 5. Output in the required format.
 
 The correct winner is: {gold_winner}
+
+<Answer Format>
+<think>
+### Checklist
+Q1: [your comparison question here]
+Q2: [your comparison question here]
+...
+
+### Item Verdicts
+Q1: A
+Q2: Tie
+...
+</think>
+
+### Final
+Winner: A
+
+# Conversation History #
+{context}
+
+# Response A #
+{response_a}
+
+# Response B #
+{response_b}
+
+# Your Evaluation #
+"""
+
+SELF_CHECKLIST_STUDENT_PROMPT = """\
+<Task Overview>
+You will evaluate two candidate responses to a user request. Your task is to:
+1. Generate a checklist of specific quality criteria for comparing these two responses.
+2. For each criterion, decide which response is better (A, B, or Tie).
+3. Based on your evaluation, output the final winner.
+
+<Instructions>
+1. Read the conversation history and both responses carefully.
+2. Generate 8-20 specific, targeted comparison questions about these two specific responses.
+   - Questions should compare the responses on different quality dimensions.
+   - Each question should be answerable with A, B, or Tie.
+3. For each question, compare the two responses and answer A, B, or Tie.
+4. Based on your checklist evaluation, decide the final winner.
+5. Output in the required format.
 
 <Answer Format>
 <think>
@@ -239,12 +285,26 @@ def stratified_sample(
     return sampled.reset_index(drop=True)
 
 
-# ── Teacher prompt building ──
+# ── Prompt building ──
 
 def build_self_checklist_teacher_prompt(row, gold_winner: str) -> str:
-    """Format the self-checklist teacher prompt for one pair."""
+    """Format the self-checklist teacher prompt (includes gold winner) for one pair."""
     return SELF_CHECKLIST_TEACHER_PROMPT.format(
         gold_winner=gold_winner,
+        context=row["context"],
+        response_a=row["response_a"],
+        response_b=row["response_b"],
+    )
+
+
+def build_self_checklist_student_prompt(row) -> str:
+    """Format the self-checklist student prompt (no gold winner) for one pair.
+
+    This is the prompt stored in the ``messages`` column for SFT training.
+    It omits the gold winner so the student does not learn to rely on a
+    signal unavailable at inference time.
+    """
+    return SELF_CHECKLIST_STUDENT_PROMPT.format(
         context=row["context"],
         response_a=row["response_a"],
         response_b=row["response_b"],
@@ -271,13 +331,14 @@ def build_rows(
 
     for _, r in pairs.iterrows():
         gold_winner = r["winner"]
-        prompt = build_self_checklist_teacher_prompt(r, gold_winner)
-        prompts.append([{"role": "user", "content": prompt}])
+        teacher_prompt = build_self_checklist_teacher_prompt(r, gold_winner)
+        student_prompt = build_self_checklist_student_prompt(r)
+        prompts.append([{"role": "user", "content": teacher_prompt}])
         metas.append({
             "sample_id": r["sample_id"],
             "domain": r["domain"],
             "winner": gold_winner,
-            "prompt": prompt,
+            "student_prompt": student_prompt,
         })
 
     log.info("Built %d teacher prompts", len(prompts))
@@ -321,7 +382,7 @@ def build_rows(
             n_winner_mismatch += 1
             continue
 
-        messages = [{"role": "user", "content": m["prompt"]}]
+        messages = [{"role": "user", "content": m["student_prompt"]}]
         rows.append({
             "sample_id": m["sample_id"],
             "domain": m["domain"],
