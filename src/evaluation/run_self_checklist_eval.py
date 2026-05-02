@@ -14,7 +14,7 @@ Usage:
     # Fine-tuned adapter
     python src/evaluation/run_self_checklist_eval.py \\
         --judge-adapter results/checkpoints/selfcheck_.../final_adapter \\
-        --eval-split dev --subset dev_600
+        --eval-split dev_600
 
     # Remote HTTP server (e.g. standalone vLLM instance)
     JUDGE_MODE=http JUDGE_URL=http://127.0.0.1:8000/v1 JUDGE_MODEL=qwen3.5-9b \\
