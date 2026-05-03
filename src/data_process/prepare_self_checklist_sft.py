@@ -61,30 +61,31 @@ You will evaluate two candidate responses to a user request. Your task is to:
 2. For each criterion, decide which response is better (A, B, or Tie).
 3. Based on your evaluation, output the final winner.
 
-<Instructions>
-1. Read the conversation history and both responses carefully.
-2. Inside your thinking, generate 8-20 specific, targeted comparison questions about these two specific responses.
-   - Questions should compare the responses on different quality dimensions.
-   - Each question should be answerable with A, B, or Tie.
-3. Inside your thinking, for each question, compare the two responses and answer A, B, or Tie.
-4. After thinking, output ONLY the final winner block.
+<Thinking Phase (free reasoning)>
+Use the thinking block to reason freely. Read the conversation and both responses, brainstorm what dimensions matter for this specific pair, and work out which response wins on each dimension. Format inside the thinking block does not matter.
 
-The correct winner is: {gold_winner}
+<Final Answer Phase — STRICT FORMAT>
+After you finish thinking, output the following blocks EXACTLY in this order, with these exact headers (no extra prose, no extra blocks):
 
-<Thinking Format (inside your thinking block)>
 ### Checklist
-Q1: [your comparison question here]
-Q2: [your comparison question here]
+Q1: [comparison question 1]
+Q2: [comparison question 2]
 ...
+Q8 to Q20: [more questions as needed; aim for 8 to 20]
 
 ### Item Verdicts
 Q1: A
 Q2: Tie
 ...
 
-<Final Answer Format (after thinking)>
 ### Final
 Winner: A
+
+Constraints:
+- Each verdict must be exactly one of A, B, or Tie (case-insensitive).
+- The number of Q lines under "### Item Verdicts" must equal the number of Q lines under "### Checklist".
+- The Winner line must read "Winner: A", "Winner: B", or "Winner: Tie".
+- The correct winner is: {gold_winner}
 
 # Conversation History #
 {context}
@@ -105,28 +106,30 @@ You will evaluate two candidate responses to a user request. Your task is to:
 2. For each criterion, decide which response is better (A, B, or Tie).
 3. Based on your evaluation, output the final winner.
 
-<Instructions>
-1. Read the conversation history and both responses carefully.
-2. Inside your thinking, generate 8-20 specific, targeted comparison questions about these two specific responses.
-   - Questions should compare the responses on different quality dimensions.
-   - Each question should be answerable with A, B, or Tie.
-3. Inside your thinking, for each question, compare the two responses and answer A, B, or Tie.
-4. After thinking, output ONLY the final winner block.
+<Thinking Phase (free reasoning)>
+Use the thinking block to reason freely. Read the conversation and both responses, brainstorm what dimensions matter for this specific pair, and work out which response wins on each dimension. Format inside the thinking block does not matter.
 
-<Thinking Format (inside your thinking block)>
+<Final Answer Phase — STRICT FORMAT>
+After you finish thinking, output the following blocks EXACTLY in this order, with these exact headers (no extra prose, no extra blocks):
+
 ### Checklist
-Q1: [your comparison question here]
-Q2: [your comparison question here]
+Q1: [comparison question 1]
+Q2: [comparison question 2]
 ...
+Q8 to Q20: [more questions as needed; aim for 8 to 20]
 
 ### Item Verdicts
 Q1: A
 Q2: Tie
 ...
 
-<Final Answer Format (after thinking)>
 ### Final
 Winner: A
+
+Constraints:
+- Each verdict must be exactly one of A, B, or Tie (case-insensitive).
+- The number of Q lines under "### Item Verdicts" must equal the number of Q lines under "### Checklist".
+- The Winner line must read "Winner: A", "Winner: B", or "Winner: Tie".
 
 # Conversation History #
 {context}
@@ -505,10 +508,30 @@ def build_rows(
             n_winner_mismatch += 1
             continue
 
-        # Auto-inject <think> tags if model omitted them (common with NVFP4 models
-        # that jump straight to ### Checklist). Wrap everything before ### Final.
-        has_think = "<think>" in raw and "</think>" in raw
-        if has_think:
+        # Build SFT target_output.
+        #
+        # When enable_thinking=True, the chat template at training time appends
+        # "<think>\n" to the assistant generation prompt. The teacher's raw
+        # output therefore starts inside the thinking block (no leading
+        # "<think>" tag) and contains "</think>" before the structured answer.
+        # Target = raw verbatim — concatenation with the prefix yields a valid
+        # "<think>...</think>### Checklist\n...### Final\nWinner:" sequence.
+        #
+        # In legacy (enable_thinking=False) mode the prompt instructs the model
+        # to emit "<think>...</think>" inline. Some models still skip the tags;
+        # auto-inject wraps everything before "### Final" as a fallback.
+        has_open_think = "<think>" in raw
+        has_close_think = "</think>" in raw
+        if enable_thinking:
+            # Native thinking mode: open tag lives in prompt prefix, raw starts
+            # inside the think block. Use raw verbatim. Track whether the model
+            # also emitted the closing tag (it should).
+            if has_close_think:
+                n_native_think += 1
+            else:
+                n_injected_think += 1
+            target = raw
+        elif has_open_think and has_close_think:
             n_native_think += 1
             target = raw
         else:
