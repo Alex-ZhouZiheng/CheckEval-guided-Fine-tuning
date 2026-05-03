@@ -462,18 +462,27 @@ def build_rows(
     elapsed = time.time() - t0
     log.info("Teacher inference: %.1fs (%.2fs/row)", elapsed, elapsed / max(len(prompts), 1))
 
-    # ── DEBUG: dump first 5 raws to inspect parse failures ──
+    # ── DEBUG: dump only PARSE-FAILED / NOT-MATCHED raws ──
     try:
         from pathlib import Path as _P
+        _fails = []
+        for _i, _r in enumerate(raws):
+            _p = parse_self_checklist_trace(_r)
+            _bad = _p["parse_error"] is not None or not _p["checklist_matched"]
+            if _bad:
+                _fails.append((_i, _r, _p))
         with open(_P("/tmp/raws_dump.txt"), "w", encoding="utf-8") as _f:
-            for _i, _r in enumerate(raws[:5]):
-                _f.write(f"\n========== RAW {_i} (len={len(_r)}) ==========\n")
-                _f.write("FIRST 1500:\n")
-                _f.write(_r[:1500])
-                _f.write("\n...[ELIDED]...\nLAST 800:\n")
-                _f.write(_r[-800:])
-                _f.write(f"\nhas_open_think={'<think>' in _r} has_close_think={'</think>' in _r}\n")
-        log.info("DEBUG: dumped first 5 raws to /tmp/raws_dump.txt")
+            _f.write(f"TOTAL_FAILS={len(_fails)} of {len(raws)}\n\n")
+            for _i, _r, _p in _fails[:8]:
+                _f.write(f"\n========== FAILED RAW {_i} (len={len(_r)}) ==========\n")
+                _f.write(f"parse_error={_p['parse_error']}  n_q={_p['n_questions']}  n_v={_p['n_verdicts']}  matched={_p['checklist_matched']}  winner={_p['winner']}\n")
+                _f.write(f"has_open_think={'<think>' in _r} has_close_think={'</think>' in _r}\n")
+                _f.write("FIRST 800:\n")
+                _f.write(_r[:800])
+                _f.write("\n...[ELIDED]...\nLAST 1500:\n")
+                _f.write(_r[-1500:])
+                _f.write("\n")
+        log.info("DEBUG: dumped %d failed raws to /tmp/raws_dump.txt", len(_fails))
     except Exception as _e:
         log.warning("DEBUG dump failed: %s", _e)
 
