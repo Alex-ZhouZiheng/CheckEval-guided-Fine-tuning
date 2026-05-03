@@ -106,7 +106,12 @@ class _AssistantOnlyCollator:
         return {"input_ids": batch_ids, "attention_mask": batch_attn, "labels": batch_labels}
 
 
-def load_sft_dataset(tier: str, sft_path: str | None = None) -> Dataset:
+def load_sft_dataset(
+    tier: str,
+    sft_path: str | None = None,
+    tokenizer=None,
+    enable_thinking: bool = False,
+) -> Dataset:
     if sft_path is not None:
         path = Path(sft_path)
         if not path.exists():
@@ -120,18 +125,45 @@ def load_sft_dataset(tier: str, sft_path: str | None = None) -> Dataset:
                 f"{path} not found. Run prepare_judge_sft.py --tier {tier} first."
             )
     df = pd.read_parquet(path)
-    log.info("Loaded %d judge SFT rows from %s", len(df), path)
+    log.info("Loaded %d judge SFT rows from %s (enable_thinking=%s)",
+             len(df), path, enable_thinking)
 
-    def _to_messages(row) -> list[dict[str, str]]:
+    if tokenizer is None:
+        # Legacy path: hand TRL the messages column, let it auto-render via
+        # the tokenizer's default chat template (no enable_thinking control).
+        def _to_messages(row) -> list[dict[str, str]]:
+            msgs = row["messages"]
+            if isinstance(msgs, str):
+                msgs = json.loads(msgs)
+            else:
+                msgs = list(msgs)
+            msgs = list(msgs) + [{"role": "assistant", "content": row["target_output"]}]
+            return msgs
+
+        return Dataset.from_list([{"messages": _to_messages(r)} for _, r in df.iterrows()])
+
+    # Thinking-aware path: pre-render full text so we control enable_thinking.
+    # Render user prefix with apply_chat_template(add_generation_prompt=True,
+    # enable_thinking=...), then concatenate raw target_output (which already
+    # contains <think>...</think>### Final\n... when teacher ran in thinking
+    # mode) and the EOS token.
+    eos = tokenizer.eos_token or ""
+
+    def _to_text(row) -> str:
         msgs = row["messages"]
         if isinstance(msgs, str):
             msgs = json.loads(msgs)
         else:
             msgs = list(msgs)
-        msgs = list(msgs) + [{"role": "assistant", "content": row["target_output"]}]
-        return msgs
+        prefix = tokenizer.apply_chat_template(
+            list(msgs),
+            tokenize=False,
+            add_generation_prompt=True,
+            enable_thinking=enable_thinking,
+        )
+        return prefix + row["target_output"] + eos
 
-    return Dataset.from_list([{"messages": _to_messages(r)} for _, r in df.iterrows()])
+    return Dataset.from_list([{"text": _to_text(r)} for _, r in df.iterrows()])
 
 
 def build_lora_config(rank: int, alpha: int, dropout: float) -> LoraConfig:
@@ -207,6 +239,10 @@ def main() -> None:
     parser.add_argument("--run-name", type=str, default=None)
     parser.add_argument("--no-wandb", action="store_true")
     parser.add_argument("--no-tensorboard", action="store_true")
+    parser.add_argument("--enable-thinking", action="store_true",
+                        help="Pre-render chat template with enable_thinking=True so the prefix "
+                             "matches Qwen3 thinking-mode inference. Required when target_output "
+                             "contains <think>...</think> blocks (self-checklist CoT data).")
     args = parser.parse_args()
 
     run_name = args.run_name or f"judge_sft_{args.tier}_r{args.lora_rank}_lr{args.lr}"
@@ -221,8 +257,14 @@ def main() -> None:
     if use_tb:
         os.environ["TENSORBOARD_LOGGING_DIR"] = str(cfg.TENSORBOARD_DIR / run_name)
 
-    train_ds = load_sft_dataset(args.tier, args.sft_path)
+    # Tokenizer needed before dataset when --enable-thinking, so we pre-render
+    # the chat template with the flag explicitly set.
     model, tokenizer = load_base(args.model_id, qlora=args.qlora)
+    train_ds = load_sft_dataset(
+        args.tier, args.sft_path,
+        tokenizer=tokenizer if args.enable_thinking else None,
+        enable_thinking=args.enable_thinking,
+    )
     lora_config = build_lora_config(args.lora_rank, args.lora_alpha, args.lora_dropout)
     data_collator = _AssistantOnlyCollator(tokenizer)
 
@@ -297,6 +339,7 @@ def main() -> None:
         "warmup_steps": warmup_steps,
         "train_samples": len(train_ds),
         "seed": cfg.SEED,
+        "enable_thinking": bool(args.enable_thinking),
     }
     with open(output_dir / "train_config.json", "w", encoding="utf-8") as f:
         json.dump(meta, f, indent=2, default=str)
