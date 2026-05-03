@@ -459,6 +459,21 @@ def build_rows(
     elapsed = time.time() - t0
     log.info("Teacher inference: %.1fs (%.2fs/row)", elapsed, elapsed / max(len(prompts), 1))
 
+    # ── DEBUG: dump first 5 raws to inspect parse failures ──
+    try:
+        from pathlib import Path as _P
+        with open(_P("/tmp/raws_dump.txt"), "w", encoding="utf-8") as _f:
+            for _i, _r in enumerate(raws[:5]):
+                _f.write(f"\n========== RAW {_i} (len={len(_r)}) ==========\n")
+                _f.write("FIRST 1500:\n")
+                _f.write(_r[:1500])
+                _f.write("\n...[ELIDED]...\nLAST 800:\n")
+                _f.write(_r[-800:])
+                _f.write(f"\nhas_open_think={'<think>' in _r} has_close_think={'</think>' in _r}\n")
+        log.info("DEBUG: dumped first 5 raws to /tmp/raws_dump.txt")
+    except Exception as _e:
+        log.warning("DEBUG dump failed: %s", _e)
+
     rows: list[dict] = []
     n_parse_fail = 0
     n_not_matched = 0
