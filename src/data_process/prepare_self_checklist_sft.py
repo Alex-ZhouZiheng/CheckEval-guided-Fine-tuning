@@ -49,7 +49,98 @@ DEFAULT_TEACHER_MODEL = "/root/autodl-tmp/Thesis/models/Qwen3.5-27B-AWQ-4bit"
 # Teacher prompt includes gold winner so the teacher can generate a coherent
 # trace. Student prompt omits it to avoid distribution mismatch at inference.
 
-SELF_CHECKLIST_TEACHER_PROMPT = """\
+# Two prompt variants. The "thinking" variants assume the model's chat template
+# is invoked with enable_thinking=True (Qwen3 family) so the model natively wraps
+# its reasoning in <think>...</think>. The "legacy" variants embed the <think>
+# scaffold directly in the answer template — used when thinking mode is off.
+
+SELF_CHECKLIST_TEACHER_PROMPT_THINKING = """\
+<Task Overview>
+You will evaluate two candidate responses to a user request. Your task is to:
+1. Generate a checklist of specific quality criteria for comparing these two responses.
+2. For each criterion, decide which response is better (A, B, or Tie).
+3. Based on your evaluation, output the final winner.
+
+<Instructions>
+1. Read the conversation history and both responses carefully.
+2. Inside your thinking, generate 8-20 specific, targeted comparison questions about these two specific responses.
+   - Questions should compare the responses on different quality dimensions.
+   - Each question should be answerable with A, B, or Tie.
+3. Inside your thinking, for each question, compare the two responses and answer A, B, or Tie.
+4. After thinking, output ONLY the final winner block.
+
+The correct winner is: {gold_winner}
+
+<Thinking Format (inside your thinking block)>
+### Checklist
+Q1: [your comparison question here]
+Q2: [your comparison question here]
+...
+
+### Item Verdicts
+Q1: A
+Q2: Tie
+...
+
+<Final Answer Format (after thinking)>
+### Final
+Winner: A
+
+# Conversation History #
+{context}
+
+# Response A #
+{response_a}
+
+# Response B #
+{response_b}
+
+# Your Evaluation #
+"""
+
+SELF_CHECKLIST_STUDENT_PROMPT_THINKING = """\
+<Task Overview>
+You will evaluate two candidate responses to a user request. Your task is to:
+1. Generate a checklist of specific quality criteria for comparing these two responses.
+2. For each criterion, decide which response is better (A, B, or Tie).
+3. Based on your evaluation, output the final winner.
+
+<Instructions>
+1. Read the conversation history and both responses carefully.
+2. Inside your thinking, generate 8-20 specific, targeted comparison questions about these two specific responses.
+   - Questions should compare the responses on different quality dimensions.
+   - Each question should be answerable with A, B, or Tie.
+3. Inside your thinking, for each question, compare the two responses and answer A, B, or Tie.
+4. After thinking, output ONLY the final winner block.
+
+<Thinking Format (inside your thinking block)>
+### Checklist
+Q1: [your comparison question here]
+Q2: [your comparison question here]
+...
+
+### Item Verdicts
+Q1: A
+Q2: Tie
+...
+
+<Final Answer Format (after thinking)>
+### Final
+Winner: A
+
+# Conversation History #
+{context}
+
+# Response A #
+{response_a}
+
+# Response B #
+{response_b}
+
+# Your Evaluation #
+"""
+
+SELF_CHECKLIST_TEACHER_PROMPT_LEGACY = """\
 <Task Overview>
 You will evaluate two candidate responses to a user request. Your task is to:
 1. Generate a checklist of specific quality criteria for comparing these two responses.
@@ -95,7 +186,7 @@ Winner: A
 # Your Evaluation #
 """
 
-SELF_CHECKLIST_STUDENT_PROMPT = """\
+SELF_CHECKLIST_STUDENT_PROMPT_LEGACY = """\
 <Task Overview>
 You will evaluate two candidate responses to a user request. Your task is to:
 1. Generate a checklist of specific quality criteria for comparing these two responses.
@@ -291,9 +382,13 @@ def stratified_sample(
 
 # ── Prompt building ──
 
-def build_self_checklist_teacher_prompt(row, gold_winner: str) -> str:
+def build_self_checklist_teacher_prompt(row, gold_winner: str, *, thinking: bool) -> str:
     """Format the self-checklist teacher prompt (includes gold winner) for one pair."""
-    return SELF_CHECKLIST_TEACHER_PROMPT.format(
+    template = (
+        SELF_CHECKLIST_TEACHER_PROMPT_THINKING if thinking
+        else SELF_CHECKLIST_TEACHER_PROMPT_LEGACY
+    )
+    return template.format(
         gold_winner=gold_winner,
         context=row["context"],
         response_a=row["response_a"],
@@ -301,14 +396,18 @@ def build_self_checklist_teacher_prompt(row, gold_winner: str) -> str:
     )
 
 
-def build_self_checklist_student_prompt(row) -> str:
+def build_self_checklist_student_prompt(row, *, thinking: bool) -> str:
     """Format the self-checklist student prompt (no gold winner) for one pair.
 
     This is the prompt stored in the ``messages`` column for SFT training.
     It omits the gold winner so the student does not learn to rely on a
     signal unavailable at inference time.
     """
-    return SELF_CHECKLIST_STUDENT_PROMPT.format(
+    template = (
+        SELF_CHECKLIST_STUDENT_PROMPT_THINKING if thinking
+        else SELF_CHECKLIST_STUDENT_PROMPT_LEGACY
+    )
+    return template.format(
         context=row["context"],
         response_a=row["response_a"],
         response_b=row["response_b"],
@@ -322,6 +421,7 @@ def build_rows(
     teacher_model,
     batch_size: int,
     max_new_tokens: int,
+    enable_thinking: bool = False,
 ) -> tuple[pd.DataFrame, dict]:
     """For each pair, build teacher prompt (with gold winner), run inference,
     parse the self-checklist trace, and keep rows where:
@@ -335,8 +435,8 @@ def build_rows(
 
     for _, r in pairs.iterrows():
         gold_winner = r["winner"]
-        teacher_prompt = build_self_checklist_teacher_prompt(r, gold_winner)
-        student_prompt = build_self_checklist_student_prompt(r)
+        teacher_prompt = build_self_checklist_teacher_prompt(r, gold_winner, thinking=enable_thinking)
+        student_prompt = build_self_checklist_student_prompt(r, thinking=enable_thinking)
         prompts.append([{"role": "user", "content": teacher_prompt}])
         metas.append({
             "sample_id": r["sample_id"],
@@ -348,11 +448,13 @@ def build_rows(
     log.info("Built %d teacher prompts", len(prompts))
 
     t0 = time.time()
+    chat_template_kwargs = {"enable_thinking": True} if enable_thinking else None
     raws = generate_batch(
         teacher_model,
         prompts,
         batch_size=batch_size,
         max_new_tokens=max_new_tokens,
+        chat_template_kwargs=chat_template_kwargs,
     )
     elapsed = time.time() - t0
     log.info("Teacher inference: %.1fs (%.2fs/row)", elapsed, elapsed / max(len(prompts), 1))
@@ -499,6 +601,10 @@ def main() -> None:
                         help="vLLM speculative_config method (default: mtp).")
     parser.add_argument("--mtp-num-speculative-tokens", type=int, default=1,
                         help="MTP speculative depth (default: 1).")
+    parser.add_argument("--enable-thinking", action="store_true",
+                        help="Use Qwen3-style native thinking mode (chat_template_kwargs.enable_thinking=True). "
+                             "Model wraps reasoning in <think>...</think> natively; prompt drops the explicit "
+                             "<think> scaffold. Requires vLLM >= 0.9.0 and a chat template with the enable_thinking branch.")
 
     args = parser.parse_args()
 
@@ -523,7 +629,7 @@ def main() -> None:
     # ── dry-run ──
     if args.dry_run:
         r = pairs.iloc[0]
-        prompt = build_self_checklist_teacher_prompt(r, r["winner"])
+        prompt = build_self_checklist_teacher_prompt(r, r["winner"], thinking=args.enable_thinking)
         console.print(f"\n[cyan]sample_id[/cyan]: {r['sample_id']}  winner={r['winner']}")
         console.print(f"[cyan]prompt (first 800c)[/cyan]:\n{prompt[:800]}...")
         console.print("\n[yellow]--dry-run set: skipping teacher inference.[/yellow]")
@@ -556,6 +662,7 @@ def main() -> None:
         teacher,
         batch_size=args.batch_size,
         max_new_tokens=args.max_new_tokens,
+        enable_thinking=args.enable_thinking,
     )
     print_summary(sft_df, stats, output_path)
 
@@ -571,6 +678,7 @@ def main() -> None:
     stats["tier"] = args.tier
     stats["n_pairs_sampled"] = int(len(pairs))
     stats["seed"] = args.seed
+    stats["enable_thinking"] = bool(args.enable_thinking)
     with open(stats_path, "w", encoding="utf-8") as f:
         json.dump(stats, f, indent=2, ensure_ascii=False)
 
