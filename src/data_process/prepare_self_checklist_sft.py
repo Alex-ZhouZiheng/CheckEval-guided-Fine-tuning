@@ -264,11 +264,20 @@ def parse_self_checklist_trace(raw: str) -> dict:
         result["parse_error"] = "empty output"
         return result
 
+    # Restrict parsing to post-thinking content. In Qwen3 thinking mode the
+    # model often "rehearses" the required output format inside <think>...
+    # </think> (e.g. writing literal "### Checklist\nQ1: [your question]"
+    # placeholders in self-correction notes). Those rehearsals trigger the
+    # regex below before the real structured answer that follows </think>.
+    # Slicing past </think> isolates the actual final answer block.
+    _think_end = raw.rfind("</think>")
+    search_text = raw[_think_end + len("</think>"):] if _think_end != -1 else raw
+
     # Split into sections using ### markers
     # Find ### Checklist block
     checklist_match = re.search(
         r'###\s*Checklist\s*\n(.*?)(?=###\s*Item\s*Verdicts|###\s*Final|\Z)',
-        raw, re.DOTALL | re.IGNORECASE
+        search_text, re.DOTALL | re.IGNORECASE
     )
     if not checklist_match:
         result["parse_error"] = "missing ### Checklist section"
@@ -283,7 +292,7 @@ def parse_self_checklist_trace(raw: str) -> dict:
     # Find ### Item Verdicts block
     verdicts_match = re.search(
         r'###\s*Item\s*Verdicts\s*\n(.*?)(?=###\s*Final|\Z)',
-        raw, re.DOTALL | re.IGNORECASE
+        search_text, re.DOTALL | re.IGNORECASE
     )
     if not verdicts_match:
         result["parse_error"] = "missing ### Item Verdicts section"
@@ -301,7 +310,7 @@ def parse_self_checklist_trace(raw: str) -> dict:
     # Find ### Final block
     final_match = re.search(
         r'###\s*Final\s*\n(.*?)(?=\Z)',
-        raw, re.DOTALL | re.IGNORECASE
+        search_text, re.DOTALL | re.IGNORECASE
     )
     if final_match:
         final_block = final_match.group(1)
