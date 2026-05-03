@@ -14,6 +14,9 @@ Usage:
         --tier tier_10k --n-samples 1500
 
     python -m src.data_process.prepare_self_checklist_sft \\
+        --tier debug_5k  # processes all 5,000 pairs
+
+    python -m src.data_process.prepare_self_checklist_sft \\
         --tier debug_5k --n-samples 50 --dry-run
 """
 from __future__ import annotations
@@ -266,11 +269,11 @@ def load_pairs(tier: str) -> pd.DataFrame:
 
 def stratified_sample(
     pairs: pd.DataFrame,
-    n: int,
+    n: int | None,
     seed: int,
 ) -> pd.DataFrame:
-    """Sample ~n pairs stratified by (domain, winner)."""
-    if n >= len(pairs):
+    """Sample ~n pairs stratified by (domain, winner). If n is None, return all pairs."""
+    if n is None or n >= len(pairs):
         return pairs.sample(frac=1.0, random_state=seed).reset_index(drop=True)
     groups = pairs.groupby(["domain", "winner"], group_keys=False)
     frac = n / len(pairs)
@@ -467,8 +470,8 @@ def print_summary(df: pd.DataFrame, stats: dict, output_path: Path) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--tier", type=str, default="tier_10k")
-    parser.add_argument("--n-samples", type=int, default=1500,
-                        help="Number of pairs to sample")
+    parser.add_argument("--n-samples", type=int, default=None,
+                        help="Number of pairs to sample (default: all pairs)")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--dry-run", action="store_true",
                         help="Print one example prompt and exit without inference.")
@@ -510,7 +513,10 @@ def main() -> None:
     log.info("Loaded %d pairs from %s", len(pairs), args.tier)
 
     pairs = stratified_sample(pairs, args.n_samples, seed=args.seed)
-    log.info("Sampled %d pairs (seed=%d)", len(pairs), args.seed)
+    if args.n_samples is None:
+        log.info("Using all %d pairs (no --n-samples)", len(pairs))
+    else:
+        log.info("Sampled %d pairs (seed=%d, requested=%d)", len(pairs), args.seed, args.n_samples)
     console.print("  winner counts: ", dict(Counter(pairs["winner"])))
     console.print("  domain counts: ", dict(Counter(pairs["domain"])))
 
