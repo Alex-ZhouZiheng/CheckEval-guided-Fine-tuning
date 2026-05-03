@@ -332,26 +332,44 @@ def generate_batch(
     messages_list: list[list[dict[str, str]]],
     batch_size: int = 16,
     lora_request: Any = None,
+    chat_template_kwargs: dict | None = None,
     **gen_kwargs,
 ) -> list[str]:
     """Batched chat generation — dispatches on the type of `model`.
 
     Returns text completions in the same order as `messages_list`.
+
+    `chat_template_kwargs` overrides/merges into `cfg.VLLM_CHAT_KWARGS["chat_template_kwargs"]`
+    (e.g. pass {"enable_thinking": True} to flip thinking mode per-call without mutating cfg).
     """
     if isinstance(model, _LlamaCppClient):
-        return _generate_batch_llamacpp(model, messages_list, **gen_kwargs)
-    return _generate_batch_vllm(model, messages_list, lora_request=lora_request, **gen_kwargs)
+        return _generate_batch_llamacpp(
+            model, messages_list,
+            chat_template_kwargs=chat_template_kwargs,
+            **gen_kwargs,
+        )
+    return _generate_batch_vllm(
+        model, messages_list,
+        lora_request=lora_request,
+        chat_template_kwargs=chat_template_kwargs,
+        **gen_kwargs,
+    )
 
 
 def _generate_batch_vllm(
     model: LLM,
     messages_list: list[list[dict[str, str]]],
     lora_request: Any = None,
+    chat_template_kwargs: dict | None = None,
     **gen_kwargs,
 ) -> list[str]:
     use_tqdm = gen_kwargs.pop("use_tqdm", True)
     sampling_params = build_sampling_params(**gen_kwargs)
     chat_kwargs = dict(cfg.VLLM_CHAT_KWARGS)
+    if chat_template_kwargs:
+        merged = dict(chat_kwargs.get("chat_template_kwargs", {}))
+        merged.update(chat_template_kwargs)
+        chat_kwargs["chat_template_kwargs"] = merged
     if lora_request is not None:
         chat_kwargs["lora_request"] = lora_request
     outputs = model.chat(
@@ -367,6 +385,7 @@ def _generate_batch_vllm(
 def _generate_batch_llamacpp(
     client: _LlamaCppClient,
     messages_list: list[list[dict[str, str]]],
+    chat_template_kwargs: dict | None = None,
     **gen_kwargs,
 ) -> list[str]:
     """Fan out chat.completions calls to llama-server concurrently."""
@@ -378,13 +397,16 @@ def _generate_batch_llamacpp(
         merged.pop(k, None)
     merged.pop("do_sample", None)
 
+    ctk = dict(cfg.VLLM_CHAT_KWARGS.get("chat_template_kwargs", {}))
+    if chat_template_kwargs:
+        ctk.update(chat_template_kwargs)
     oai_kwargs = {
         "model": client.model_name,
         "temperature": float(merged.get("temperature", 0.0)),
         "top_p": float(merged.get("top_p", 1.0)),
         "max_tokens": int(merged.get("max_tokens", cfg.GENERATION_KWARGS.get("max_new_tokens", 512))),
         "extra_body": {
-            "chat_template_kwargs": cfg.VLLM_CHAT_KWARGS.get("chat_template_kwargs", {}),
+            "chat_template_kwargs": ctk,
         },
     }
     if merged.get("seed") is not None:

@@ -1,0 +1,82 @@
+definition: This module evaluates whether the response follows explicit instructions, current-turn intent, hard constraints,
+  requested output format, and source-grounded transformations. v5 adds high-discrimination constraint, entity coverage, multi-turn
+  tracking, and artifact-format questions because broad task-adherence questions were over-selected and often produced yes/yes
+  ties.
+dimension: relevance_instruction_following
+sub_aspects:
+  Task Adherence:
+    filtered_questions:
+    - Does the response perform the task the user actually asked for, producing the requested kind of output rather than a
+      different kind of answer?
+    - Does the response cover each explicit request or sub-task in the user's prompt rather than answering only part of it?
+    - Does the response deliver the specific artifact or action the user requested, such as an explanation, summary, translation,
+      code snippet, edited text, reply, or list?
+    - Does the response stay focused on completing the latest requested task instead of mainly offering adjacent commentary,
+      background information, or unrelated advice?
+    original_count: 4
+    removed_count: 0
+    seed_question: Does the response perform the task the user actually asked for, producing the type of output requested
+      rather than a different kind of answer?
+  Source-Grounded Transformation:
+    filtered_questions:
+    - If the user requested an action on given content, does the response actually transform or use that content as requested?
+    - If the user supplied source text, code, data, or a scenario, does the response preserve the important source details
+      while performing the requested transformation?
+    - If the task is to rewrite, edit, summarize, translate, or continue provided content, does the response avoid introducing
+      unsupported new facts or changing the core meaning?
+    original_count: 3
+    removed_count: 0
+    seed_question: If the user requested an action on given content, does the response actually transform or use that content
+      as requested?
+  Exact Constraint Compliance:
+    filtered_questions:
+    - If the prompt specifies a word count, sentence count, paragraph count, list length, stanza count, or number of outputs,
+      does the response satisfy that quantity within reasonable tolerance?
+    - If the prompt lists required names, characters, topics, features, options, countries, files, fields, or components,
+      does the response include all of them without silently omitting important items?
+    - If the prompt forbids certain content, wording, references, formats, or explanations, does the response avoid including
+      the prohibited material?
+    - If the prompt requires a specific language, register, point of view, tense, or style, does the response follow that
+      requirement throughout the answer?
+    - If the prompt asks for exact wording, a direct answer, or a concise reply, does the response avoid adding unnecessary
+      caveats, unrelated explanation, or extra sections?
+    original_count: 5
+    removed_count: 0
+    seed_question: If the prompt specifies a word count, sentence count, paragraph count, list length, stanza count, or number
+      of outputs, does the response satisfy that quantity within reasonable tolerance?
+  Artifact Format Fidelity:
+    filtered_questions:
+    - If the prompt asks for a script, dialogue, log, table, JSON, code block, email, letter, list, or other format, does
+      the response preserve that format throughout?
+    - If the prompt asks for a continuation of existing text or dialogue, does the response continue in the same format rather
+      than restarting, summarizing, or explaining?
+    - If the prompt asks for a direct answer to a multiple-choice or short-answer question, does the response provide the
+      answer clearly without burying it in irrelevant explanation?
+    - If the prompt asks for a finished artifact, does the response provide the artifact itself rather than only describing
+      how to create it?
+    original_count: 4
+    removed_count: 0
+    seed_question: If the prompt asks for a script, dialogue, log, table, JSON, code block, email, letter, list, or other
+      format, does the response preserve that format throughout?
+  Current-Turn and Multi-Turn Following:
+    filtered_questions:
+    - Does the response prioritize the latest user message over earlier context when deciding what action to perform?
+    - If prior conversation context changes the meaning of the latest request, does the response incorporate that context
+      correctly?
+    - If the latest user request asks for an edit, paraphrase, continuation, or reply based on previous text, does the response
+      perform that requested transformation on the relevant text?
+    - Does the response avoid answering a previous or adjacent question instead of the current user request?
+    original_count: 4
+    removed_count: 0
+    seed_question: Does the response prioritize the latest user message over earlier context when deciding what action to
+      perform?
+  Explicit Numeric Constraints:
+    filtered_questions:
+    - If the prompt specifies a numeric constraint such as word count, list length, line count, time budget, or number of
+      options, does the response satisfy that constraint within reasonable tolerance?
+    - If the prompt specifies an explicit output format such as JSON, a table, a bullet list, a code block, or a particular
+      natural language, does the response actually produce that format rather than narrating around it?
+    original_count: 2
+    removed_count: 0
+    seed_question: If the prompt specifies a numeric constraint such as word count, list length, line count, time budget,
+      or number of options, does the response satisfy that constraint within reasonable tolerance?

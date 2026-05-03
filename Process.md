@@ -1,6 +1,6 @@
 # Process: Experiments and Research Directions
 
-Last updated: 2026-04-30
+Last updated: 2026-05-01
 
 This document summarizes the experiment routes currently visible in this repository, with emphasis on artifacts under `results/`, `data/`, `checklists/`, and `wandb/`. The numbers below are copied from local result files, so they should be read as an inventory of explored directions rather than a single perfectly controlled leaderboard.
 
@@ -302,6 +302,36 @@ Artifacts:
 
 Conclusion: generated checklists work technically and reach the mid/high 0.76 range on dev_600, but they do not yet outperform the best static pairwise NA-aware bank. The stronger direction is improving generated checklist quality, not simply adding more generated questions.
 
+### Comparative Checklist Ablation
+
+On 2026-05-01, a comparative checklist format was tested on the test split. Instead of scoring each response independently as yes/no/NA for each checklist item, the judge answered each criterion directly as A/B/Tie. The goal was to test whether comparative criterion-level judging reduces yes/yes collapse and improves pairwise accuracy.
+
+Implementation notes:
+
+- Comparative rewrites were cached in `data/comparative_questions.json`.
+- Test generated checklists were produced with `run_generator_infer.py --split test --comparative`.
+- `scripts/run_comparative_eval.py` was run with local in-process vLLM, not llama-server.
+- Full-bank comparative evaluation used batched vLLM inference with `--batch-size 64 --max-model-len 8192 --max-num-seqs 24 --max-num-batched-tokens 12288 --gpu-memory-utilization 0.82`.
+
+Test results:
+
+| Artifact | Question source | Aggregation | n_total | Accuracy | Effective accuracy | Tie rate | Parse ok | Notes |
+|---|---|---|---:|---:|---:|---:|---:|---|
+| `results/comparative/gen_comparative_count/metrics.json` | generated per-sample | count | 1073 | 0.6859 | 0.7412 | 0.0746 | 1.0000 | Best raw accuracy among comparative conditions. |
+| `results/comparative/gen_comparative_weighted/metrics.json` | generated per-sample | weighted | 1073 | 0.6859 | 0.7412 | 0.0746 | 1.0000 | Same winner decisions as count because generated weights are uniform. |
+| `results/comparative/hr_comparative_count/metrics.json` | HR-oracle top-15 | count | 1073 | 0.6794 | 0.7147 | 0.0494 | 1.0000 | Lower than HR-oracle pointwise pairwise. |
+| `results/comparative/hr_comparative_weighted/metrics.json` | HR-oracle top-15 | weighted | 1073 | 0.4185 | 0.7471 | 0.4399 | 1.0000 | Very conservative; high effective accuracy only after many ties. |
+| `results/comparative/fullbank_comparative_count/metrics.json` | full v4 bank | count | 1073 | 0.6664 | 0.7086 | 0.0596 | 0.9870 | Full-bank prompt produced many per-question Tie answers and 14 incomplete parses. |
+
+Interpretation:
+
+- Comparative judging did not recover the gap to the strongest pointwise / pairwise NA-aware baselines. The best comparative raw accuracy, generated count at 0.6859, is well below the current static test baseline at 0.7856 and the HR-oracle pointwise weighted result around 0.7943 after threshold calibration.
+- The generated comparative condition is the strongest among these runs, which supports the idea that per-sample question relevance matters more than simply changing the answer format.
+- Full-bank comparative count is diluted by many criterion-level ties: average Tie answers were 25.84 out of 58 questions. This mirrors the broader lesson that full-bank judging adds noise when many criteria are weakly relevant.
+- HR weighted comparative is not a good main metric. It has low raw accuracy and a high overall tie rate, even though its non-tie subset is relatively accurate.
+
+Conclusion: comparative A/B/Tie criteria are useful as a diagnostic ablation, not as the main method. The next useful analysis is a rescue/regression comparison between `gen_comparative_count` and the existing pointwise/static baselines, especially to see whether generated comparative questions capture sparse decisive human rationales.
+
 ## 10. Oracle Label Generation
 
 Oracle labels are used to train the selector and to analyze bank usefulness. The current artifacts live mainly under `data/oracle/`.
@@ -455,6 +485,7 @@ The clearest positive findings so far:
 
 4. Generated checklists are viable but currently plateau around 0.76-0.77 valid accuracy on dev_600.
    - Best generated-checklist artifact: `pipeline_judge_base_dev_600_4Bgen9Bjudge`, accuracy 0.7699 over 491 valid examples.
+   - Comparative generated checklists on test reached only 0.6859 raw accuracy, so changing the judge answer format to A/B/Tie is not enough by itself.
 
 5. Fine-tuning routes have not yet beaten the static checklist method.
    - Vanilla DPO merged test: 0.6477.
@@ -528,12 +559,14 @@ What was tried:
 - 4B generator with 9B judge.
 - 9B generator with 4B judge.
 - generator checkpoints.
+- comparative generated checklists where each criterion directly asks for A/B/Tie.
 
 What we learned:
 
 - 4B generator + 9B judge slightly beat the base generated-checklist setup.
 - 4B judge hurt quality.
 - Generator checkpoints did not show a clear improvement over base generation.
+- Comparative format did not fix the quality gap; generated comparative count was the best comparative condition on test, but still below the pointwise/static baselines.
 
 ### Direction E: Fine-Tuning Judges
 
@@ -579,3 +612,4 @@ Based only on current artifacts, the cleanest next steps are:
 5. Run the 27B pairwise NA-aware setup on test or a fixed random probe to check whether the dev gain transfers.
 6. Do not resume joint training from auto-detected checklist-SFT data until `data/checklist_sft/...` reports nonzero parsed-valid rows.
 7. Keep GRPO exploratory until content-damage perturbations lower reward consistently.
+8. Treat comparative checklist judging as a diagnostic branch only; prioritize question relevance, selector recall to human-relevance qids, and generated-checklist quality before more prompt-format variants.
