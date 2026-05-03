@@ -14,6 +14,9 @@ Usage:
         --tier tier_10k --n-samples 1500
 
     python -m src.data_process.prepare_self_checklist_sft \\
+        --tier debug_5k  # processes all 5,000 pairs
+
+    python -m src.data_process.prepare_self_checklist_sft \\
         --tier debug_5k --n-samples 50 --dry-run
 """
 from __future__ import annotations
@@ -193,7 +196,8 @@ def parse_self_checklist_trace(raw: str) -> dict:
         return result
 
     verdicts_block = verdicts_match.group(1)
-    for m in re.finditer(r'^Q(\d+):\s*(A|B|Tie)\s*$', verdicts_block, re.MULTILINE | re.IGNORECASE):
+    # Match verdicts with optional inline explanation e.g. "Q1: A (reasoning...)"
+    for m in re.finditer(r'^Q(\d+):\s*(A|B|Tie)\b', verdicts_block, re.MULTILINE | re.IGNORECASE):
         q_num = int(m.group(1))
         verdict = m.group(2).strip().upper()  # Normalize to uppercase
         if verdict == "TIE":
@@ -265,11 +269,11 @@ def load_pairs(tier: str) -> pd.DataFrame:
 
 def stratified_sample(
     pairs: pd.DataFrame,
-    n: int,
+    n: int | None,
     seed: int,
 ) -> pd.DataFrame:
-    """Sample ~n pairs stratified by (domain, winner)."""
-    if n >= len(pairs):
+    """Sample ~n pairs stratified by (domain, winner). If n is None, return all pairs."""
+    if n is None or n >= len(pairs):
         return pairs.sample(frac=1.0, random_state=seed).reset_index(drop=True)
     groups = pairs.groupby(["domain", "winner"], group_keys=False)
     frac = n / len(pairs)
@@ -358,7 +362,8 @@ def build_rows(
     n_not_matched = 0
     n_no_winner = 0
     n_winner_mismatch = 0
-    n_no_think_tags = 0
+    n_native_think = 0
+    n_injected_think = 0
 
     for m, raw in zip(metas, raws):
         parsed = parse_self_checklist_trace(raw)
@@ -383,10 +388,19 @@ def build_rows(
             n_winner_mismatch += 1
             continue
 
-        # Drop rows missing <think> tags (student prompt asks for them)
-        if "<think>" not in raw or "</think>" not in raw:
-            n_no_think_tags += 1
-            continue
+        # Auto-inject <think> tags if model omitted them (common with NVFP4 models
+        # that jump straight to ### Checklist). Wrap everything before ### Final.
+        has_think = "<think>" in raw and "</think>" in raw
+        if has_think:
+            n_native_think += 1
+            target = raw
+        else:
+            n_injected_think += 1
+            final_pos = raw.rfind("### Final")
+            if final_pos != -1:
+                target = "<think>\n" + raw[:final_pos].rstrip() + "\n</think>\n\n" + raw[final_pos:].lstrip()
+            else:
+                target = "<think>\n" + raw + "\n</think>"
 
         messages = [{"role": "user", "content": m["student_prompt"]}]
         rows.append({
@@ -396,7 +410,7 @@ def build_rows(
             "n_questions": parsed["n_questions"],
             "n_verdicts": parsed["n_verdicts"],
             "messages": json.dumps(messages, ensure_ascii=False),
-            "target_output": raw,
+            "target_output": target,
         })
 
     stats = {
@@ -405,13 +419,14 @@ def build_rows(
         "n_not_matched": n_not_matched,
         "n_no_winner": n_no_winner,
         "n_winner_mismatch": n_winner_mismatch,
-        "n_no_think_tags": n_no_think_tags,
+        "n_native_think": n_native_think,
+        "n_injected_think": n_injected_think,
         "n_rows_kept": len(rows),
         "teacher_inference_seconds": elapsed,
     }
     log.info(
-        "Teacher parse results: kept=%d  parse_fail=%d  not_matched=%d  no_winner=%d  mismatch=%d  no_think=%d",
-        len(rows), n_parse_fail, n_not_matched, n_no_winner, n_winner_mismatch, n_no_think_tags,
+        "Teacher parse results: kept=%d  parse_fail=%d  not_matched=%d  no_winner=%d  mismatch=%d  native_think=%d  injected_think=%d",
+        len(rows), n_parse_fail, n_not_matched, n_no_winner, n_winner_mismatch, n_native_think, n_injected_think,
     )
     return pd.DataFrame(rows), stats
 
@@ -429,7 +444,8 @@ def print_summary(df: pd.DataFrame, stats: dict, output_path: Path) -> None:
     table.add_row("Checklist/verdict mismatch", f"{stats.get('n_not_matched', 0):,}")
     table.add_row("No winner", f"{stats.get('n_no_winner', 0):,}")
     table.add_row("Winner != gold", f"{stats.get('n_winner_mismatch', 0):,}")
-    table.add_row("Missing <think> tags", f"{stats.get('n_no_think_tags', 0):,}")
+    table.add_row("Native <think> tags", f"{stats.get('n_native_think', 0):,}")
+    table.add_row("Injected <think> tags", f"{stats.get('n_injected_think', 0):,}")
 
     if len(df):
         table.add_row("Avg questions", f"{df['n_questions'].mean():.1f}")
@@ -454,8 +470,8 @@ def print_summary(df: pd.DataFrame, stats: dict, output_path: Path) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--tier", type=str, default="tier_10k")
-    parser.add_argument("--n-samples", type=int, default=1500,
-                        help="Number of pairs to sample")
+    parser.add_argument("--n-samples", type=int, default=None,
+                        help="Number of pairs to sample (default: all pairs)")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--dry-run", action="store_true",
                         help="Print one example prompt and exit without inference.")
@@ -474,6 +490,15 @@ def main() -> None:
     parser.add_argument("--max-num-seqs", type=int, default=16)
     parser.add_argument("--cache-dir", type=str, default=None)
     parser.add_argument("--quantization", type=str, default=None)
+    parser.add_argument("--max-num-batched-tokens", type=int,
+                        default=cfg.VLLM_ENGINE_KWARGS.get("max_num_batched_tokens", 12288))
+    # MTP (Multi-Token Prediction) speculative decoding
+    parser.add_argument("--enable-mtp", action="store_true",
+                        help="Enable vLLM MTP speculative decoding.")
+    parser.add_argument("--mtp-method", type=str, default="mtp",
+                        help="vLLM speculative_config method (default: mtp).")
+    parser.add_argument("--mtp-num-speculative-tokens", type=int, default=1,
+                        help="MTP speculative depth (default: 1).")
 
     args = parser.parse_args()
 
@@ -488,7 +513,10 @@ def main() -> None:
     log.info("Loaded %d pairs from %s", len(pairs), args.tier)
 
     pairs = stratified_sample(pairs, args.n_samples, seed=args.seed)
-    log.info("Sampled %d pairs (seed=%d)", len(pairs), args.seed)
+    if args.n_samples is None:
+        log.info("Using all %d pairs (no --n-samples)", len(pairs))
+    else:
+        log.info("Sampled %d pairs (seed=%d, requested=%d)", len(pairs), args.seed, args.n_samples)
     console.print("  winner counts: ", dict(Counter(pairs["winner"])))
     console.print("  domain counts: ", dict(Counter(pairs["domain"])))
 
@@ -503,8 +531,12 @@ def main() -> None:
 
     # ── load teacher ──
     quantization = args.quantization
-    log.info("Teacher: %s  (quantization=%s)",
-             args.teacher_model_id, quantization or "auto")
+    speculative_config = {
+        "method": args.mtp_method,
+        "num_speculative_tokens": args.mtp_num_speculative_tokens,
+    } if args.enable_mtp else None
+    log.info("Teacher: %s  (quantization=%s  mtp=%s)",
+             args.teacher_model_id, quantization or "auto", bool(args.enable_mtp))
 
     teacher = load_judge_model(
         model_id=args.teacher_model_id,
@@ -513,7 +545,9 @@ def main() -> None:
         max_model_len=args.max_model_len,
         gpu_memory_utilization=args.gpu_memory_utilization,
         max_num_seqs=args.max_num_seqs,
+        max_num_batched_tokens=args.max_num_batched_tokens,
         quantization=quantization,
+        speculative_config=speculative_config,
     )
 
     # ── run teacher and collect rows ──
