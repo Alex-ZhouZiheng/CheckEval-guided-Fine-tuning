@@ -8,6 +8,7 @@ Usage:
     python run_judge_sft.py --sft-path data/judge_sft/train_tier_10k_selfcheck.parquet
 """
 from __future__ import annotations
+from unsloth import FastLanguageModel
 import os as _os, sys as _sys
 _sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
 
@@ -184,11 +185,6 @@ def load_base(model_id: str, qlora: bool = False):
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 
-    # Left-truncate so the assistant target tail (### Final\nWinner: ...) is
-    # preserved when --max-length cuts the sequence. With the default right
-    # truncation, long thinking traces would knock the Winner line — and the
-    # entire structured answer — out of the loss span, training the model
-    # only on the thinking prefix.
     tokenizer.truncation_side = "left"
 
     kwargs = dict(trust_remote_code=True)
@@ -227,12 +223,6 @@ def load_base_unsloth(
     model_id: str, max_seq_length: int, qlora: bool,
     lora_rank: int, lora_alpha: int, lora_dropout: float,
 ):
-    """Load via unsloth FastLanguageModel — fused kernels + async activation
-    offload give ~30-50% VRAM headroom over HF+FA2 at long context.
-
-    Unsloth injects LoRA itself; caller MUST NOT pass peft_config to SFTTrainer.
-    """
-    from unsloth import FastLanguageModel  # noqa: imports patch at load time
 
     log.info("Loading via unsloth: %s (qlora=%s, max_seq=%d)",
              model_id, qlora, max_seq_length)

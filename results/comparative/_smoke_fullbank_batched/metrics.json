@@ -1,0 +1,16 @@
+{
+  "accuracy": 0.8125,
+  "macro_f1": 0.5424,
+  "tie_rate": 0.0625,
+  "effective_accuracy": 0.8667,
+  "correct": 13,
+  "ties": 1,
+  "wrong": 2,
+  "n_valid": 16,
+  "n_total": 16,
+  "parse_ok_rate": 1.0,
+  "avg_answers_per_sample": 57.31,
+  "avg_a_count": 34.25,
+  "avg_b_count": 16.06,
+  "avg_tie_count": 7.0
+}

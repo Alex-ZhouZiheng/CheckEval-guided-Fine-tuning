@@ -1,0 +1,90 @@
+{
+  "n_total": 1073,
+  "n_valid": 671,
+  "n_tie": 402,
+  "n_unparseable": 0,
+  "parse_rate": 0.625349487418453,
+  "accuracy": 0.8107302533532041,
+  "macro_f1": 0.8106478241064783,
+  "classification_report": {
+    "A": {
+      "precision": 0.8204334365325078,
+      "recall": 0.7934131736526946,
+      "f1-score": 0.806697108066971,
+      "support": 334.0
+    },
+    "B": {
+      "precision": 0.8017241379310345,
+      "recall": 0.827893175074184,
+      "f1-score": 0.8145985401459854,
+      "support": 337.0
+    },
+    "accuracy": 0.8107302533532041,
+    "macro avg": {
+      "precision": 0.8110787872317711,
+      "recall": 0.8106531743634393,
+      "f1-score": 0.8106478241064783,
+      "support": 671.0
+    },
+    "weighted avg": {
+      "precision": 0.8110369631663431,
+      "recall": 0.8107302533532041,
+      "f1-score": 0.8106654875164909,
+      "support": 671.0
+    }
+  },
+  "pred_distribution": {
+    "B": 348,
+    "Tie": 402,
+    "A": 323
+  },
+  "position_bias_A": 0.481371087928465,
+  "per_domain": {
+    "code": {
+      "n": 205,
+      "accuracy": 0.7902439024390244,
+      "macro_f1": 0.7901640124735176
+    },
+    "general": {
+      "n": 360,
+      "accuracy": 0.8388888888888889,
+      "macro_f1": 0.8384851016429964
+    },
+    "stem": {
+      "n": 106,
+      "accuracy": 0.7547169811320755,
+      "macro_f1": 0.7547169811320755
+    }
+  },
+  "policy": "learned_topk",
+  "k": 15,
+  "score_method": "compare_checklists_pairwise_weighted",
+  "tie_delta": 0.05,
+  "aggregate_na_policy": "as_no",
+  "aggregate_coverage_threshold": 0.8,
+  "question_weights": "results/dynamic_test/question_weights/hr_oracle_k15_qwen36_27b_weights_discriminative_rerank_beta1_cap2.parquet",
+  "weight_column": "importance_softmax",
+  "weight_transform": "none",
+  "weight_temperature": 1.0,
+  "weighted_na_policy": "ignore",
+  "tau_escalate": 0.05,
+  "tau_hard": 0.03,
+  "n_min": 8,
+  "avg_k": 15.0,
+  "tie_rate": 0.3746505125815471,
+  "parse_ok_rate": 0.9962721342031687,
+  "selector_inference_time_s": 0.0,
+  "selector_picks": "results/dynamic_test/human_relevance_oracle_test_v4_qwen36_27b_nvfp4_ranked_picks_discriminative_rerank_beta1_cap2.parquet",
+  "judge_mode": "local",
+  "judge_url": null,
+  "judge_model": "/root/autodl-tmp/Thesis/models/Qwen3.5-9B",
+  "http_extra_body": null,
+  "http_reasoning_effort": null,
+  "recall_human_selected": 0.8151135927657172,
+  "recall_human_asked": 0.8151135927657172,
+  "n_evaluated": 1039,
+  "human_relevance": "data/oracle/test_human_relevance_v4_qwen36_27b_nvfp4.parquet",
+  "latency_p50_s": 0.4784619228259937,
+  "latency_p90_s": 0.4784619228259937,
+  "samples_per_second_estimate": 2.0900304753481467
+}

@@ -1,0 +1,27 @@
+{
+  "run_dir": "results/dynamic_test/human_relevance_oracle_qwen36_27b_k15_td005_weighted_pairwise_raw_for_audit",
+  "out_dir": "results/analysis/tie_contribution_audit_hroracle_weighted_raw",
+  "n_total": 1073,
+  "n_tie": 424,
+  "parse_fail_recomputed": 5,
+  "max_margin_abs_error": 4.440892098500626e-16,
+  "tie_categories": {
+    "all_zero_contributions": 294,
+    "sparse_correct_signal_diluted": 90,
+    "sparse_wrong_signal_or_conflict": 35,
+    "exact_cancellation": 5
+  },
+  "tie_top1_matches_gold_rate": 0.2169811320754717,
+  "tie_top3_matches_gold_rate": 0.21226415094339623,
+  "tie_mass_matches_gold_rate": 0.2099056603773585,
+  "tie_nonzero_count_dist": {
+    "0": 294,
+    "1": 87,
+    "2": 31,
+    "3": 8,
+    "4": 3,
+    "5": 1
+  },
+  "tie_zero_weight_mass_mean": 0.9905845488332119,
+  "tie_na_weight_mass_mean": 0.03440813525067354
+}

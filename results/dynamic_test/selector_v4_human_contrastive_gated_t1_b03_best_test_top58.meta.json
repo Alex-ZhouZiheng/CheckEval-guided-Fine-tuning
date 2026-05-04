@@ -1,0 +1,10 @@
+{
+  "selector": "/root/autodl-tmp/Thesis/results/checkpoints/selector_v4_human_contrastive_gated_t1_b03/best",
+  "split": "test",
+  "subset": null,
+  "k": 58,
+  "n_samples": 1073,
+  "inference_time_s": 17.84236979484558,
+  "samples_per_second": 60.13775144992091,
+  "dim_quota": true
+}

@@ -1,0 +1,86 @@
+{
+  "n_total": 425,
+  "n_valid": 242,
+  "n_tie": 183,
+  "n_unparseable": 0,
+  "parse_rate": 0.5694117647058824,
+  "accuracy": 0.7231404958677686,
+  "macro_f1": 0.7223392413734053,
+  "classification_report": {
+    "A": {
+      "precision": 0.7168141592920354,
+      "recall": 0.6982758620689655,
+      "f1-score": 0.7074235807860262,
+      "support": 116.0
+    },
+    "B": {
+      "precision": 0.7286821705426356,
+      "recall": 0.746031746031746,
+      "f1-score": 0.7372549019607844,
+      "support": 126.0
+    },
+    "accuracy": 0.7231404958677686,
+    "macro avg": {
+      "precision": 0.7227481649173355,
+      "recall": 0.7221538040503558,
+      "f1-score": 0.7223392413734053,
+      "support": 242.0
+    },
+    "weighted avg": {
+      "precision": 0.7229933717613563,
+      "recall": 0.7231404958677686,
+      "f1-score": 0.722955590984454,
+      "support": 242.0
+    }
+  },
+  "pred_distribution": {
+    "A": 113,
+    "B": 129,
+    "Tie": 183
+  },
+  "position_bias_A": 0.4669421487603306,
+  "per_domain": {
+    "code": {
+      "n": 67,
+      "accuracy": 0.6567164179104478,
+      "macro_f1": 0.6564102564102564
+    },
+    "general": {
+      "n": 141,
+      "accuracy": 0.7304964539007093,
+      "macro_f1": 0.7274114774114774
+    },
+    "stem": {
+      "n": 34,
+      "accuracy": 0.8235294117647058,
+      "macro_f1": 0.8235294117647058
+    }
+  },
+  "policy": "learned_topk",
+  "k": 15,
+  "score_method": "compare_checklists_pairwise_weighted",
+  "tie_delta": 0.05,
+  "aggregate_na_policy": "as_no",
+  "aggregate_coverage_threshold": 0.8,
+  "question_weights": "results/dynamic_test/question_weights/hr_oracle_k15_qwen36_27b_weights.parquet",
+  "weight_column": "importance_softmax",
+  "weight_transform": "none",
+  "weight_temperature": 1.0,
+  "weighted_na_policy": "ignore",
+  "tau_escalate": 0.05,
+  "tau_hard": 0.03,
+  "n_min": 8,
+  "avg_k": 15.0,
+  "tie_rate": 0.43058823529411766,
+  "parse_ok_rate": 0.9741176470588235,
+  "selector_inference_time_s": 0.0,
+  "selector_picks": "data/tiebreak/hr_oracle_weighted_test_tie_picks.parquet",
+  "judge_mode": "http",
+  "judge_url": "https://api.deepseek.com",
+  "judge_model": "deepseek-v4-pro",
+  "http_extra_body": "deepseek-thinking-on",
+  "http_reasoning_effort": null,
+  "latency_p50_s": 1.312420067506678,
+  "latency_p90_s": 1.312420067506678,
+  "samples_per_second_estimate": 0.7619511654525288
+}

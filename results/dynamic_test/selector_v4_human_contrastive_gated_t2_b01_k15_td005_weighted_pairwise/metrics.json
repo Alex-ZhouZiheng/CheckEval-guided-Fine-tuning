@@ -1,0 +1,86 @@
+{
+  "n_total": 1073,
+  "n_valid": 618,
+  "n_tie": 455,
+  "n_unparseable": 0,
+  "parse_rate": 0.575955265610438,
+  "accuracy": 0.7993527508090615,
+  "macro_f1": 0.7992181686701532,
+  "classification_report": {
+    "A": {
+      "precision": 0.7913907284768212,
+      "recall": 0.7966666666666666,
+      "f1-score": 0.7940199335548173,
+      "support": 300.0
+    },
+    "B": {
+      "precision": 0.8069620253164557,
+      "recall": 0.8018867924528302,
+      "f1-score": 0.804416403785489,
+      "support": 318.0
+    },
+    "accuracy": 0.7993527508090615,
+    "macro avg": {
+      "precision": 0.7991763768966385,
+      "recall": 0.7992767295597485,
+      "f1-score": 0.7992181686701532,
+      "support": 618.0
+    },
+    "weighted avg": {
+      "precision": 0.799403143355468,
+      "recall": 0.7993527508090615,
+      "f1-score": 0.799369573576425,
+      "support": 618.0
+    }
+  },
+  "pred_distribution": {
+    "B": 316,
+    "A": 302,
+    "Tie": 455
+  },
+  "position_bias_A": 0.4886731391585761,
+  "per_domain": {
+    "code": {
+      "n": 162,
+      "accuracy": 0.845679012345679,
+      "macro_f1": 0.8456731318827878
+    },
+    "general": {
+      "n": 363,
+      "accuracy": 0.7933884297520661,
+      "macro_f1": 0.7932315123529456
+    },
+    "stem": {
+      "n": 93,
+      "accuracy": 0.7419354838709677,
+      "macro_f1": 0.7411873840445269
+    }
+  },
+  "policy": "learned_topk",
+  "k": 15,
+  "score_method": "compare_checklists_pairwise_weighted",
+  "tie_delta": 0.05,
+  "aggregate_na_policy": "as_no",
+  "aggregate_coverage_threshold": 0.8,
+  "question_weights": "results/dynamic_test/question_weights/hr_oracle_k15_qwen36_27b_weights_human_contrastive_gated_t2_b01.parquet",
+  "weight_column": "importance_softmax",
+  "weight_transform": "none",
+  "weight_temperature": 1.0,
+  "weighted_na_policy": "ignore",
+  "tau_escalate": 0.05,
+  "tau_hard": 0.03,
+  "n_min": 8,
+  "avg_k": 15.0,
+  "tie_rate": 0.424044734389562,
+  "parse_ok_rate": 0.9981360671015843,
+  "selector_inference_time_s": 0.0,
+  "selector_picks": "results/dynamic_test/selector_v4_human_contrastive_gated_t2_b01_best_test_top58.parquet",
+  "judge_mode": "local",
+  "judge_url": null,
+  "judge_model": "/root/autodl-tmp/Thesis/models/Qwen3.5-9B",
+  "http_extra_body": null,
+  "http_reasoning_effort": null,
+  "latency_p50_s": 0.45981015163610056,
+  "latency_p90_s": 0.45981015163610056,
+  "samples_per_second_estimate": 2.1748106179078284
+}

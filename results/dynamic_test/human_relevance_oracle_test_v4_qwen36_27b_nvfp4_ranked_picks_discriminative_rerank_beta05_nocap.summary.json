@@ -1,0 +1,15 @@
+{
+  "n_samples": 1073,
+  "k": 15,
+  "qid_source_column": "ranked_qids",
+  "rank_alpha": 0.5,
+  "prior_beta": 0.5,
+  "epsilon": 0.02,
+  "min_support": 20,
+  "subaspect_cap": 0,
+  "changed_at_k": 1073,
+  "mean_overlap_at_k": 12.442684063373719,
+  "mean_prior_before": 0.10837513013943041,
+  "mean_prior_after": 0.12057778863001263,
+  "out": "results/dynamic_test/human_relevance_oracle_test_v4_qwen36_27b_nvfp4_ranked_picks_discriminative_rerank_beta05_nocap.parquet"
+}
