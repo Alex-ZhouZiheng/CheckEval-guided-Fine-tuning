@@ -226,12 +226,13 @@ def load_sft_dataset(
     return Dataset.from_list([{"text": _to_text(r)} for _, r in df.iterrows()])
 
 
-def build_lora_config(rank: int, alpha: int, dropout: float) -> LoraConfig:
+def build_lora_config(rank: int, alpha: int, dropout: float,
+                      target_modules: list[str] | None = None) -> LoraConfig:
     return LoraConfig(
         r=rank,
         lora_alpha=alpha,
         lora_dropout=dropout,
-        target_modules=cfg.LORA_TARGET_MODULES,
+        target_modules=target_modules or cfg.LORA_TARGET_MODULES,
         task_type=TaskType.CAUSAL_LM,
         bias="none",
     )
@@ -286,6 +287,7 @@ def load_base_unsloth(
     model_id: str, max_seq_length: int, qlora: bool,
     lora_rank: int, lora_alpha: int, lora_dropout: float,
     device_map: str | None = None,
+    target_modules: list[str] | None = None,
 ):
 
     if qlora:
@@ -323,7 +325,7 @@ def load_base_unsloth(
         r=lora_rank,
         lora_alpha=lora_alpha,
         lora_dropout=lora_dropout,
-        target_modules=cfg.LORA_TARGET_MODULES,
+        target_modules=target_modules or cfg.LORA_TARGET_MODULES,
         bias="none",
         use_gradient_checkpointing="unsloth",  # async offload to CPU RAM
         random_state=cfg.SEED,
@@ -371,6 +373,17 @@ def main() -> None:
                         help="Use DeepSpeed ZeRO-3 without CPU offload. This avoids "
                              "DeepSpeedCPUAdam CUDA extension builds when system CUDA "
                              "does not match torch CUDA.")
+    parser.add_argument("--packing", action="store_true",
+                        help="Concat short samples up to max_length for higher throughput. "
+                             "Disables custom assistant-only collator (loss includes prompt).")
+    parser.add_argument("--weight-decay", type=float, default=0.0)
+    parser.add_argument("--warmup-ratio", type=float, default=cfg.WARMUP_RATIO)
+    parser.add_argument("--lr-scheduler-type", type=str, default="linear",
+                        choices=["linear", "cosine", "constant", "constant_with_warmup",
+                                 "cosine_with_restarts", "polynomial"])
+    parser.add_argument("--target-modules", type=str, default=None,
+                        help="Comma-separated module names overriding cfg.LORA_TARGET_MODULES, "
+                             "e.g. 'q_proj,k_proj,v_proj,o_proj,gate_proj,up_proj,down_proj'.")
     parser.add_argument("--enable-thinking", action="store_true",
                         help="Pre-render chat template with enable_thinking=True so the prefix "
                              "matches Qwen3 thinking-mode inference. Required when target_output "
@@ -417,11 +430,16 @@ def main() -> None:
 
     # Tokenizer needed before dataset when --enable-thinking, so we pre-render
     # the chat template with the flag explicitly set.
+    target_modules = (
+        [m.strip() for m in args.target_modules.split(",") if m.strip()]
+        if args.target_modules else None
+    )
     if args.use_unsloth:
         model, tokenizer = load_base_unsloth(
             args.model_id, max_seq_length=args.max_length, qlora=args.qlora,
             lora_rank=args.lora_rank, lora_alpha=args.lora_alpha,
             lora_dropout=args.lora_dropout, device_map=args.device_map,
+            target_modules=target_modules,
         )
     else:
         model, tokenizer = load_base(
@@ -437,13 +455,18 @@ def main() -> None:
     # the trainer call (TRL handles wrap).
     lora_config = None if args.use_unsloth else build_lora_config(
         args.lora_rank, args.lora_alpha, args.lora_dropout,
+        target_modules=target_modules,
     )
-    data_collator = _AssistantOnlyCollator(tokenizer)
+    # Packing concats samples; our collator searches for assistant header which
+    # only catches the LAST occurrence inside a packed sequence → would mask all
+    # earlier samples. Disable custom collator and let TRL's default packing
+    # collator run (loss covers prompt tokens too, acceptable for small SFT).
+    data_collator = None if args.packing else _AssistantOnlyCollator(tokenizer)
 
     eff_bs = args.batch_size * args.grad_accum * world_size
     steps_per_epoch = max(1, math.ceil(len(train_ds) / eff_bs))
     total_steps = steps_per_epoch * args.epochs
-    warmup_steps = int(total_steps * cfg.WARMUP_RATIO)
+    warmup_steps = int(total_steps * args.warmup_ratio)
     save_steps = max(50, steps_per_epoch // 2)
 
     report_to = []
@@ -459,12 +482,14 @@ def main() -> None:
         run_name=run_name,
         max_length=args.max_length,
         assistant_only_loss=False,
-        packing=False,
+        packing=args.packing,
         num_train_epochs=args.epochs,
         per_device_train_batch_size=args.batch_size,
         gradient_accumulation_steps=args.grad_accum,
         learning_rate=args.lr,
         warmup_steps=warmup_steps,
+        weight_decay=args.weight_decay,
+        lr_scheduler_type=args.lr_scheduler_type,
         optim=args.optim,
         bf16=True,
         # Unsloth's get_peft_model already wired async-offload checkpointing;
