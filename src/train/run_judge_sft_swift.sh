@@ -1,14 +1,20 @@
 #!/usr/bin/env bash
 # Usage:
 #   bash src/train/run_judge_sft_swift.sh debug_5k_teacher
+#   MODEL_NAME=Qwen3.5-4B QUANT_BITS=0 MAX_LEN=6144 \
+#       bash src/train/run_judge_sft_swift.sh train_debug_5k_selfcheck
 #
 # Env overrides (all optional):
-#   MAX_LEN=3072 LORA_RANK=16 LR=2e-5 EPOCHS=3 GRAD_ACCUM=16 \
-#   bash src/train/run_judge_sft_swift.sh debug_5k_teacher
+#   MODEL_NAME=Qwen3.5-9B|Qwen3.5-4B   (default: Qwen3.5-9B)
+#   QUANT_BITS=4|0                     (4 = QLoRA NF4, 0 = BF16 LoRA. default: 4)
+#   MAX_LEN=3072 LORA_RANK=16 LR=2e-5 EPOCHS=3 GRAD_ACCUM=16
+#   ENABLE_THINKING=true|false         (Qwen3 native think mode. default: false)
 
 set -euo pipefail
 
 TIER="${1:-debug_5k_teacher}"
+MODEL_NAME="${MODEL_NAME:-Qwen3.5-9B}"
+QUANT_BITS="${QUANT_BITS:-4}"
 MAX_LEN="${MAX_LEN:-3072}"
 LORA_RANK="${LORA_RANK:-16}"
 LORA_ALPHA="${LORA_ALPHA:-32}"
@@ -17,12 +23,13 @@ EPOCHS="${EPOCHS:-3}"
 BATCH_SIZE="${BATCH_SIZE:-1}"
 GRAD_ACCUM="${GRAD_ACCUM:-16}"
 WARMUP_RATIO="${WARMUP_RATIO:-0.05}"
+ENABLE_THINKING="${ENABLE_THINKING:-false}"
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-MODEL_PATH="${PROJECT_ROOT}/models/Qwen3.5-9B"
+MODEL_PATH="${PROJECT_ROOT}/models/${MODEL_NAME}"
 PARQUET_PATH="${PROJECT_ROOT}/data/judge_sft/train_${TIER}.parquet"
 JSONL_PATH="${PROJECT_ROOT}/data/judge_sft/train_${TIER}.messages.jsonl"
-RUN_NAME="judge_sft_swift_${TIER}_r${LORA_RANK}_lr${LR}"
+RUN_NAME="judge_sft_swift_${MODEL_NAME}_${TIER}_r${LORA_RANK}_lr${LR}"
 OUTPUT_DIR="${PROJECT_ROOT}/checkpoints/${RUN_NAME}"
 
 # ── 1. Convert parquet → JSONL (swift 'messages' format) ──
@@ -52,6 +59,36 @@ fi
 export NPROC_PER_NODE=1
 export CUDA_VISIBLE_DEVICES=0
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+export HF_HUB_OFFLINE=1
+export TRANSFORMERS_OFFLINE=1
+
+# QLoRA flags: only injected when QUANT_BITS != 0. Qwen3.5 4B in BF16 fits a
+# 32GB 5090 at MAX_LEN=6144; QLoRA adds quant noise unsloth flagged as worse
+# than usual on this arch.
+QUANT_FLAGS=()
+if [[ "${QUANT_BITS}" != "0" ]]; then
+  QUANT_FLAGS=(
+    --quant_bits "${QUANT_BITS}"
+    --quant_method bnb
+    --bnb_4bit_compute_dtype bfloat16
+    --bnb_4bit_quant_type nf4
+  )
+fi
+
+# enable_thinking forwards to Qwen3 chat template. Self-checklist data has
+# <think>...</think> already in target_output → must NOT add another prefix
+# (--add_non_thinking_prefix false), otherwise we get nested <think> blocks.
+THINK_FLAGS=()
+if [[ "${ENABLE_THINKING}" == "true" ]]; then
+  THINK_FLAGS=(
+    --template_kwargs '{"enable_thinking": true}'
+    --add_non_thinking_prefix false
+  )
+else
+  THINK_FLAGS=(
+    --add_non_thinking_prefix true
+  )
+fi
 
 swift sft \
   --model "${MODEL_PATH}" \
@@ -60,15 +97,12 @@ swift sft \
   --lora_rank "${LORA_RANK}" \
   --lora_alpha "${LORA_ALPHA}" \
   --target_modules all-linear \
-  --quant_bits 4 \
-  --quant_method bnb \
-  --bnb_4bit_compute_dtype bfloat16 \
-  --bnb_4bit_quant_type nf4 \
+  "${QUANT_FLAGS[@]}" \
   --torch_dtype bfloat16 \
   --max_length "${MAX_LEN}" \
   --truncation_strategy left \
   --group_by_length true \
-  --add_non_thinking_prefix true \
+  "${THINK_FLAGS[@]}" \
   --loss_scale ignore_empty_think \
   --use_liger_kernel true \
   --attn_impl flash_attn \
