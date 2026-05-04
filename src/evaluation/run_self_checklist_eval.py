@@ -40,7 +40,10 @@ from rich.table import Table
 from tqdm import tqdm
 
 import config as cfg
-from data_process.prepare_self_checklist_sft import parse_self_checklist_trace
+from data_process.prepare_self_checklist_sft import (
+    parse_self_checklist_trace,
+    SELF_CHECKLIST_STUDENT_PROMPT_THINKING,
+)
 from utils import (
     compute_metrics,
     generate_batch,
@@ -143,13 +146,24 @@ def _trace_diagnostics(raw_outputs: list[str]) -> tuple[
     return n_questions, item_tie_rates
 
 
-def build_eval_prompts(df: pd.DataFrame) -> tuple[list[list[dict]], list[int]]:
+def build_eval_prompts(
+    df: pd.DataFrame, enable_thinking: bool = False,
+) -> tuple[list[list[dict]], list[int]]:
     """Build self-checklist eval prompts for each row.
+
+    When ``enable_thinking`` is True, use the prompt variant that places the
+    structured ``### Checklist`` / ``### Item Verdicts`` / ``### Final`` blocks
+    AFTER the thinking block — matches Qwen3 native thinking mode and the SFT
+    teacher data produced by ``prepare_self_checklist_sft.py --enable-thinking``.
 
     Returns:
         messages_list: one ``[{"role": "user", "content": prompt}]`` per sample.
         keep_idx: row indices of df that were kept (swap_flag=False rows).
     """
+    template = (
+        SELF_CHECKLIST_STUDENT_PROMPT_THINKING if enable_thinking
+        else SELF_CHECKLIST_EVAL_PROMPT
+    )
     messages_list: list[list[dict]] = []
     keep_idx: list[int] = []
     n_swapped = 0
@@ -157,7 +171,7 @@ def build_eval_prompts(df: pd.DataFrame) -> tuple[list[list[dict]], list[int]]:
         if "swap_flag" in df.columns and row.get("swap_flag") is True:
             n_swapped += 1
             continue
-        prompt = SELF_CHECKLIST_EVAL_PROMPT.format(
+        prompt = template.format(
             context=row["context"],
             response_a=row["response_a"],
             response_b=row["response_b"],
@@ -179,6 +193,7 @@ def _http_judge_generate(
     max_new_tokens: int,
     temperature: float = 0.0,
     concurrency: int = 32,
+    enable_thinking: bool = False,
 ) -> list[str]:
     """Fan out chat.completions calls to a running OpenAI-compatible server."""
     from openai import OpenAI
@@ -191,7 +206,7 @@ def _http_judge_generate(
             messages=msgs,
             temperature=temperature,
             max_tokens=max_new_tokens,
-            extra_body={"chat_template_kwargs": {"enable_thinking": False}},
+            extra_body={"chat_template_kwargs": {"enable_thinking": enable_thinking}},
         )
         return resp.choices[0].message.content or ""
 
@@ -227,6 +242,17 @@ def main() -> None:
                         default=cfg.VLLM_ENGINE_KWARGS["max_model_len"])
     parser.add_argument("--gpu-memory-utilization", type=float,
                         default=cfg.VLLM_ENGINE_KWARGS["gpu_memory_utilization"])
+    parser.add_argument("--enable-thinking", action="store_true",
+                        help="Use Qwen3 native thinking mode. Switches prompt to "
+                             "the post-thinking-structured variant and passes "
+                             "chat_template_kwargs={'enable_thinking': True} to vLLM. "
+                             "Required when evaluating an adapter trained with "
+                             "--enable-thinking.")
+    parser.add_argument("--max-num-seqs", type=int, default=16)
+    parser.add_argument("--max-num-batched-tokens", type=int,
+                        default=cfg.VLLM_ENGINE_KWARGS.get("max_num_batched_tokens", 12288))
+    parser.add_argument("--enable-mtp", action="store_true")
+    parser.add_argument("--mtp-num-speculative-tokens", type=int, default=1)
     args = parser.parse_args()
 
     # ── adapter setup ──
@@ -245,8 +271,9 @@ def main() -> None:
     if args.max_samples:
         df = df.head(args.max_samples).reset_index(drop=True)
 
-    messages_list, keep_idx = build_eval_prompts(df)
-    log.info("Evaluable samples: %d / %d", len(keep_idx), len(df))
+    messages_list, keep_idx = build_eval_prompts(df, enable_thinking=args.enable_thinking)
+    log.info("Evaluable samples: %d / %d  (enable_thinking=%s)",
+             len(keep_idx), len(df), args.enable_thinking)
 
     if not keep_idx:
         raise SystemExit("No evaluable samples found.")
@@ -270,20 +297,28 @@ def main() -> None:
             messages_list, url, judge_model_name, api_key,
             max_new_tokens=args.max_new_tokens,
             concurrency=args.http_concurrency,
+            enable_thinking=args.enable_thinking,
         )
         elapsed = time.time() - t0
     else:
         enable_lora = adapter_path is not None
+        speculative_config = (
+            {"method": "mtp", "num_speculative_tokens": args.mtp_num_speculative_tokens}
+            if args.enable_mtp else None
+        )
         model = load_judge_model(
             model_id=args.base_model,
             backend=args.backend,
             tensor_parallel_size=args.tensor_parallel_size,
             max_model_len=args.max_model_len,
             gpu_memory_utilization=args.gpu_memory_utilization,
+            max_num_seqs=args.max_num_seqs,
+            max_num_batched_tokens=args.max_num_batched_tokens,
             enable_lora=enable_lora,
             max_lora_rank=max(lora_rank, 16) if enable_lora else None,
             max_loras=1 if enable_lora else None,
             llamacpp_adapter_path=str(adapter_path) if enable_lora else None,
+            speculative_config=speculative_config,
         )
         lora_request = make_lora_handle(
             adapter_path=str(adapter_path) if enable_lora else None,
@@ -297,6 +332,8 @@ def main() -> None:
             batch_size=args.batch_size,
             max_new_tokens=args.max_new_tokens,
             lora_request=lora_request,
+            chat_template_kwargs=({"enable_thinking": True}
+                                  if args.enable_thinking else None),
         )
         elapsed = time.time() - t0
 
