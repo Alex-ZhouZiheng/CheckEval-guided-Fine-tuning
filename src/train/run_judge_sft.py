@@ -185,6 +185,13 @@ def load_base(model_id: str, qlora: bool = False):
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 
+    # Left-truncate so the assistant target tail (### Final\nWinner: ...) is
+    # preserved when --max-length cuts the sequence. With the default right
+    # truncation, long thinking traces would knock the Winner line — and the
+    # entire structured answer — out of the loss span, training the model
+    # only on the thinking prefix.
+    tokenizer.truncation_side = "left"
+
     kwargs = dict(trust_remote_code=True)
     if qlora:
         kwargs["quantization_config"] = BitsAndBytesConfig(
