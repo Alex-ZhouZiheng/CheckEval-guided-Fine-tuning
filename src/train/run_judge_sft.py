@@ -54,6 +54,22 @@ def build_deepspeed_zero3_config() -> dict:
     }
 
 
+def build_deepspeed_zero3_no_offload_config() -> dict:
+    return {
+        "bf16": {"enabled": True},
+        "zero_optimization": {
+            "stage": 3,
+            "overlap_comm": True,
+            "contiguous_gradients": True,
+            "stage3_gather_16bit_weights_on_model_save": True,
+        },
+        "gradient_accumulation_steps": "auto",
+        "gradient_clipping": 1.0,
+        "train_micro_batch_size_per_gpu": "auto",
+        "train_batch_size": "auto",
+    }
+
+
 # ── Liger Kernel: fused RoPE / RMSNorm / SwiGLU saves ~6-10 GB on Qwen3 ──
 # Skipped when --use-unsloth (unsloth ships its own fused kernels; double-patch
 # can break activation shapes). Set DISABLE_LIGER=1 to force-skip.
@@ -326,6 +342,10 @@ def main() -> None:
     parser.add_argument("--deepspeed-zero3", action="store_true",
                         help="Use DeepSpeed ZeRO-3 with CPU parameter/optimizer offload. "
                              "Launch with torchrun/accelerate for multi-GPU sharding.")
+    parser.add_argument("--deepspeed-zero3-no-offload", action="store_true",
+                        help="Use DeepSpeed ZeRO-3 without CPU offload. This avoids "
+                             "DeepSpeedCPUAdam CUDA extension builds when system CUDA "
+                             "does not match torch CUDA.")
     parser.add_argument("--enable-thinking", action="store_true",
                         help="Pre-render chat template with enable_thinking=True so the prefix "
                              "matches Qwen3 thinking-mode inference. Required when target_output "
@@ -335,6 +355,10 @@ def main() -> None:
     world_size = int(os.environ.get("WORLD_SIZE", "1"))
     if args.device_map is not None and args.deepspeed_zero3:
         parser.error("--device-map and --deepspeed-zero3 are mutually exclusive.")
+    if args.device_map is not None and args.deepspeed_zero3_no_offload:
+        parser.error("--device-map and --deepspeed-zero3-no-offload are mutually exclusive.")
+    if args.deepspeed_zero3 and args.deepspeed_zero3_no_offload:
+        parser.error("--deepspeed-zero3 and --deepspeed-zero3-no-offload are mutually exclusive.")
     if args.device_map is not None and world_size > 1:
         parser.error("--device-map is single-process model sharding; do not use it with torchrun/DDP.")
 
@@ -430,7 +454,13 @@ def main() -> None:
         seed=cfg.SEED,
         dataloader_num_workers=2,
         remove_unused_columns=False,
-        deepspeed=build_deepspeed_zero3_config() if args.deepspeed_zero3 else None,
+        deepspeed=(
+            build_deepspeed_zero3_config()
+            if args.deepspeed_zero3
+            else build_deepspeed_zero3_no_offload_config()
+            if args.deepspeed_zero3_no_offload
+            else None
+        ),
         ddp_find_unused_parameters=False if world_size > 1 else None,
     )
 
@@ -469,6 +499,7 @@ def main() -> None:
         "use_unsloth": bool(args.use_unsloth),
         "device_map": args.device_map,
         "deepspeed_zero3": bool(args.deepspeed_zero3),
+        "deepspeed_zero3_no_offload": bool(args.deepspeed_zero3_no_offload),
     }
     with open(output_dir / "train_config.json", "w", encoding="utf-8") as f:
         json.dump(meta, f, indent=2, default=str)

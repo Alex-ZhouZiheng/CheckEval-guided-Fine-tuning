@@ -122,18 +122,16 @@ Do not commit `.env`, model weights, raw private data, or large generated output
 <claude-mem-context>
 # Memory Context
 
-# [CheckEval-guided-Fine-tuning] recent context, 2026-05-04 3:59pm GMT+2
+# [CheckEval-guided-Fine-tuning] recent context, 2026-05-04 4:16pm GMT+2
 
 Legend: 🎯session 🔴bugfix 🟣feature 🔄refactor ✅change 🔵discovery ⚖️decision 🚨security_alert 🔐security_note
 Format: ID TIME TYPE TITLE
 Fetch details: get_observations([IDs]) | Search: mem-search skill
 
-Stats: 50 obs (12,255t read) | 436,818t work | 97% savings
+Stats: 50 obs (12,345t read) | 372,689t work | 97% savings
 
 ### May 3, 2026
-496 1:22p 🔴 Parser now searches only post‑content for all ### blocks
-502 9:47p 🔵 Missing Checklist section in failed raw outputs
-504 " ✅ Removed debug dump hook from prepare_self_checklist_sft.py
+504 9:47p ✅ Removed debug dump hook from prepare_self_checklist_sft.py
 506 9:48p ✅ Removed debug raw-dump hook from prepare_self_checklist_sft.py
 501 9:49p 🔵 User requests replacing prompt-forced Qwen3 think output with native think mode
 503 " 🔴 Parser now uses post‑thinking content for all sections
@@ -192,6 +190,8 @@ S101 User asked if provided PEFT fine-tuning command parameters are suitable for
 554 3:42p 🔵 User inquired about suitability of PEFT fine-tuning parameters for first-time judge SFT run
 555 3:44p 🔵 Remote GPU status and Python package versions inspected
 556 3:57p 🔵 User inquired about OOM avoidance methods for dual-GPU setups
+557 4:00p 🔵 [**PEFT Fine-Tuning Parameter Consultation for Qwen3.5-9B**]
+558 4:11p 🔵 CUDA out‑of‑memory despite 64 GiB total GPU memory
 
-Access 437k tokens of past work via get_observations([IDs]) or mem-search skill.
+Access 373k tokens of past work via get_observations([IDs]) or mem-search skill.
 </claude-mem-context>
