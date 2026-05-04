@@ -75,19 +75,16 @@ if [[ "${QUANT_BITS}" != "0" ]]; then
   )
 fi
 
-# enable_thinking forwards to Qwen3 chat template. Self-checklist data has
-# <think>...</think> already in target_output → must NOT add another prefix
-# (--add_non_thinking_prefix false), otherwise we get nested <think> blocks.
+# enable_thinking: ms-swift doesn't expose --template_kwargs in older
+# versions; fall back to --add_non_thinking_prefix toggle which controls
+# whether a "<think>\n\n</think>" prefix gets injected into the assistant
+# turn. Self-checklist data already carries <think>...</think> inside
+# target_output, so we want NO extra prefix when ENABLE_THINKING=true.
 THINK_FLAGS=()
 if [[ "${ENABLE_THINKING}" == "true" ]]; then
-  THINK_FLAGS=(
-    --template_kwargs '{"enable_thinking": true}'
-    --add_non_thinking_prefix false
-  )
+  THINK_FLAGS=(--add_non_thinking_prefix false)
 else
-  THINK_FLAGS=(
-    --add_non_thinking_prefix true
-  )
+  THINK_FLAGS=(--add_non_thinking_prefix true)
 fi
 
 swift sft \
