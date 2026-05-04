@@ -233,6 +233,12 @@ def load_base_unsloth(
         dtype=torch.bfloat16 if not qlora else None,
         trust_remote_code=True,
     )
+    # Newer unsloth returns a Processor wrapper for VL-capable repos. The text
+    # tokenizer lives at processor.tokenizer; downstream code (collator, chat
+    # template) needs the bare tokenizer interface (encode/decode/etc).
+    if not hasattr(tokenizer, "encode") and hasattr(tokenizer, "tokenizer"):
+        log.info("  Extracting .tokenizer from %s wrapper", type(tokenizer).__name__)
+        tokenizer = tokenizer.tokenizer
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
     tokenizer.truncation_side = "left"
