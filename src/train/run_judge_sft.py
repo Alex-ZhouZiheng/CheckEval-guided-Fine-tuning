@@ -35,6 +35,8 @@ log = logging.getLogger(__name__)
 
 
 # ── Liger Kernel: fused RoPE / RMSNorm / SwiGLU saves ~6-10 GB on Qwen3 ──
+# Skipped when --use-unsloth (unsloth ships its own fused kernels; double-patch
+# can break activation shapes). Set DISABLE_LIGER=1 to force-skip.
 def _apply_liger():
     if os.environ.get("DISABLE_LIGER", "0") == "1":
         return
@@ -57,9 +59,6 @@ def _apply_liger():
                 return
             except Exception as e:
                 log.warning("%s failed: %s", fn_name, e)
-
-
-_apply_liger()
 
 
 class _AssistantOnlyCollator:
@@ -224,6 +223,44 @@ def load_base(model_id: str, qlora: bool = False):
     return model, tokenizer
 
 
+def load_base_unsloth(
+    model_id: str, max_seq_length: int, qlora: bool,
+    lora_rank: int, lora_alpha: int, lora_dropout: float,
+):
+    """Load via unsloth FastLanguageModel — fused kernels + async activation
+    offload give ~30-50% VRAM headroom over HF+FA2 at long context.
+
+    Unsloth injects LoRA itself; caller MUST NOT pass peft_config to SFTTrainer.
+    """
+    from unsloth import FastLanguageModel  # noqa: imports patch at load time
+
+    log.info("Loading via unsloth: %s (qlora=%s, max_seq=%d)",
+             model_id, qlora, max_seq_length)
+    model, tokenizer = FastLanguageModel.from_pretrained(
+        model_name=model_id,
+        max_seq_length=max_seq_length,
+        load_in_4bit=qlora,
+        dtype=torch.bfloat16 if not qlora else None,
+        trust_remote_code=True,
+    )
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token
+    tokenizer.truncation_side = "left"
+    tokenizer.padding_side = "right"
+
+    model = FastLanguageModel.get_peft_model(
+        model,
+        r=lora_rank,
+        lora_alpha=lora_alpha,
+        lora_dropout=lora_dropout,
+        target_modules=cfg.LORA_TARGET_MODULES,
+        bias="none",
+        use_gradient_checkpointing="unsloth",  # async offload to CPU RAM
+        random_state=cfg.SEED,
+    )
+    return model, tokenizer
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--tier", type=str, default="debug_5k")
@@ -246,6 +283,10 @@ def main() -> None:
     parser.add_argument("--run-name", type=str, default=None)
     parser.add_argument("--no-wandb", action="store_true")
     parser.add_argument("--no-tensorboard", action="store_true")
+    parser.add_argument("--use-unsloth", action="store_true",
+                        help="Load via unsloth FastLanguageModel (fused kernels + async "
+                             "activation offload). Allows 9B QLoRA @ 8192 ctx on 32GB. "
+                             "Mutually exclusive with liger-kernel; we auto-disable liger.")
     parser.add_argument("--enable-thinking", action="store_true",
                         help="Pre-render chat template with enable_thinking=True so the prefix "
                              "matches Qwen3 thinking-mode inference. Required when target_output "
@@ -264,15 +305,34 @@ def main() -> None:
     if use_tb:
         os.environ["TENSORBOARD_LOGGING_DIR"] = str(cfg.TENSORBOARD_DIR / run_name)
 
+    # liger and unsloth ship overlapping kernel patches — running both crashes
+    # at the first forward pass. Liger applies on import; gate it on the flag.
+    if not args.use_unsloth:
+        _apply_liger()
+    else:
+        log.info("--use-unsloth set: skipping liger-kernel (unsloth has its own).")
+
     # Tokenizer needed before dataset when --enable-thinking, so we pre-render
     # the chat template with the flag explicitly set.
-    model, tokenizer = load_base(args.model_id, qlora=args.qlora)
+    if args.use_unsloth:
+        model, tokenizer = load_base_unsloth(
+            args.model_id, max_seq_length=args.max_length, qlora=args.qlora,
+            lora_rank=args.lora_rank, lora_alpha=args.lora_alpha,
+            lora_dropout=args.lora_dropout,
+        )
+    else:
+        model, tokenizer = load_base(args.model_id, qlora=args.qlora)
     train_ds = load_sft_dataset(
         args.tier, args.sft_path,
         tokenizer=tokenizer if args.enable_thinking else None,
         enable_thinking=args.enable_thinking,
     )
-    lora_config = build_lora_config(args.lora_rank, args.lora_alpha, args.lora_dropout)
+    # unsloth injected LoRA via get_peft_model already; passing peft_config to
+    # SFTTrainer would double-wrap and break grad flow. HF path keeps PEFT in
+    # the trainer call (TRL handles wrap).
+    lora_config = None if args.use_unsloth else build_lora_config(
+        args.lora_rank, args.lora_alpha, args.lora_dropout,
+    )
     data_collator = _AssistantOnlyCollator(tokenizer)
 
     world_size = int(os.environ.get("WORLD_SIZE", "1"))
@@ -303,8 +363,12 @@ def main() -> None:
         warmup_steps=warmup_steps,
         optim=args.optim,
         bf16=True,
-        gradient_checkpointing=True,
-        gradient_checkpointing_kwargs={"use_reentrant": False},
+        # Unsloth's get_peft_model already wired async-offload checkpointing;
+        # toggling it again from TRL re-wraps and disables the offload path.
+        gradient_checkpointing=not args.use_unsloth,
+        gradient_checkpointing_kwargs=(
+            None if args.use_unsloth else {"use_reentrant": False}
+        ),
         save_strategy="steps",
         save_steps=save_steps,
         save_total_limit=2,
@@ -347,6 +411,7 @@ def main() -> None:
         "train_samples": len(train_ds),
         "seed": cfg.SEED,
         "enable_thinking": bool(args.enable_thinking),
+        "use_unsloth": bool(args.use_unsloth),
     }
     with open(output_dir / "train_config.json", "w", encoding="utf-8") as f:
         json.dump(meta, f, indent=2, default=str)
