@@ -21,6 +21,7 @@ import os
 from pathlib import Path
 
 os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
+os.environ.setdefault("PYTORCH_ALLOC_CONF", "expandable_segments:True")
 
 import pandas as pd
 import torch
@@ -224,6 +225,12 @@ def load_base_unsloth(
     lora_rank: int, lora_alpha: int, lora_dropout: float,
 ):
 
+    if qlora:
+        log.warning(
+            "QLoRA (4-bit) is NOT recommended for Qwen3.5 by unsloth docs — "
+            "quantization differences larger than normal. Use bf16 LoRA instead "
+            "(drop --qlora). If OOM persists, reduce --max-length."
+        )
     log.info("Loading via unsloth: %s (qlora=%s, max_seq=%d)",
              model_id, qlora, max_seq_length)
     model, tokenizer = FastLanguageModel.from_pretrained(
@@ -253,6 +260,7 @@ def load_base_unsloth(
         bias="none",
         use_gradient_checkpointing="unsloth",  # async offload to CPU RAM
         random_state=cfg.SEED,
+        max_seq_length=max_seq_length,
     )
     return model, tokenizer
 
@@ -273,9 +281,10 @@ def main() -> None:
     parser.add_argument("--lora-dropout", type=float, default=cfg.LORA_DROPOUT)
     parser.add_argument("--max-length", type=int, default=cfg.MAX_LENGTH)
     parser.add_argument("--qlora", action="store_true",
-                        help="Load base model in 4-bit NF4 (QLoRA). Saves ~13GB on a 9B model.")
-    parser.add_argument("--optim", type=str, default="adamw_torch",
-                        choices=["adamw_torch", "paged_adamw_8bit", "adamw_bnb_8bit"])
+                        help="Load base model in 4-bit NF4 (QLoRA). Note: unsloth docs "
+                             "recommend AGAINST QLoRA for Qwen3.5 — use bf16 LoRA instead.")
+    parser.add_argument("--optim", type=str, default="adamw_8bit",
+                        choices=["adamw_torch", "paged_adamw_8bit", "adamw_bnb_8bit", "adamw_8bit"])
     parser.add_argument("--run-name", type=str, default=None)
     parser.add_argument("--no-wandb", action="store_true")
     parser.add_argument("--no-tensorboard", action="store_true")
@@ -307,6 +316,13 @@ def main() -> None:
         _apply_liger()
     else:
         log.info("--use-unsloth set: skipping liger-kernel (unsloth has its own).")
+        if args.lora_dropout > 0:
+            log.warning(
+                "Unsloth requires dropout=0 for fast LoRA patching. "
+                "lora_dropout=%.2f will prevent patching LoRA matrices → speed drop. "
+                "Pass --lora-dropout 0 to fix.",
+                args.lora_dropout,
+            )
 
     # Tokenizer needed before dataset when --enable-thinking, so we pre-render
     # the chat template with the flag explicitly set.
