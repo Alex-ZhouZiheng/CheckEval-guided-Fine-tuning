@@ -36,6 +36,24 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s  %(message)s")
 log = logging.getLogger(__name__)
 
 
+def build_deepspeed_zero3_config() -> dict:
+    return {
+        "bf16": {"enabled": True},
+        "zero_optimization": {
+            "stage": 3,
+            "offload_optimizer": {"device": "cpu", "pin_memory": True},
+            "offload_param": {"device": "cpu", "pin_memory": True},
+            "overlap_comm": True,
+            "contiguous_gradients": True,
+            "stage3_gather_16bit_weights_on_model_save": True,
+        },
+        "gradient_accumulation_steps": "auto",
+        "gradient_clipping": 1.0,
+        "train_micro_batch_size_per_gpu": "auto",
+        "train_batch_size": "auto",
+    }
+
+
 # ── Liger Kernel: fused RoPE / RMSNorm / SwiGLU saves ~6-10 GB on Qwen3 ──
 # Skipped when --use-unsloth (unsloth ships its own fused kernels; double-patch
 # can break activation shapes). Set DISABLE_LIGER=1 to force-skip.
@@ -178,8 +196,9 @@ def build_lora_config(rank: int, alpha: int, dropout: float) -> LoraConfig:
     )
 
 
-def load_base(model_id: str, qlora: bool = False):
-    log.info("Loading tokenizer and base model: %s (qlora=%s)", model_id, qlora)
+def load_base(model_id: str, qlora: bool = False, device_map: str | None = None):
+    log.info("Loading tokenizer and base model: %s (qlora=%s, device_map=%s)",
+             model_id, qlora, device_map or "<none>")
     tokenizer = AutoTokenizer.from_pretrained(
         model_id, trust_remote_code=True, padding_side="right",
     )
@@ -198,6 +217,8 @@ def load_base(model_id: str, qlora: bool = False):
         )
     else:
         kwargs["dtype"] = torch.bfloat16
+    if device_map is not None:
+        kwargs["device_map"] = device_map
 
     try:
         model = AutoModelForCausalLM.from_pretrained(
@@ -223,6 +244,7 @@ def load_base(model_id: str, qlora: bool = False):
 def load_base_unsloth(
     model_id: str, max_seq_length: int, qlora: bool,
     lora_rank: int, lora_alpha: int, lora_dropout: float,
+    device_map: str | None = None,
 ):
 
     if qlora:
@@ -231,14 +253,18 @@ def load_base_unsloth(
             "quantization differences larger than normal. Use bf16 LoRA instead "
             "(drop --qlora). If OOM persists, reduce --max-length."
         )
-    log.info("Loading via unsloth: %s (qlora=%s, max_seq=%d)",
-             model_id, qlora, max_seq_length)
+    log.info("Loading via unsloth: %s (qlora=%s, max_seq=%d, device_map=%s)",
+             model_id, qlora, max_seq_length, device_map or "<none>")
+    load_kwargs = {}
+    if device_map is not None:
+        load_kwargs["device_map"] = device_map
     model, tokenizer = FastLanguageModel.from_pretrained(
         model_name=model_id,
         max_seq_length=max_seq_length,
         load_in_4bit=qlora,
         dtype=torch.bfloat16 if not qlora else None,
         trust_remote_code=True,
+        **load_kwargs,
     )
     # Newer unsloth returns a Processor wrapper for VL-capable repos. The text
     # tokenizer lives at processor.tokenizer; downstream code (collator, chat
@@ -292,11 +318,25 @@ def main() -> None:
                         help="Load via unsloth FastLanguageModel (fused kernels + async "
                              "activation offload). Allows 9B QLoRA @ 8192 ctx on 32GB. "
                              "Mutually exclusive with liger-kernel; we auto-disable liger.")
+    parser.add_argument("--device-map", type=str, default=None,
+                        choices=["auto", "balanced", "balanced_low_0", "sequential"],
+                        help="Pass device_map to from_pretrained for single-process model "
+                             "sharding, e.g. --device-map balanced. Do not combine with "
+                             "torchrun/DDP or --deepspeed-zero3.")
+    parser.add_argument("--deepspeed-zero3", action="store_true",
+                        help="Use DeepSpeed ZeRO-3 with CPU parameter/optimizer offload. "
+                             "Launch with torchrun/accelerate for multi-GPU sharding.")
     parser.add_argument("--enable-thinking", action="store_true",
                         help="Pre-render chat template with enable_thinking=True so the prefix "
                              "matches Qwen3 thinking-mode inference. Required when target_output "
                              "contains <think>...</think> blocks (self-checklist CoT data).")
     args = parser.parse_args()
+
+    world_size = int(os.environ.get("WORLD_SIZE", "1"))
+    if args.device_map is not None and args.deepspeed_zero3:
+        parser.error("--device-map and --deepspeed-zero3 are mutually exclusive.")
+    if args.device_map is not None and world_size > 1:
+        parser.error("--device-map is single-process model sharding; do not use it with torchrun/DDP.")
 
     run_name = args.run_name or f"judge_sft_{args.tier}_r{args.lora_rank}_lr{args.lr}"
     output_dir = cfg.CHECKPOINTS_DIR / run_name
@@ -330,10 +370,12 @@ def main() -> None:
         model, tokenizer = load_base_unsloth(
             args.model_id, max_seq_length=args.max_length, qlora=args.qlora,
             lora_rank=args.lora_rank, lora_alpha=args.lora_alpha,
-            lora_dropout=args.lora_dropout,
+            lora_dropout=args.lora_dropout, device_map=args.device_map,
         )
     else:
-        model, tokenizer = load_base(args.model_id, qlora=args.qlora)
+        model, tokenizer = load_base(
+            args.model_id, qlora=args.qlora, device_map=args.device_map,
+        )
     train_ds = load_sft_dataset(
         args.tier, args.sft_path,
         tokenizer=tokenizer if args.enable_thinking else None,
@@ -347,7 +389,6 @@ def main() -> None:
     )
     data_collator = _AssistantOnlyCollator(tokenizer)
 
-    world_size = int(os.environ.get("WORLD_SIZE", "1"))
     eff_bs = args.batch_size * args.grad_accum * world_size
     steps_per_epoch = max(1, math.ceil(len(train_ds) / eff_bs))
     total_steps = steps_per_epoch * args.epochs
@@ -389,6 +430,8 @@ def main() -> None:
         seed=cfg.SEED,
         dataloader_num_workers=2,
         remove_unused_columns=False,
+        deepspeed=build_deepspeed_zero3_config() if args.deepspeed_zero3 else None,
+        ddp_find_unused_parameters=False if world_size > 1 else None,
     )
 
     trainer = SFTTrainer(
@@ -424,6 +467,8 @@ def main() -> None:
         "seed": cfg.SEED,
         "enable_thinking": bool(args.enable_thinking),
         "use_unsloth": bool(args.use_unsloth),
+        "device_map": args.device_map,
+        "deepspeed_zero3": bool(args.deepspeed_zero3),
     }
     with open(output_dir / "train_config.json", "w", encoding="utf-8") as f:
         json.dump(meta, f, indent=2, default=str)

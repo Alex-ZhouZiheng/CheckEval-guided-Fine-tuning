@@ -53,7 +53,8 @@
       "Bash(git add *)",
       "Bash(git commit *)",
       "Bash(cd \"D:\\\\\\\\CheckEval-guided-Fine-tuning\")",
-      "Bash(echo \"---EXISTS=$?\")"
+      "Bash(echo \"---EXISTS=$?\")",
+      "Bash(scp -P 34697 data/oracle/v5_new_qids.parquet root@connect.bjb2.seetacloud.com:/root/autodl-tmp/Thesis/data/oracle/)"
     ]
   }
 }

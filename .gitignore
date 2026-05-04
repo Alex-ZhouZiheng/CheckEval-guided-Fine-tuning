@@ -118,6 +118,7 @@ checklistbak/
 wandb/
 
 .claude/
+.worktrees/
 .agents/
 .code
 .orchestra-skills.json

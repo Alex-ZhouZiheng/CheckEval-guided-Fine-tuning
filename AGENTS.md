@@ -122,76 +122,76 @@ Do not commit `.env`, model weights, raw private data, or large generated output
 <claude-mem-context>
 # Memory Context
 
-# [CheckEval-guided-Fine-tuning] recent context, 2026-05-01 2:26pm GMT+2
+# [CheckEval-guided-Fine-tuning] recent context, 2026-05-04 3:59pm GMT+2
 
 Legend: 🎯session 🔴bugfix 🟣feature 🔄refactor ✅change 🔵discovery ⚖️decision 🚨security_alert 🔐security_note
 Format: ID TIME TYPE TITLE
 Fetch details: get_observations([IDs]) | Search: mem-search skill
 
-Stats: 50 obs (18,766t read) | 490,114t work | 96% savings
+Stats: 50 obs (12,255t read) | 436,818t work | 97% savings
 
-### Apr 30, 2026
-S13 Gated contrastive selector — full design spec written and presented for user approval before implementation (Apr 30, 10:12 PM)
-S14 Gated/conditional contrastive selector implementation for CheckEval bi-encoder checklist selector — complete wiring of contrastive_gate_threshold and contrastive_gate_topk params through run_selector_train.py (Apr 30, 10:13 PM)
-S15 Analyze ARA experiment results and identify next research steps for Checklist-Guided Fine-Tuning thesis (Apr 30, 10:37 PM)
-### May 1, 2026
-S16 Analyse current experiment results in ara/ folder and determine next steps for CheckEval-guided Preference Evaluation research (May 1, 11:09 AM)
-S17 Analyse current experiment results in ara/ folder and determine next steps for CheckEval-guided Preference Evaluation research (May 1, 11:24 AM)
-S20 Analyse current experiment results in ara/ folder and determine next steps for CheckEval-guided Preference Evaluation research (May 1, 11:25 AM)
-S19 Analyse current experiment results in ara/ folder and determine next steps for CheckEval-guided Preference Evaluation research (May 1, 11:26 AM)
-S18 Analyse current experiment results in ara/ folder and determine next steps for CheckEval-guided Preference Evaluation research (May 1, 11:26 AM)
-S21 Benchmark DeepSeek V4 Pro as judge for HR top-15 evaluation on full test split (1073 samples), then distill into 9B model (May 1, 11:26 AM)
-134 1:15p 🔵 DeepSeek V4 Pro HTTP Judge Runs: 100% Tie Rate, 0% Parse Rate
-135 " 🔵 Review App Encoding Corruption from PowerShell Set-Content
-136 " 🔵 Local Project Missing Three Key HR Oracle Input Files
-146 1:27p 🔵 DeepSeek V4 Pro 5-sample smoke test produces no output after 604s timeout
-138 " 🔵 DeepSeek V4 Pro Judge Successfully Parses with Thinking Mode Enabled
-139 " ⚖️ Judge-Ceiling Experiment: DeepSeek V4 Pro on Full 1073-Sample Test Set
-147 1:38p 🔵 DeepSeek V4 Pro smoke test succeeds with http-concurrency=100 in 131s
-152 " 🔵 DeepSeek V4 Pro smoke test succeeds — 100% parse rate, 100% accuracy on 5 samples
-144 " 🔵 DeepSeek V4 Pro smoke test times out after 604s with thinking-on
-145 " 🔵 DeepSeek V4 Pro Judge Ceiling Experiment: Serial Throughput Too Slow
-154 1:39p 🔵 Full DeepSeek V4 Pro HR-oracle experiment now feasible with concurrency=100
-148 1:41p 🔵 No observable work completed yet
-149 " 🔵 Target parquet file confirmed at 6.9MB
-156 " 🔴 Added retry logic with exponential backoff to HTTP judge requests
-158 1:42p 🔵 Retry logic recovers from transient HTTP failures but full experiment still crashes
-150 " 🔵 Parquet schema inspected: 595 rows, 42 columns
-151 " 🔵 Dataset composition: 71% ties, 20% wrong winners, 9% correct
-153 " 🔵 97.5% of weight arrays contain NaN values; 21 weight parse failures
-159 " 🔵 Primary session re-running exploration commands
-160 " 🔵 Question bank index loaded: 58 questions with dimension/sub_aspect mapping
-166 " 🟣 Comprehensive tie/error analysis script created and executed
-167 " 🔴 Critical bug: classify_failure_modes reads wrong key names for computed stats
-161 1:44p 🔵 build_oracle_labels.py has HTTP resume cache — run_dynamic_eval.py lacks it
-155 " 🔵 Full DeepSeek V4 Pro experiment crashes after initial API burst — rate limit or OOM
-162 1:45p 🔵 run_dynamic_eval.py uses fragile ex.map — build_oracle_labels.py has robust as_completed + resume cache
-157 " ✅ No new primary session activity to record
-163 " 🟣 Port HTTP resume cache from build_oracle_labels.py to run_dynamic_eval.py
-176 1:48p 🟣 HTTP resume cache added to run_dynamic_eval.py
-177 " 🔵 DeepSeek V4 Pro concurrency=100 hits 429 rate limit after ~53s
-178 " 🔵 Cache writes survive process exit in detached process but not foreground
-164 1:50p 🟣 HTTP Resume Cache Added to run_dynamic_eval.py
-165 " ✅ _http_judge_generate Signature Updated with as_completed and Lock
-171 1:54p 🔴 All 10 failure modes firing after _calc_ prefix bug fixes
-179 1:57p 🔵 Background DeepSeek experiment at 591/2146 (27%) after 6.5 minutes
-168 " 🔵 HTTP Resume Cache Not Writing Despite Successful DeepSeek API Responses
-169 " 🔵 DeepSeek V4 Pro Thinking Latency: 3s to 56s Per Request at Concurrency=100
-170 " ✅ DeepSeek Judge Run Relaunched as Hidden Background Process via Start-Process
-180 1:58p 🔵 DeepSeek experiment at 1279/2146 (60%) after 15 minutes
-172 2:00p 🔵 Zero annotator sign-disagreement across all 595 samples
-173 " 🟣 All 9 failure mode case files and 9 analysis tables generated
-174 " 🔵 FM1 case confirmed: all-yes-yes with 0.000 nonzero rate masks clear annotator preference
-175 2:02p 🔵 Even task-specific questions show poor discrimination (lowest nonzero rates)
-S22 Bug fix verification and output validation for HR-oracle tie/error analysis script (May 1, 2:02 PM)
-181 2:04p 🔵 DeepSeek V4 Pro HR evaluation at 93% completion under sustained rate limiting
-185 2:11p 🔵 DeepSeek V4 Pro HR top-15 evaluation completed — accuracy 0.805 vs Qwen3.5-9B baseline 0.816
-187 2:18p 🔵 DeepSeek V4 Pro vs Qwen3.5-9B cross-comparison — DS rescues 229, regresses 134, net +95
-188 2:23p ✅ HR oracle baseline matched test split exported for reuse
-182 " 🔵 DeepSeek V4 Pro Judge Ceiling: Tie Rate Down, Valid Accuracy Slightly Down
-183 " 🟣 HTTP Resume Cache Proven: 2146/2146 Prompts Survived 429 Rate Limits
-184 " 🔵 DeepSeek V4 Pro Latency: ~1.3s Median at Concurrency=100, $0.75/1K Samples Estimated
-186 2:24p ✅ Baseline predictions downloaded from remote server for DeepSeek cross-comparison
+### May 3, 2026
+496 1:22p 🔴 Parser now searches only post‑content for all ### blocks
+502 9:47p 🔵 Missing Checklist section in failed raw outputs
+504 " ✅ Removed debug dump hook from prepare_self_checklist_sft.py
+506 9:48p ✅ Removed debug raw-dump hook from prepare_self_checklist_sft.py
+501 9:49p 🔵 User requests replacing prompt-forced Qwen3 think output with native think mode
+503 " 🔴 Parser now uses post‑thinking content for all sections
+508 10:25p 🔵 User requests enabling Qwen3 native think mode in prepare_self_checklist_sft.py
+510 10:35p 🔵 Measured actual prompt token length distribution for Qwen3 think mode
+509 10:36p 🔵 Investigating Qwen3 native think mode on HuggingFace
+511 10:40p 🔵 Investigate native think mode support for Qwen3.6 27B on HuggingFace
+### May 4, 2026
+512 11:01a 🔵 nohup process ignoring input during shutdown monitoring
+513 11:03a 🔵 Chat template and target output alignment verified for Qwen3.5-9B SFT
+518 11:15a ✅ [Optimizing inference speed with vLLM backend and speculative decoding]
+S92 Clarify vLLM max_model_len and output budget interaction for dev_600 evaluation (May 4, 11:18 AM)
+519 11:19a 🔵 Measured dev_600 prompt token lengths for vLLM max_model_len sizing
+S93 Parameter evaluation and optimization for LoRA SFT training of Qwen3.5-9B model (May 4, 11:21 AM)
+520 11:43a 🟣 Enhanced parsing accuracy across domains
+S94 Investigated Qwen3-27B native think mode support and implemented training configuration changes to enable thinking mode in SFT pipeline (May 4, 11:45 AM)
+521 11:45a ⚖️ [**title**: Configured PEFT fine-tuning run]
+522 " 🔵 [**title**: Retrieved PEFT fine-tuning documentation]
+523 " 🔵 [**title**: Missing training data file]
+524 11:46a 🔵 [**title**: No training data files found]
+525 11:47a 🔵 [**title**: File search timed out]
+526 11:52a 🔴 CUDA memory allocation optimized to prevent OOM errors
+527 " 🔵 Code Structure and Configuration for Base Model Loading
+528 11:53a ✅ Tokenizer truncation side changed to left to preserve structured answer
+529 12:02p 🔵 Qwen3-27B Think Mode Investigation Requested
+530 " 🔵 CUDA memory allocation failure during SFT training
+S95 Investigated Qwen3-27B native think mode implementation (May 4, 12:02 PM)
+S96 Memory optimization strategies for Qwen3-27B training with thinking mode enabled (May 4, 12:05 PM)
+S97 Diagnose and resolve OOM during judge SFT training with Qwen3.5-9B using Unsloth and QLoRA (May 4, 12:05 PM)
+532 12:36p 🔵 CUDA OOM Encountered During Qwen3.5-9B SFT Training With Unsloth
+533 12:37p 🔵 Swift SFT Training Script for Qwen3.5-9B with OOM Mitigations
+534 12:39p 🔴 CUDA OOM Error When Using Unsloth for QLoRA Training
+535 12:40p 🔵 Search for Advanced Attention and CUDA Features Timed Out
+536 12:42p 🔵 SSH Connection to AutoDL Instance Refused
+537 12:43p ✅ Configured Qwen3.5-9B judge SFT training run with QLoRA parameters
+S98 Resolve CUDA OOM with unsloth and ensure fast‑path attention libraries are installed (May 4, 12:43 PM)
+538 " ⚖️ Inquired about PEFT fine-tuning parameter suitability for first-time judge SFT run
+539 12:44p 🔵 SSH command to inspect remote Python packages failed due to PowerShell parsing error
+540 " 🔵 Remote server environment lacks CUDA toolkit and proper flash-attn installation
+541 12:58p 🔵 User requested to learn Unsloth fine-tuning for Qwen3.5 via official docs
+542 12:59p 🔵 Extracted full Unsloth Qwen3.5 fine‑tuning code and configuration
+543 1:01p 🔵 CUDA OOM Encountered When Training Qwen3.5-9B With Unsloth and QLoRA
+544 1:10p 🔵 OOM Debugging - Unsloth Memory Issue Investigation
+S99 Install causal_conv1d and flash-linear-attention to resolve OOM and enable fast-path attention (May 4, 1:12 PM)
+S100 Download and install causal_conv1d wheel from GitHub releases to enable fast-path attention (May 4, 1:15 PM)
+545 1:27p 🔵 Unsloth OOM Error with Qwen3.5-9B Training
+546 3:19p 🔵 User inquired about suitability of PEFT fine-tuning parameters for first-time run
+548 " 🔵 Remote server environment inspection revealed RTX 5090 GPU with CUDA 13
+547 " 🔵 Missing pip module in .unsloth Python environment on remote server
+549 3:22p 🔵 Remote flash_attn environment check failed due to malformed Python command
+550 3:26p 🔵 User inquired about PEFT fine-tuning parameter suitability for first-time training
+551 " 🟣 Installed flash‑attn wheel for Python 3.12 .venvmerge
+552 3:28p ✅ Installed ABI-compatible flash-attn 2.8.3 on remote SeetaCloud training server
+S101 User asked if provided PEFT fine-tuning command parameters are suitable for a first-time fine-tuning run of Qwen3.5-9B using judge SFT training data; subsequent work prepared the remote training server by installing a compatible flash-attn version (May 4, 3:30 PM)
+553 3:32p 🔵 Unsloth 16bit LoRA configuration and performance impact discovered
+554 3:42p 🔵 User inquired about suitability of PEFT fine-tuning parameters for first-time judge SFT run
+555 3:44p 🔵 Remote GPU status and Python package versions inspected
+556 3:57p 🔵 User inquired about OOM avoidance methods for dual-GPU setups
 
-Access 490k tokens of past work via get_observations([IDs]) or mem-search skill.
+Access 437k tokens of past work via get_observations([IDs]) or mem-search skill.
 </claude-mem-context>
