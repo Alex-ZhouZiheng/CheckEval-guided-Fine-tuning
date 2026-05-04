@@ -70,6 +70,31 @@ def build_deepspeed_zero3_no_offload_config() -> dict:
     }
 
 
+def init_torch_distributed_for_deepspeed() -> None:
+    if not torch.distributed.is_available():
+        raise RuntimeError("torch.distributed is not available; cannot use DeepSpeed.")
+    if torch.distributed.is_initialized():
+        return
+
+    required = ["RANK", "WORLD_SIZE", "MASTER_ADDR", "MASTER_PORT", "LOCAL_RANK"]
+    missing = [name for name in required if name not in os.environ]
+    if missing:
+        raise RuntimeError(
+            "DeepSpeed launch is missing torch distributed environment variables "
+            f"{missing}. Launch with: python -m torch.distributed.run --standalone "
+            "--nproc_per_node=<N> src/train/run_judge_sft.py ..."
+        )
+
+    local_rank = int(os.environ["LOCAL_RANK"])
+    if torch.cuda.is_available():
+        torch.cuda.set_device(local_rank)
+    torch.distributed.init_process_group(backend="nccl", init_method="env://")
+    log.info(
+        "Initialized torch.distributed for DeepSpeed: rank=%s/%s local_rank=%s",
+        os.environ["RANK"], os.environ["WORLD_SIZE"], local_rank,
+    )
+
+
 # ── Liger Kernel: fused RoPE / RMSNorm / SwiGLU saves ~6-10 GB on Qwen3 ──
 # Skipped when --use-unsloth (unsloth ships its own fused kernels; double-patch
 # can break activation shapes). Set DISABLE_LIGER=1 to force-skip.
@@ -361,6 +386,8 @@ def main() -> None:
         parser.error("--deepspeed-zero3 and --deepspeed-zero3-no-offload are mutually exclusive.")
     if args.device_map is not None and world_size > 1:
         parser.error("--device-map is single-process model sharding; do not use it with torchrun/DDP.")
+    if args.deepspeed_zero3 or args.deepspeed_zero3_no_offload:
+        init_torch_distributed_for_deepspeed()
 
     run_name = args.run_name or f"judge_sft_{args.tier}_r{args.lora_rank}_lr{args.lr}"
     output_dir = cfg.CHECKPOINTS_DIR / run_name
