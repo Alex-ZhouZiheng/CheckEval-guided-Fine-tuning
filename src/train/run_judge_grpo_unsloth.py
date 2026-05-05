@@ -12,7 +12,7 @@ Train:
     python -m src.train.run_judge_grpo_unsloth --tier tier_10k
 """
 from __future__ import annotations
-
+from unsloth import FastLanguageModel
 import argparse
 import json
 import logging
@@ -677,7 +677,7 @@ def main() -> None:
 
     patch_transformers_cache_compat()
 
-    from unsloth import FastLanguageModel
+
     from trl import GRPOConfig, GRPOTrainer
 
     dataset = load_grpo_dataset(args.dataset_path, args.max_samples)
