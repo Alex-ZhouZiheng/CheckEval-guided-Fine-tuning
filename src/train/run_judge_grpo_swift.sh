@@ -41,6 +41,7 @@ TIER="${TIER:-tier_10k}"
 TAG="${TAG:-grpo}"
 DATASET_PATH="${DATASET_PATH:-${PROJECT_ROOT}/data/judge_sft/grpo_${TIER}_selfcheck.jsonl}"
 PLUGIN_PATH="${PROJECT_ROOT}/src/train/plugin/judge_selfcheck_reward.py"
+EVAL_PLUGIN_PATH="${PROJECT_ROOT}/src/train/plugin/judge_selfcheck_eval_callback.py"
 
 QUANT_BITS="${QUANT_BITS:-0}"
 LR="${LR:-5e-6}"
@@ -61,6 +62,34 @@ ENABLE_THINKING="${ENABLE_THINKING:-true}"
 
 REWARD_FUNCS="${REWARD_FUNCS:-judge_selfcheck_winner}"
 REWARD_WEIGHTS="${REWARD_WEIGHTS:-1.0}"
+
+# In-training self-checklist eval (callback plugin). Set EVAL_STEPS=0 to disable.
+EVAL_STEPS="${EVAL_STEPS:-0}"
+EVAL_SPLIT="${EVAL_SPLIT:-dev_600}"
+EVAL_SUBSET="${EVAL_SUBSET:-}"
+EVAL_MAX_SAMPLES="${EVAL_MAX_SAMPLES:-200}"
+EVAL_BATCH_SIZE="${EVAL_BATCH_SIZE:-1}"
+EVAL_MAX_NEW_TOKENS="${EVAL_MAX_NEW_TOKENS:-2048}"
+EVAL_TEMPERATURE="${EVAL_TEMPERATURE:-0.0}"
+EVAL_ENABLE_THINKING="${EVAL_ENABLE_THINKING:-true}"
+EVAL_BEFORE_TRAIN="${EVAL_BEFORE_TRAIN:-false}"
+EVAL_LABEL_PREFIX="${EVAL_LABEL_PREFIX:-swift_grpo}"
+
+export SELFCHECK_EVAL_STEPS="${EVAL_STEPS}"
+export SELFCHECK_EVAL_SPLIT="${EVAL_SPLIT}"
+export SELFCHECK_EVAL_SUBSET="${EVAL_SUBSET}"
+export SELFCHECK_EVAL_MAX_SAMPLES="${EVAL_MAX_SAMPLES}"
+export SELFCHECK_EVAL_BATCH_SIZE="${EVAL_BATCH_SIZE}"
+export SELFCHECK_EVAL_MAX_NEW_TOKENS="${EVAL_MAX_NEW_TOKENS}"
+export SELFCHECK_EVAL_TEMPERATURE="${EVAL_TEMPERATURE}"
+export SELFCHECK_EVAL_ENABLE_THINKING="${EVAL_ENABLE_THINKING}"
+export SELFCHECK_EVAL_BEFORE_TRAIN="${EVAL_BEFORE_TRAIN}"
+export SELFCHECK_EVAL_LABEL_PREFIX="${EVAL_LABEL_PREFIX}"
+
+EXTERNAL_PLUGINS=("${PLUGIN_PATH}")
+if [[ "${EVAL_STEPS}" != "0" || "${EVAL_BEFORE_TRAIN}" == "true" ]]; then
+  EXTERNAL_PLUGINS+=("${EVAL_PLUGIN_PATH}")
+fi
 
 # vLLM colocate rollout (frees memory during gradient step via sleep_level).
 USE_VLLM="${USE_VLLM:-true}"
@@ -121,7 +150,7 @@ fi
 swift rlhf \
     --rlhf_type grpo \
     --model "${MODEL_PATH}" \
-    --external_plugins "${PLUGIN_PATH}" \
+    --external_plugins "${EXTERNAL_PLUGINS[@]}" \
     --reward_funcs ${REWARD_FUNCS} \
     --reward_weights ${REWARD_WEIGHTS} \
     "${VLLM_FLAGS[@]}" \
