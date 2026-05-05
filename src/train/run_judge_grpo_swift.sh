@@ -49,7 +49,7 @@ EPOCHS="${EPOCHS:-1}"
 BATCH_SIZE="${BATCH_SIZE:-1}"
 GRAD_ACCUM="${GRAD_ACCUM:-16}"
 NUM_GENERATIONS="${NUM_GENERATIONS:-4}"
-MAX_LEN="${MAX_LEN:-10240}"
+MAX_LEN="${MAX_LEN:-12288}"
 MAX_COMPLETION_LEN="${MAX_COMPLETION_LEN:-6144}"
 BETA="${BETA:-0.04}"
 TEMPERATURE="${TEMPERATURE:-1.0}"
@@ -172,7 +172,7 @@ swift rlhf \
     --gradient_accumulation_steps "${GRAD_ACCUM}" \
     --learning_rate "${LR}" \
     --lr_scheduler_type cosine \
-    --warmup_ratio "${WARMUP_RATIO}" \
+    --warmup_steps "${WARMUP_RATIO}" \
     --save_steps "${SAVE_STEPS}" \
     --save_total_limit "${SAVE_TOTAL_LIMIT}" \
     --logging_steps 1 \
@@ -180,7 +180,7 @@ swift rlhf \
     --num_generations "${NUM_GENERATIONS}" \
     --temperature "${TEMPERATURE}" \
     --beta "${BETA}" \
-    --use_liger_kernel true \
+    --use_liger_kernel false \
     --attn_impl flash_attn \
     --gradient_checkpointing true \
     --optim paged_adamw_8bit \
