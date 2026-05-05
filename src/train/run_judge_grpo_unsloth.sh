@@ -26,6 +26,9 @@
 #   GRAD_ACCUM=16
 #   REWARD_FUNCS="winner format"
 #   SAVE_MERGED_16BIT=false
+#   EVAL_SPLIT=dev_600 EVAL_MAX_SAMPLES=200
+#   EVAL_STEPS=0              # set >0 for in-training self-check eval
+#   NO_FINAL_EVAL=false
 
 set -euo pipefail
 
@@ -36,6 +39,9 @@ MODEL_PATH="${MODEL_PATH:-${PROJECT_ROOT}/models/${MODEL_NAME}}"
 TIER="${TIER:-tier_10k}"
 TAG="${TAG:-unsloth_grpo}"
 DATASET_PATH="${DATASET_PATH:-${PROJECT_ROOT}/data/judge_sft/grpo_${TIER}_selfcheck.jsonl}"
+if [[ ! -f "${DATASET_PATH}" && -f "${PROJECT_ROOT}/data/judge_sft/grpo_train_${TIER}_selfcheck.jsonl" ]]; then
+  DATASET_PATH="${PROJECT_ROOT}/data/judge_sft/grpo_train_${TIER}_selfcheck.jsonl"
+fi
 
 LOAD_IN_4BIT="${LOAD_IN_4BIT:-false}"
 FAST_INFERENCE="${FAST_INFERENCE:-false}"
@@ -58,6 +64,16 @@ SAVE_TOTAL_LIMIT="${SAVE_TOTAL_LIMIT:-3}"
 REWARD_FUNCS="${REWARD_FUNCS:-winner}"
 REPORT_TO="${REPORT_TO:-tensorboard}"
 SAVE_MERGED_16BIT="${SAVE_MERGED_16BIT:-false}"
+NO_FINAL_EVAL="${NO_FINAL_EVAL:-false}"
+EVAL_BEFORE_TRAIN="${EVAL_BEFORE_TRAIN:-false}"
+EVAL_STEPS="${EVAL_STEPS:-0}"
+EVAL_SPLIT="${EVAL_SPLIT:-dev_600}"
+EVAL_SUBSET="${EVAL_SUBSET:-}"
+EVAL_MAX_SAMPLES="${EVAL_MAX_SAMPLES:-200}"
+EVAL_BATCH_SIZE="${EVAL_BATCH_SIZE:-1}"
+EVAL_MAX_NEW_TOKENS="${EVAL_MAX_NEW_TOKENS:-2048}"
+EVAL_TEMPERATURE="${EVAL_TEMPERATURE:-0.0}"
+EVAL_ENABLE_THINKING="${EVAL_ENABLE_THINKING:-true}"
 
 [[ -f "${DATASET_PATH}" ]] || {
   echo "[unsloth-grpo-judge] dataset not found: ${DATASET_PATH}" >&2
@@ -79,6 +95,20 @@ if [[ "${FAST_INFERENCE}" == "true" ]]; then
 fi
 if [[ "${SAVE_MERGED_16BIT}" == "true" ]]; then
   FLAGS+=(--save-merged-16bit)
+fi
+if [[ "${NO_FINAL_EVAL}" == "true" ]]; then
+  FLAGS+=(--no-final-eval)
+fi
+if [[ "${EVAL_BEFORE_TRAIN}" == "true" ]]; then
+  FLAGS+=(--eval-before-train)
+fi
+if [[ "${EVAL_ENABLE_THINKING}" == "true" ]]; then
+  FLAGS+=(--eval-enable-thinking)
+else
+  FLAGS+=(--eval-no-thinking)
+fi
+if [[ -n "${EVAL_SUBSET}" ]]; then
+  FLAGS+=(--eval-subset "${EVAL_SUBSET}")
 fi
 
 # shellcheck disable=SC2206
@@ -109,4 +139,10 @@ python -m src.train.run_judge_grpo_unsloth \
   --save-total-limit "${SAVE_TOTAL_LIMIT}" \
   --reward-funcs "${REWARD_FUNC_ARGS[@]}" \
   --report-to "${REPORT_TO_ARGS[@]}" \
+  --eval-steps "${EVAL_STEPS}" \
+  --eval-split "${EVAL_SPLIT}" \
+  --eval-max-samples "${EVAL_MAX_SAMPLES}" \
+  --eval-batch-size "${EVAL_BATCH_SIZE}" \
+  --eval-max-new-tokens "${EVAL_MAX_NEW_TOKENS}" \
+  --eval-temperature "${EVAL_TEMPERATURE}" \
   "${FLAGS[@]}"

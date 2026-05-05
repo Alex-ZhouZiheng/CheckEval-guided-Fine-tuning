@@ -122,13 +122,13 @@ Do not commit `.env`, model weights, raw private data, or large generated output
 <claude-mem-context>
 # Memory Context
 
-# [CheckEval-guided-Fine-tuning] recent context, 2026-05-05 6:43pm GMT+2
+# [CheckEval-guided-Fine-tuning] recent context, 2026-05-05 6:51pm GMT+2
 
 Legend: 🎯session 🔴bugfix 🟣feature 🔄refactor ✅change 🔵discovery ⚖️decision 🚨security_alert 🔐security_note
 Format: ID TIME TYPE TITLE
 Fetch details: get_observations([IDs]) | Search: mem-search skill
 
-Stats: 50 obs (10,723t read) | 441,471t work | 98% savings
+Stats: 50 obs (10,996t read) | 481,520t work | 98% savings
 
 ### May 5, 2026
 S129 GPU memory optimization for autotuning process (May 5, 11:36 AM)
@@ -137,13 +137,6 @@ S131 Performance optimization progress summary after autotuning and OOM fallback
 S132 Distillation Experiment Analysis and Next Steps (May 5, 11:48 AM)
 S133 RL微调判官方法分析与GRPO实施计划 (May 5, 1:08 PM)
 S134 Create GRPO fine-tuning components for the self-checklist judge, including a dataset preparation script, custom reward plugin, and training shell script, following existing project patterns for generator GRPO training. (May 5, 1:10 PM)
-600 1:15p 🟣 GRPO pipeline scaffolding implemented with pairwise preference preparation
-602 " 🟣 GRPO Training Orchestration Script Added
-603 " 🔵 CheckEval Reward Plugin Identified
-604 1:16p 🟣 CheckEval Reward Plugin Implemented for GRPO
-605 " 🔵 Project Configuration Structure Identified
-606 " 🔵 Tier Sizes and Judge SFT Directory Defined
-607 1:17p 🟣 Self-Check Judge GRPO Reward Plugin Added
 S135 Explain need for 0.15 format reward after SFT and clarify whether GRPO data should match SFT data (May 5, 1:18 PM)
 S136 Investigate and fix mergekit breakage caused by removal of TRANSFORMERS_CACHE in new Transformers version (May 5, 4:04 PM)
 608 4:07p 🔄 Add --exclude-sft argument to prepare_judge_grpo script
@@ -191,6 +184,13 @@ S138 Decision on whether to continue RL training from SFT checkpoint or start RL
 649 6:40p 🟣 Added Unsloth‑based GRPO training entrypoint
 650 " 🟣 Added Unsloth-based GRPO training pipeline for self-checklist judge
 651 6:42p 🟣 Implemented lightweight self-checklist parser in GRPO training script
+652 6:43p 🔵 Syntax validation passed for GRPO training entrypoint
+653 " 🔵 Key function and class definitions located in GRPO training script
+654 6:45p 🔵 Repository configuration paths and tier sizes identified
+655 6:47p 🔵 Self‑checklist evaluation script loaded
+657 6:48p 🔵 Utility functions for evaluation loaded
+656 " 🔵 Checking prior memory for GRPO eval conventions
+658 " 🟣 Added self-checklist evaluation prompts to GRPO training script
 
-Access 441k tokens of past work via get_observations([IDs]) or mem-search skill.
+Access 482k tokens of past work via get_observations([IDs]) or mem-search skill.
 </claude-mem-context>

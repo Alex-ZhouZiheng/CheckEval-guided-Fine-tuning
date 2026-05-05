@@ -19,6 +19,9 @@ import logging
 import os
 import re
 import sys
+import time
+from collections import Counter
+from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -31,6 +34,100 @@ for _p in (_SRC_DIR, _DATA_PROCESS_DIR):
         sys.path.insert(0, str(_p))
 
 log = logging.getLogger(__name__)
+
+
+SELF_CHECKLIST_EVAL_PROMPT = """\
+<Task Overview>
+You will evaluate two candidate responses to a user request. Your task is to:
+1. Generate a checklist of specific quality criteria for comparing these two responses.
+2. For each criterion, decide which response is better (A, B, or Tie).
+3. Based on your evaluation, output the final winner.
+
+<Instructions>
+1. Read the conversation history and both responses carefully.
+2. Generate 8-20 specific, targeted comparison questions about these two specific responses.
+   - Questions should compare the responses on different quality dimensions.
+   - Each question should be answerable with A, B, or Tie.
+3. For each question, compare the two responses and answer A, B, or Tie.
+4. Based on your checklist evaluation, decide the final winner.
+5. Output in the required format.
+
+<Answer Format>
+<think>
+### Checklist
+Q1: [your comparison question here]
+Q2: [your comparison question here]
+...
+
+### Item Verdicts
+Q1: A
+Q2: Tie
+...
+</think>
+
+### Final
+Winner: A
+
+# Conversation History #
+{context}
+
+# Response A #
+{response_a}
+
+# Response B #
+{response_b}
+
+# Your Evaluation #
+"""
+
+
+SELF_CHECKLIST_EVAL_PROMPT_THINKING = """\
+<Task Overview>
+You will evaluate two candidate responses to a user request. Your task is to:
+1. Generate a checklist of specific quality criteria for comparing these two responses.
+2. For each criterion, decide which response is better (A, B, or Tie).
+3. Based on your evaluation, output the final winner.
+
+<Thinking Phase (free reasoning)>
+Use the thinking block to reason freely. Read the conversation and both responses,
+brainstorm what dimensions matter for this specific pair, and work out which
+response wins on each dimension. Format inside the thinking block does not matter.
+
+<Final Answer Phase - STRICT FORMAT>
+After you finish thinking, output the following blocks EXACTLY in this order,
+with these exact headers (no extra prose, no extra blocks):
+
+### Checklist
+Q1: [comparison question 1]
+Q2: [comparison question 2]
+...
+Q8 to Q20: [more questions as needed; aim for 8 to 20]
+
+### Item Verdicts
+Q1: A
+Q2: Tie
+...
+
+### Final
+Winner: A
+
+Constraints:
+- Each verdict must be exactly one of A, B, or Tie (case-insensitive).
+- The number of Q lines under "### Item Verdicts" must equal the number of Q
+  lines under "### Checklist".
+- The Winner line must read "Winner: A", "Winner: B", or "Winner: Tie".
+
+# Conversation History #
+{context}
+
+# Response A #
+{response_a}
+
+# Response B #
+{response_b}
+
+# Your Evaluation #
+"""
 
 
 def _env_float(name: str, default: float) -> float:
@@ -254,6 +351,229 @@ def load_grpo_dataset(path: Path, max_samples: int | None = None):
     return ds
 
 
+def build_eval_prompts(df, enable_thinking: bool) -> tuple[list[list[dict[str, str]]], list[int]]:
+    template = SELF_CHECKLIST_EVAL_PROMPT_THINKING if enable_thinking else SELF_CHECKLIST_EVAL_PROMPT
+    messages_list: list[list[dict[str, str]]] = []
+    keep_idx: list[int] = []
+    n_swapped = 0
+    for i, (_, row) in enumerate(df.iterrows()):
+        if "swap_flag" in df.columns and row.get("swap_flag") is True:
+            n_swapped += 1
+            continue
+        prompt = template.format(
+            context=row["context"],
+            response_a=row["response_a"],
+            response_b=row["response_b"],
+        )
+        messages_list.append([{"role": "user", "content": prompt}])
+        keep_idx.append(i)
+    if n_swapped:
+        log.info("[selfcheck-eval] skipped %d swap_flag rows", n_swapped)
+    return messages_list, keep_idx
+
+
+def generate_eval_outputs(
+    model,
+    tokenizer,
+    messages_list: list[list[dict[str, str]]],
+    *,
+    batch_size: int,
+    max_new_tokens: int,
+    temperature: float,
+    enable_thinking: bool,
+) -> list[str]:
+    import torch
+
+    outputs: list[str] = []
+    do_sample = temperature > 0.0
+    was_training = bool(getattr(model, "training", False))
+    model.eval()
+    try:
+        for start in range(0, len(messages_list), batch_size):
+            batch_messages = messages_list[start:start + batch_size]
+            texts = [
+                tokenizer.apply_chat_template(
+                    messages,
+                    tokenize=False,
+                    add_generation_prompt=True,
+                    enable_thinking=enable_thinking,
+                )
+                for messages in batch_messages
+            ]
+            inputs = tokenizer(
+                texts,
+                return_tensors="pt",
+                padding=True,
+                truncation=True,
+            )
+            device = getattr(model, "device", None)
+            if device is None:
+                device = next(model.parameters()).device
+            inputs = inputs.to(device)
+            with torch.no_grad():
+                generate_kwargs: dict[str, Any] = {
+                    "max_new_tokens": max_new_tokens,
+                    "do_sample": do_sample,
+                    "pad_token_id": tokenizer.pad_token_id,
+                    "eos_token_id": tokenizer.eos_token_id,
+                }
+                if do_sample:
+                    generate_kwargs["temperature"] = max(temperature, 1e-5)
+                generated = model.generate(
+                    **inputs,
+                    **generate_kwargs,
+                )
+            prompt_len = inputs["input_ids"].shape[1]
+            for row in generated[:, prompt_len:]:
+                outputs.append(tokenizer.decode(row, skip_special_tokens=True))
+    finally:
+        if was_training:
+            model.train()
+    return outputs
+
+
+def run_selfcheck_eval(
+    model,
+    tokenizer,
+    args: argparse.Namespace,
+    *,
+    label: str,
+    step: int | None = None,
+) -> dict[str, Any]:
+    from utils import compute_metrics, load_eval_data, save_results
+
+    df = load_eval_data(args.eval_split, args.eval_subset)
+    if args.eval_max_samples:
+        df = df.head(args.eval_max_samples).reset_index(drop=True)
+
+    messages_list, keep_idx = build_eval_prompts(
+        df,
+        enable_thinking=args.eval_enable_thinking,
+    )
+    if not keep_idx:
+        raise RuntimeError("No evaluable samples found for self-checklist eval.")
+
+    log.info(
+        "[selfcheck-eval] %s: samples=%d/%d split=%s subset=%s",
+        label,
+        len(messages_list),
+        len(df),
+        args.eval_split,
+        args.eval_subset,
+    )
+    t0 = time.time()
+    raw_outputs = generate_eval_outputs(
+        model,
+        tokenizer,
+        messages_list,
+        batch_size=args.eval_batch_size,
+        max_new_tokens=args.eval_max_new_tokens,
+        temperature=args.eval_temperature,
+        enable_thinking=args.eval_enable_thinking,
+    )
+    elapsed = time.time() - t0
+
+    predicted_winners: list[str | None] = []
+    n_questions: list[int | None] = []
+    item_tie_rates: list[float | None] = []
+    trace_parse_ok = 0
+    for raw in raw_outputs:
+        parsed = parse_self_checklist_trace(raw)
+        predicted_winners.append(parsed["winner"])
+        nq = int(parsed.get("n_questions", 0) or 0)
+        nv = int(parsed.get("n_verdicts", 0) or 0)
+        n_questions.append(nq if nq > 0 else None)
+        if nq > 0:
+            trace_parse_ok += 1
+        if nv > 0:
+            n_tie = sum(1 for v in parsed["verdicts"].values() if v == "Tie")
+            item_tie_rates.append(n_tie / nv)
+        else:
+            item_tie_rates.append(None)
+
+    df_eval = df.iloc[keep_idx].reset_index(drop=True).copy()
+    df_eval["raw_output"] = raw_outputs
+    df_eval["predicted_winner"] = predicted_winners
+    df_eval["parse_ok"] = [w is not None for w in predicted_winners]
+    df_eval["n_checklist_questions"] = n_questions
+    df_eval["item_tie_rate"] = item_tie_rates
+
+    metrics = compute_metrics(
+        y_true=df_eval["winner"].tolist(),
+        y_pred=df_eval["predicted_winner"].tolist(),
+        domains=df_eval["domain"].tolist(),
+    )
+    n_eval = len(messages_list)
+    metrics["inference_time_s"] = elapsed
+    metrics["n_samples_total"] = len(df)
+    metrics["n_samples_evaluable"] = n_eval
+    metrics["parse_rate"] = float(df_eval["parse_ok"].mean()) if n_eval else 0.0
+    metrics["tie_rate"] = (
+        sum(1 for w in predicted_winners if w == "Tie") / n_eval
+        if n_eval else 0.0
+    )
+    valid_nq = [v for v in n_questions if v is not None]
+    valid_tie = [v for v in item_tie_rates if v is not None]
+    metrics["avg_checklist_length"] = (
+        sum(valid_nq) / len(valid_nq) if valid_nq else None
+    )
+    metrics["item_tie_rate"] = (
+        sum(valid_tie) / len(valid_tie) if valid_tie else None
+    )
+    metrics["trace_parse_rate"] = trace_parse_ok / n_eval if n_eval else 0.0
+    metrics["judge_adapter"] = str(args.output_dir / "final_lora")
+    metrics["judge_mode"] = "unsloth_hf"
+    metrics["base_model"] = args.model_name
+    metrics["eval_label"] = label
+    if step is not None:
+        metrics["train_step"] = step
+
+    split_tag = args.eval_subset or args.eval_split
+    exp_name = f"selfchecklist_unsloth_{args.output_dir.name}_{split_tag}_{label}"
+    save_results(df_eval, metrics, exp_name)
+
+    winner_counts = Counter(w for w in predicted_winners if w is not None)
+    log.info(
+        "[selfcheck-eval] %s: acc=%s macro_f1=%s parse=%.4f tie=%.4f "
+        "trace_parse=%.4f winners=%s time=%.1fs",
+        label,
+        f"{metrics.get('accuracy', 0):.4f}" if "accuracy" in metrics else "N/A",
+        f"{metrics.get('macro_f1', 0):.4f}" if "macro_f1" in metrics else "N/A",
+        metrics["parse_rate"],
+        metrics["tie_rate"],
+        metrics["trace_parse_rate"],
+        {k: winner_counts.get(k, 0) for k in ["A", "B", "Tie"]},
+        elapsed,
+    )
+    return metrics
+
+
+class SelfCheckEvalCallback:
+    def __init__(self, model, tokenizer, args: argparse.Namespace) -> None:
+        from transformers import TrainerCallback
+
+        class _Callback(TrainerCallback):
+            def on_step_end(self, trainer_args, state, control, **kwargs):
+                if args.eval_steps <= 0 or state.global_step <= 0:
+                    return
+                if state.global_step % args.eval_steps != 0:
+                    return
+                try:
+                    if not state.is_world_process_zero:
+                        return
+                except AttributeError:
+                    pass
+                run_selfcheck_eval(
+                    model,
+                    tokenizer,
+                    args,
+                    label=f"step_{state.global_step}",
+                    step=state.global_step,
+                )
+
+        self.callback = _Callback()
+
+
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--tier", default=os.environ.get("TIER", "tier_10k"))
@@ -292,6 +612,17 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--report-to", nargs="*", default=["tensorboard"])
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--save-merged-16bit", action="store_true")
+    p.add_argument("--no-final-eval", action="store_true")
+    p.add_argument("--eval-before-train", action="store_true")
+    p.add_argument("--eval-steps", type=int, default=0)
+    p.add_argument("--eval-split", default="dev_600")
+    p.add_argument("--eval-subset", default=None)
+    p.add_argument("--eval-max-samples", type=int, default=200)
+    p.add_argument("--eval-batch-size", type=int, default=1)
+    p.add_argument("--eval-max-new-tokens", type=int, default=2048)
+    p.add_argument("--eval-temperature", type=float, default=0.0)
+    p.add_argument("--eval-enable-thinking", action="store_true", default=True)
+    p.add_argument("--eval-no-thinking", dest="eval_enable_thinking", action="store_false")
     return p.parse_args()
 
 
@@ -303,7 +634,9 @@ def resolve_paths(args: argparse.Namespace) -> argparse.Namespace:
         args.model_name = model_name
 
     if args.dataset_path is None:
-        args.dataset_path = _PROJECT_ROOT / "data" / "judge_sft" / f"grpo_{args.tier}_selfcheck.jsonl"
+        default_path = _PROJECT_ROOT / "data" / "judge_sft" / f"grpo_{args.tier}_selfcheck.jsonl"
+        fallback_path = _PROJECT_ROOT / "data" / "judge_sft" / f"grpo_train_{args.tier}_selfcheck.jsonl"
+        args.dataset_path = fallback_path if fallback_path.exists() and not default_path.exists() else default_path
 
     if args.output_dir is None:
         model_tag = Path(str(args.model_name).rstrip("/")).name
@@ -340,6 +673,7 @@ def main() -> None:
     )
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
+    tokenizer.padding_side = "left"
 
     model = FastLanguageModel.get_peft_model(
         model,
@@ -392,9 +726,16 @@ def main() -> None:
         args=training_args,
         train_dataset=dataset,
     )
+    if args.eval_steps > 0:
+        trainer.add_callback(SelfCheckEvalCallback(model, tokenizer, args).callback)
+    if args.eval_before_train:
+        run_selfcheck_eval(model, tokenizer, args, label="before_train")
     trainer.train()
     trainer.save_model(str(args.output_dir / "final_lora"))
     tokenizer.save_pretrained(str(args.output_dir / "final_lora"))
+
+    if not args.no_final_eval:
+        run_selfcheck_eval(model, tokenizer, args, label=f"final_{date.today()}")
 
     if args.save_merged_16bit:
         merged_dir = args.output_dir / "final_merged_16bit"
