@@ -122,36 +122,19 @@ Do not commit `.env`, model weights, raw private data, or large generated output
 <claude-mem-context>
 # Memory Context
 
-# [CheckEval-guided-Fine-tuning] recent context, 2026-05-05 6:20pm GMT+2
+# [CheckEval-guided-Fine-tuning] recent context, 2026-05-05 6:43pm GMT+2
 
 Legend: 🎯session 🔴bugfix 🟣feature 🔄refactor ✅change 🔵discovery ⚖️decision 🚨security_alert 🔐security_note
 Format: ID TIME TYPE TITLE
 Fetch details: get_observations([IDs]) | Search: mem-search skill
 
-Stats: 50 obs (10,404t read) | 422,554t work | 98% savings
+Stats: 50 obs (10,723t read) | 441,471t work | 98% savings
 
 ### May 5, 2026
-580 12:21a 🟣 Inference initiated for self-checklist SFT data
-581 " 🔵 Qwen3.6-27B-NVFP4 self-checklist outputs omit required / tags
-582 " ✅ Optimizing inference speed with vLLM backend and speculative decoding
-584 12:28a 🔵 Identified need to reduce max-model-len to prevent OOM
-585 12:31a ✅ Added reference file with known-good 4B self‑checklist vLLM command
-586 12:35a 🔵 Query about dev600 dataset max model-len
-587 12:37a 🔴 CUDA OOM Error When Using Unsloth for Qwen3.5-9B Fine-tuning
-588 10:57a 🔴 OOM Issue in Data Preparation Script Resolved
-589 10:58a 🔵 vLLM Parameters Used in Data Processing and Evaluation
-590 " 🔵 Teacher Model Loading and SFT Row Generation Workflow
-591 11:01a 🔵 Evaluation Script LoRA Adapter Configuration
-593 11:19a 🔵 PyTorch Version Incompatibility Detected
-594 11:24a 🔵 Torch version incompatibility blocks FlashInfer CUDA extensions
-595 11:34a 🔵 Memory usage difference between data preparation and evaluation scripts
 S129 GPU memory optimization for autotuning process (May 5, 11:36 AM)
-596 11:40a 🟣 Authentication Enhancement
 S130 Autotuner OOM fallback and CUDA graph capture completion (May 5, 11:40 AM)
-597 11:46a ✅ **[Flashinfer Autotuner] OOM fallback and CUDA graph capture**
 S131 Performance optimization progress summary after autotuning and OOM fallback (May 5, 11:46 AM)
 S132 Distillation Experiment Analysis and Next Steps (May 5, 11:48 AM)
-598 1:08p 🔵 Self-Checklist Evaluation Results for 27B Teacher Model
 S133 RL微调判官方法分析与GRPO实施计划 (May 5, 1:08 PM)
 S134 Create GRPO fine-tuning components for the self-checklist judge, including a dataset preparation script, custom reward plugin, and training shell script, following existing project patterns for generator GRPO training. (May 5, 1:10 PM)
 600 1:15p 🟣 GRPO pipeline scaffolding implemented with pairwise preference preparation
@@ -191,6 +174,23 @@ S138 Decision on whether to continue RL training from SFT checkpoint or start RL
 632 6:01p 🔵 Qwen3.5-4B format compliance probed with increased generation limits
 633 6:18p 🔵 Syntax check passed for run_judge_grpo_swift.sh
 634 " 🔵 Training session initiated
+635 6:21p ✅ Update GRPO training defaults and AGENTS documentation
+636 " ✅ Remote GRPO training defaults updated via git pull
+637 6:22p 🔵 Remote training server GPU and tmux status checked
+638 " ✅ Started GRPO training run in new tmux session
+639 6:24p 🔵 Monitored GRPO training session logs and GPU usage via remote SSH
+640 6:25p 🔵 User Environment Context Update
+641 6:26p 🟣 Upgrade Transformers to 5.7.0 with Cache Shim
+642 " 🔵 TRL Import Failure Due to Missing vllm_ascend
+643 6:27p 🔵 TRL vLLM Ascend Availability Check
+644 6:28p 🔴 Patch TRL import_utils for Transformers 5 Compatibility
+645 6:29p 🟣 GRPO Training Session Restarted
+646 6:35p 🔵 Permission error when reading SKILL.md
+648 6:36p 🔵 Memory file search blocked by sandbox
+647 " 🔵 Read GRPO RL training skill documentation
+649 6:40p 🟣 Added Unsloth‑based GRPO training entrypoint
+650 " 🟣 Added Unsloth-based GRPO training pipeline for self-checklist judge
+651 6:42p 🟣 Implemented lightweight self-checklist parser in GRPO training script
 
-Access 423k tokens of past work via get_observations([IDs]) or mem-search skill.
+Access 441k tokens of past work via get_observations([IDs]) or mem-search skill.
 </claude-mem-context>
