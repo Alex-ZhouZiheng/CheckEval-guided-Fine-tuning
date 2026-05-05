@@ -253,6 +253,8 @@ def main() -> None:
                         default=cfg.VLLM_ENGINE_KWARGS.get("max_num_batched_tokens", 12288))
     parser.add_argument("--enable-mtp", action="store_true")
     parser.add_argument("--mtp-num-speculative-tokens", type=int, default=1)
+    parser.add_argument("--quantization", type=str, default=None,
+                        help="vLLM quantization (e.g. nvfp4) to align with teacher load.")
     args = parser.parse_args()
 
     # ── adapter setup ──
@@ -319,6 +321,7 @@ def main() -> None:
             max_loras=1 if enable_lora else None,
             llamacpp_adapter_path=str(adapter_path) if enable_lora else None,
             speculative_config=speculative_config,
+            quantization=args.quantization,
         )
         lora_request = make_lora_handle(
             adapter_path=str(adapter_path) if enable_lora else None,
