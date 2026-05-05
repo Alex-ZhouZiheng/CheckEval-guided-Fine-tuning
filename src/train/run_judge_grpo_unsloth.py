@@ -144,6 +144,23 @@ def _env_int(name: str, default: int) -> int:
         return default
 
 
+def patch_transformers_cache_compat() -> None:
+    """Restore a Transformers 4.x symbol still imported by old optional deps."""
+    try:
+        from transformers.utils import hub
+    except Exception:
+        return
+    if hasattr(hub, "TRANSFORMERS_CACHE"):
+        return
+    hub.TRANSFORMERS_CACHE = os.environ.get(
+        "TRANSFORMERS_CACHE",
+        os.environ.get(
+            "HF_HOME",
+            os.path.join(os.path.expanduser("~"), ".cache", "huggingface", "hub"),
+        ),
+    )
+
+
 def completion_to_text(completion: Any) -> str:
     """Normalize TRL chat/string completion payloads to raw assistant text."""
     if completion is None:
@@ -657,6 +674,8 @@ def main() -> None:
             f"Dataset not found: {args.dataset_path}\n"
             f"Build it with: python -m src.data_process.prepare_judge_grpo --tier {args.tier}"
         )
+
+    patch_transformers_cache_compat()
 
     from unsloth import FastLanguageModel
     from trl import GRPOConfig, GRPOTrainer

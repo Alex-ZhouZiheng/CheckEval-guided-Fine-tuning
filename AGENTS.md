@@ -122,13 +122,13 @@ Do not commit `.env`, model weights, raw private data, or large generated output
 <claude-mem-context>
 # Memory Context
 
-# [CheckEval-guided-Fine-tuning] recent context, 2026-05-05 6:51pm GMT+2
+# [CheckEval-guided-Fine-tuning] recent context, 2026-05-05 6:58pm GMT+2
 
 Legend: 🎯session 🔴bugfix 🟣feature 🔄refactor ✅change 🔵discovery ⚖️decision 🚨security_alert 🔐security_note
 Format: ID TIME TYPE TITLE
 Fetch details: get_observations([IDs]) | Search: mem-search skill
 
-Stats: 50 obs (10,996t read) | 481,520t work | 98% savings
+Stats: 50 obs (11,435t read) | 511,829t work | 98% savings
 
 ### May 5, 2026
 S129 GPU memory optimization for autotuning process (May 5, 11:36 AM)
@@ -139,17 +139,8 @@ S133 RL微调判官方法分析与GRPO实施计划 (May 5, 1:08 PM)
 S134 Create GRPO fine-tuning components for the self-checklist judge, including a dataset preparation script, custom reward plugin, and training shell script, following existing project patterns for generator GRPO training. (May 5, 1:10 PM)
 S135 Explain need for 0.15 format reward after SFT and clarify whether GRPO data should match SFT data (May 5, 1:18 PM)
 S136 Investigate and fix mergekit breakage caused by removal of TRANSFORMERS_CACHE in new Transformers version (May 5, 4:04 PM)
-608 4:07p 🔄 Add --exclude-sft argument to prepare_judge_grpo script
-609 5:15p 🔵 Dataset missing for judge GRPO run
-610 5:18p 🔵 Missing mergekit dependency in TRL import chain
 S137 SSH connection timeout to remote host (May 5, 5:21 PM)
-611 5:22p 🟣 GRPO Training Experiment with Self-Check Reward Function
-612 5:26p 🟣 Created virtual environment for GRPO on server
-613 5:27p 🔵 ImportError caused by missing TRANSFORMERS_CACHE in transformers.utils.hub
-614 " ⚖️ Create isolated virtual environment for GRPO
-615 " 🔵 Remote SSH connection timed out
-616 5:32p 🔴 Dependency conflict between mergekit and vllm
-617 " 🔵 Missing torch module detected in .vengrpo environment
+617 5:32p 🔵 Missing torch module detected in .vengrpo environment
 618 5:35p 🔴 Remote server disk space exhausted during pip install
 619 5:40p ✅ GRPO training environment packages installed on remote SeetaCloud server
 620 5:41p ✅ Install flash-attn into .vengrpo environment
@@ -191,6 +182,15 @@ S138 Decision on whether to continue RL training from SFT checkpoint or start RL
 657 6:48p 🔵 Utility functions for evaluation loaded
 656 " 🔵 Checking prior memory for GRPO eval conventions
 658 " 🟣 Added self-checklist evaluation prompts to GRPO training script
+659 6:50p 🟣 Implemented self‑checklist evaluation workflow in GRPO script
+660 6:51p 🔵 Confirmed modified GRPO training script passes Python syntax check
+661 6:55p 🔴 Resolved TRANSFORMERS_CACHE ImportError
+662 " 🔵 rg command unavailable due to permission error
+664 " 🔵 PowerShell file search blocked by sandbox
+663 " 🔵 Missing TRANSFORMERS_CACHE symbol causes import failure in llm_blender/TRL stack
+665 6:56p 🔵 Aborted attempt to read GRPO training script
+666 6:57p 🔴 Added TRANSFORMERS_CACHE compatibility patch to GRPO trainer
+667 6:58p 🔵 PowerShell Select-String blocked by sandbox
 
-Access 482k tokens of past work via get_observations([IDs]) or mem-search skill.
+Access 512k tokens of past work via get_observations([IDs]) or mem-search skill.
 </claude-mem-context>
