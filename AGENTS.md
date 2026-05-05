@@ -122,76 +122,75 @@ Do not commit `.env`, model weights, raw private data, or large generated output
 <claude-mem-context>
 # Memory Context
 
-# [CheckEval-guided-Fine-tuning] recent context, 2026-05-04 4:21pm GMT+2
+# [CheckEval-guided-Fine-tuning] recent context, 2026-05-05 6:20pm GMT+2
 
 Legend: 🎯session 🔴bugfix 🟣feature 🔄refactor ✅change 🔵discovery ⚖️decision 🚨security_alert 🔐security_note
 Format: ID TIME TYPE TITLE
 Fetch details: get_observations([IDs]) | Search: mem-search skill
 
-Stats: 50 obs (12,642t read) | 346,731t work | 96% savings
+Stats: 50 obs (10,404t read) | 422,554t work | 98% savings
 
-### May 3, 2026
-506 9:48p ✅ Removed debug raw-dump hook from prepare_self_checklist_sft.py
-501 9:49p 🔵 User requests replacing prompt-forced Qwen3 think output with native think mode
-503 " 🔴 Parser now uses post‑thinking content for all sections
-508 10:25p 🔵 User requests enabling Qwen3 native think mode in prepare_self_checklist_sft.py
-510 10:35p 🔵 Measured actual prompt token length distribution for Qwen3 think mode
-509 10:36p 🔵 Investigating Qwen3 native think mode on HuggingFace
-511 10:40p 🔵 Investigate native think mode support for Qwen3.6 27B on HuggingFace
-### May 4, 2026
-512 11:01a 🔵 nohup process ignoring input during shutdown monitoring
-513 11:03a 🔵 Chat template and target output alignment verified for Qwen3.5-9B SFT
-518 11:15a ✅ [Optimizing inference speed with vLLM backend and speculative decoding]
-S92 Clarify vLLM max_model_len and output budget interaction for dev_600 evaluation (May 4, 11:18 AM)
-519 11:19a 🔵 Measured dev_600 prompt token lengths for vLLM max_model_len sizing
-S93 Parameter evaluation and optimization for LoRA SFT training of Qwen3.5-9B model (May 4, 11:21 AM)
-520 11:43a 🟣 Enhanced parsing accuracy across domains
-S94 Investigated Qwen3-27B native think mode support and implemented training configuration changes to enable thinking mode in SFT pipeline (May 4, 11:45 AM)
-521 11:45a ⚖️ [**title**: Configured PEFT fine-tuning run]
-522 " 🔵 [**title**: Retrieved PEFT fine-tuning documentation]
-523 " 🔵 [**title**: Missing training data file]
-524 11:46a 🔵 [**title**: No training data files found]
-525 11:47a 🔵 [**title**: File search timed out]
-526 11:52a 🔴 CUDA memory allocation optimized to prevent OOM errors
-527 " 🔵 Code Structure and Configuration for Base Model Loading
-528 11:53a ✅ Tokenizer truncation side changed to left to preserve structured answer
-529 12:02p 🔵 Qwen3-27B Think Mode Investigation Requested
-530 " 🔵 CUDA memory allocation failure during SFT training
-S95 Investigated Qwen3-27B native think mode implementation (May 4, 12:02 PM)
-S96 Memory optimization strategies for Qwen3-27B training with thinking mode enabled (May 4, 12:05 PM)
-S97 Diagnose and resolve OOM during judge SFT training with Qwen3.5-9B using Unsloth and QLoRA (May 4, 12:05 PM)
-532 12:36p 🔵 CUDA OOM Encountered During Qwen3.5-9B SFT Training With Unsloth
-533 12:37p 🔵 Swift SFT Training Script for Qwen3.5-9B with OOM Mitigations
-534 12:39p 🔴 CUDA OOM Error When Using Unsloth for QLoRA Training
-535 12:40p 🔵 Search for Advanced Attention and CUDA Features Timed Out
-536 12:42p 🔵 SSH Connection to AutoDL Instance Refused
-537 12:43p ✅ Configured Qwen3.5-9B judge SFT training run with QLoRA parameters
-S98 Resolve CUDA OOM with unsloth and ensure fast‑path attention libraries are installed (May 4, 12:43 PM)
-538 " ⚖️ Inquired about PEFT fine-tuning parameter suitability for first-time judge SFT run
-539 12:44p 🔵 SSH command to inspect remote Python packages failed due to PowerShell parsing error
-540 " 🔵 Remote server environment lacks CUDA toolkit and proper flash-attn installation
-541 12:58p 🔵 User requested to learn Unsloth fine-tuning for Qwen3.5 via official docs
-542 12:59p 🔵 Extracted full Unsloth Qwen3.5 fine‑tuning code and configuration
-543 1:01p 🔵 CUDA OOM Encountered When Training Qwen3.5-9B With Unsloth and QLoRA
-544 1:10p 🔵 OOM Debugging - Unsloth Memory Issue Investigation
-S99 Install causal_conv1d and flash-linear-attention to resolve OOM and enable fast-path attention (May 4, 1:12 PM)
-S100 Download and install causal_conv1d wheel from GitHub releases to enable fast-path attention (May 4, 1:15 PM)
-545 1:27p 🔵 Unsloth OOM Error with Qwen3.5-9B Training
-546 3:19p 🔵 User inquired about suitability of PEFT fine-tuning parameters for first-time run
-548 " 🔵 Remote server environment inspection revealed RTX 5090 GPU with CUDA 13
-547 " 🔵 Missing pip module in .unsloth Python environment on remote server
-549 3:22p 🔵 Remote flash_attn environment check failed due to malformed Python command
-550 3:26p 🔵 User inquired about PEFT fine-tuning parameter suitability for first-time training
-551 " 🟣 Installed flash‑attn wheel for Python 3.12 .venvmerge
-552 3:28p ✅ Installed ABI-compatible flash-attn 2.8.3 on remote SeetaCloud training server
-S101 User asked if provided PEFT fine-tuning command parameters are suitable for a first-time fine-tuning run of Qwen3.5-9B using judge SFT training data; subsequent work prepared the remote training server by installing a compatible flash-attn version (May 4, 3:30 PM)
-553 3:32p 🔵 Unsloth 16bit LoRA configuration and performance impact discovered
-554 3:42p 🔵 User inquired about suitability of PEFT fine-tuning parameters for first-time judge SFT run
-555 3:44p 🔵 Remote GPU status and Python package versions inspected
-556 3:57p 🔵 User inquired about OOM avoidance methods for dual-GPU setups
-557 4:00p 🔵 [**PEFT Fine-Tuning Parameter Consultation for Qwen3.5-9B**]
-558 4:11p 🔵 CUDA out‑of‑memory despite 64 GiB total GPU memory
-559 4:16p 🟣 Add --deepspeed-zero3-no-offload flag for ZeRO-3 without CPU offload
+### May 5, 2026
+580 12:21a 🟣 Inference initiated for self-checklist SFT data
+581 " 🔵 Qwen3.6-27B-NVFP4 self-checklist outputs omit required / tags
+582 " ✅ Optimizing inference speed with vLLM backend and speculative decoding
+584 12:28a 🔵 Identified need to reduce max-model-len to prevent OOM
+585 12:31a ✅ Added reference file with known-good 4B self‑checklist vLLM command
+586 12:35a 🔵 Query about dev600 dataset max model-len
+587 12:37a 🔴 CUDA OOM Error When Using Unsloth for Qwen3.5-9B Fine-tuning
+588 10:57a 🔴 OOM Issue in Data Preparation Script Resolved
+589 10:58a 🔵 vLLM Parameters Used in Data Processing and Evaluation
+590 " 🔵 Teacher Model Loading and SFT Row Generation Workflow
+591 11:01a 🔵 Evaluation Script LoRA Adapter Configuration
+593 11:19a 🔵 PyTorch Version Incompatibility Detected
+594 11:24a 🔵 Torch version incompatibility blocks FlashInfer CUDA extensions
+595 11:34a 🔵 Memory usage difference between data preparation and evaluation scripts
+S129 GPU memory optimization for autotuning process (May 5, 11:36 AM)
+596 11:40a 🟣 Authentication Enhancement
+S130 Autotuner OOM fallback and CUDA graph capture completion (May 5, 11:40 AM)
+597 11:46a ✅ **[Flashinfer Autotuner] OOM fallback and CUDA graph capture**
+S131 Performance optimization progress summary after autotuning and OOM fallback (May 5, 11:46 AM)
+S132 Distillation Experiment Analysis and Next Steps (May 5, 11:48 AM)
+598 1:08p 🔵 Self-Checklist Evaluation Results for 27B Teacher Model
+S133 RL微调判官方法分析与GRPO实施计划 (May 5, 1:08 PM)
+S134 Create GRPO fine-tuning components for the self-checklist judge, including a dataset preparation script, custom reward plugin, and training shell script, following existing project patterns for generator GRPO training. (May 5, 1:10 PM)
+600 1:15p 🟣 GRPO pipeline scaffolding implemented with pairwise preference preparation
+602 " 🟣 GRPO Training Orchestration Script Added
+603 " 🔵 CheckEval Reward Plugin Identified
+604 1:16p 🟣 CheckEval Reward Plugin Implemented for GRPO
+605 " 🔵 Project Configuration Structure Identified
+606 " 🔵 Tier Sizes and Judge SFT Directory Defined
+607 1:17p 🟣 Self-Check Judge GRPO Reward Plugin Added
+S135 Explain need for 0.15 format reward after SFT and clarify whether GRPO data should match SFT data (May 5, 1:18 PM)
+S136 Investigate and fix mergekit breakage caused by removal of TRANSFORMERS_CACHE in new Transformers version (May 5, 4:04 PM)
+608 4:07p 🔄 Add --exclude-sft argument to prepare_judge_grpo script
+609 5:15p 🔵 Dataset missing for judge GRPO run
+610 5:18p 🔵 Missing mergekit dependency in TRL import chain
+S137 SSH connection timeout to remote host (May 5, 5:21 PM)
+611 5:22p 🟣 GRPO Training Experiment with Self-Check Reward Function
+612 5:26p 🟣 Created virtual environment for GRPO on server
+613 5:27p 🔵 ImportError caused by missing TRANSFORMERS_CACHE in transformers.utils.hub
+614 " ⚖️ Create isolated virtual environment for GRPO
+615 " 🔵 Remote SSH connection timed out
+616 5:32p 🔴 Dependency conflict between mergekit and vllm
+617 " 🔵 Missing torch module detected in .vengrpo environment
+618 5:35p 🔴 Remote server disk space exhausted during pip install
+619 5:40p ✅ GRPO training environment packages installed on remote SeetaCloud server
+620 5:41p ✅ Install flash-attn into .vengrpo environment
+621 " 🔴 Missing immutables dependency for TRL GRPO trainer
+622 5:42p ✅ Installed missing immutables package for mergekit compatibility
+623 " 🔴 Pydantic schema generation error in TRL GRPO trainer import
+624 5:43p 🔴 Persisting pydantic schema error after downgrading to pydantic 2.11.7
+625 5:44p 🔵 Located Task class definition in mergekit source
+626 5:45p 🔴 sed command failed while attempting to patch mergekit Task class
+S138 Decision on whether to continue RL training from SFT checkpoint or start RL directly from base model (May 5, 5:48 PM)
+627 5:49p 🔵 Verified remote environment Python and vLLM version
+628 " ✅ Uploaded base model format hit-rate probe script to remote server
+630 5:51p ✅ Re-uploaded base model format hit-rate probe script with main guard
+631 5:56p 🔵 Investigate availability of “think” mode for Qwen 3.6 27B on HuggingFace
+632 6:01p 🔵 Qwen3.5-4B format compliance probed with increased generation limits
+633 6:18p 🔵 Syntax check passed for run_judge_grpo_swift.sh
+634 " 🔵 Training session initiated
 
-Access 347k tokens of past work via get_observations([IDs]) or mem-search skill.
+Access 423k tokens of past work via get_observations([IDs]) or mem-search skill.
 </claude-mem-context>
