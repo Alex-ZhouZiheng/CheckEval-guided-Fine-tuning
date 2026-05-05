@@ -45,7 +45,7 @@ log = logging.getLogger(__name__)
 
 def main() -> None:
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("--tier", default="tier_10k", choices=list(cfg.TIER_SIZES))
+    p.add_argument("--tier", default="tier_10k")
     p.add_argument("--max", type=int, default=None, help="Optional row cap.")
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--enable-thinking", action="store_true", default=True,
