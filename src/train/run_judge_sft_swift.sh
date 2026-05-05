@@ -24,6 +24,11 @@ BATCH_SIZE="${BATCH_SIZE:-1}"
 GRAD_ACCUM="${GRAD_ACCUM:-16}"
 WARMUP_RATIO="${WARMUP_RATIO:-0.05}"
 ENABLE_THINKING="${ENABLE_THINKING:-false}"
+# In-loop eval: set EVAL_RATIO=0 to disable. Holds out a slice of the train
+# set for periodic eval loss tracking — needed to detect overfit / format
+# collapse before burning a full eval pass on dev_600.
+EVAL_RATIO="${EVAL_RATIO:-0.05}"
+EVAL_STEPS="${EVAL_STEPS:-50}"
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 MODEL_PATH="${PROJECT_ROOT}/models/${MODEL_NAME}"
@@ -87,6 +92,19 @@ else
   THINK_FLAGS=(--add_non_thinking_prefix true)
 fi
 
+# Eval loop flags: split a slice off the training set for periodic eval
+# loss reporting. Keeping eval batch size at 1 to match training memory
+# footprint (no extra OOM risk). Disable entirely with EVAL_RATIO=0.
+EVAL_FLAGS=()
+if [[ "${EVAL_RATIO}" != "0" ]]; then
+  EVAL_FLAGS=(
+    --split_dataset_ratio "${EVAL_RATIO}"
+    --eval_strategy steps
+    --eval_steps "${EVAL_STEPS}"
+    --per_device_eval_batch_size 1
+  )
+fi
+
 swift sft \
   --model "${MODEL_PATH}" \
   --dataset "${JSONL_PATH}" \
@@ -101,6 +119,7 @@ swift sft \
   --group_by_length true \
   "${THINK_FLAGS[@]}" \
   --loss_scale ignore_empty_think \
+  "${EVAL_FLAGS[@]}" \
   --use_liger_kernel true \
   --attn_impl flash_attn \
   --gradient_checkpointing true \
