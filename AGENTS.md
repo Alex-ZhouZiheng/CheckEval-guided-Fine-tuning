@@ -122,13 +122,13 @@ Do not commit `.env`, model weights, raw private data, or large generated output
 <claude-mem-context>
 # Memory Context
 
-# [CheckEval-guided-Fine-tuning] recent context, 2026-05-06 5:01pm GMT+2
+# [CheckEval-guided-Fine-tuning] recent context, 2026-05-06 11:58pm GMT+2
 
 Legend: 🎯session 🔴bugfix 🟣feature 🔄refactor ✅change 🔵discovery ⚖️decision 🚨security_alert 🔐security_note
 Format: ID TIME TYPE TITLE
 Fetch details: get_observations([IDs]) | Search: mem-search skill
 
-Stats: 50 obs (10,012t read) | 335,079t work | 97% savings
+Stats: 50 obs (10,384t read) | 416,725t work | 98% savings
 
 ### May 5, 2026
 S138 Decision on whether to continue RL training from SFT checkpoint or start RL directly from base model (May 5, 5:28 PM)
@@ -141,41 +141,8 @@ S144 Extract pure language model checkpoint from Qwen3.5-4B VL model (May 5, 8:0
 S145 Adjust training configuration to reduce clipped_ratio and improve reward signal for vLLM colocate training (May 5, 8:03 PM)
 S146 Reconfigure training to accommodate longer prompts and completions while managing GPU memory (May 5, 8:14 PM)
 S147 Checkpoint retention policy for model training (May 5, 9:16 PM)
-736 10:25p 🔵 Playwright skill documentation read
-737 10:26p 🟣 LaTeX tables converted to HTML preview
-738 10:27p 🔵 Playwright browsers not installed
-740 10:30p 🔵 Playwright Chromium install timed out
-739 " 🔵 Playwright Chromium install times out, screenshot retry planned for local HTML preview
-741 10:31p 🔵 Microsoft Edge not found
-742 10:41p ✅ Git status after visualization generation
-743 10:46p 🔵 Evaluation not triggered after checkpoint 50
-744 10:50p 🔵 Self‑check evaluation callback code inspected
-745 10:51p 🔵 Checkpoint‑50 location identified for manual evaluation
-746 11:21p 🔵 GRPO training performance vs baseline
-747 " 🔵 Search for self-checklist baseline evaluation artifacts
-748 11:24p 🔵 SFT parse rate approaching 100%
-749 11:31p 🔵 Inspected SFT training script and data‑prep files for hyperparameter definitions
-750 11:41p 🔵 User inquired about tuning SFT v2 parameters based on training curves
 ### May 6, 2026
-751 10:12a 🟣 User requested MTP support for run_zeroshot.py and accuracy calculation explanation
-752 10:13a ✅ run_zeroshot.py has uncommitted modifications
-753 10:14a 🟣 Added MTP speculative decoding flags to run_zeroshot.py
-754 10:17a 🔵 enable_thinking flag usage across project
-755 " 🔴 chat_template_kwargs integration in utils.py
-757 10:18a 🟣 Added --enable-thinking and --max-new-tokens arguments
-758 " 🟣 Integrated thinking mode arguments into run_vanilla_judge call
-759 10:42a ✅ User ran two experiments and added results to table
-760 " 🔵 Git status shows modified .gitignore and AGENTS.md on master branch
-761 " 🟣 LaTeX table visualization pipeline implemented
-762 " 🟣 Added new benchmark rows to paper tables
-763 10:43a 🟣 Generated HTML preview for paper tables
-764 10:51a 🟣 Self-checklist implementation confirmed
-766 10:55a 🟣 reward1 Calculation Method Implemented
-767 11:29a 🔵 Inspecting training code for thinking-mode handling
-768 1:24p 🔵 Fine-tuned Qwen3.5-4B checkpoint ready for evaluation
-769 1:35p 🔵 Permission error executing ripgrep on Windows sandbox
-770 1:36p 🔵 Found training dataset paths on remote server
-772 " 🔵 Syntax error in remote Python inspection command
+772 1:36p 🔵 Syntax error in remote Python inspection command
 771 " 🔵 Self‑check training data schema identified
 773 1:37p 🔵 Remote dataset inspected: shape, schema, and stats
 774 " 🔵 Server-side code references to parse failures and winner mismatches identified
@@ -192,6 +159,39 @@ S147 Checkpoint retention policy for model training (May 5, 9:16 PM)
 791 4:34p 🔵 Extracted launcher environment lines from run_judge_grpo_swift.sh
 792 4:42p ⚖️ Initiate unit tests for new quality reward
 793 4:46p ✅ Added line‑number collection step to reward‑validation plan
+794 5:59p 🔵 Quality reward audit failed to meet parse_ok_rate threshold
+795 6:02p 🔵 Search for rollout generation scripts
+796 6:03p 🔵 User requested review of 2026-05-06-checklist-quality-proxy-reward.md plan
+797 6:11p 🔵 Self-Checklist model evaluation completed with performance metrics
+798 6:24p 🔵 DDP unused‑parameter flag warning and max‑tokens auto‑adjustment observed
+799 6:28p ✅ Adjusted max_tokens for Swift trainer based on model length constraints
+800 7:28p 🔵 Training process stalls after loading diversity encoder
+801 9:04p 🔵 File search command failed due to Windows sandbox permission error
+802 9:06p 🔵 PowerShell Get-Content command blocked by sandbox permissions
+803 9:07p 🔵 Academic paper skill metadata read successfully after escalated permission
+804 " 🔵 Read first 180 lines of thesis.tex from template zip with escalated permissions
+806 9:08p 🔵 PDF text extraction command failed due to PowerShell here-doc syntax error
+805 " 🟣 Retry PDF extraction with UTF-8 encoding
+807 " 🔵 Retrieved final 80 lines of thesis.tex template from zip archive
+808 9:10p 🟣 Created related work chapter and bibliography files
+809 " 🔵 All citation keys in related_work.tex have corresponding BibTeX entries
+810 11:03p 🔵 Windows Sandbox Process Creation Failure
+811 " 🔵 File Listing Timeout
+812 11:04p 🔵 SKILL.md Read Timeout
+813 " 🔵 Academic-Paper Skill Definition Loaded
+814 11:05p 🔵 Git Workspace State Revealed
+815 11:06p 🔵 PowerShell JSON parsing error during metrics extraction
+816 11:07p 🔵 Successful metrics extraction via PowerShell
+817 11:08p 🔵 Read research narrative and evidence markdown files
+818 11:39p 🔵 Timeout reading GRPO skill markdown file
+819 11:40p 🔵 File search operation timed out during diagnosis
+820 11:43p 🔵 Remote checkpoint directory inaccessible via SSH
+821 11:52p 🔵 Reward selfcheck test suite passed
+822 11:54p 🔵 Git status command failed due to permission error
+823 " 🔵 Repository status shows pending changes and permission warning
+824 11:55p 🔄 Adjusted thinking flag handling in run_judge_grpo_swift.sh
+825 " 🔵 Git diff confirms training script thinking flag modifications
+826 11:56p ✅ Sync GRPO eval thinking with training setting
 
-Access 335k tokens of past work via get_observations([IDs]) or mem-search skill.
+Access 417k tokens of past work via get_observations([IDs]) or mem-search skill.
 </claude-mem-context>
