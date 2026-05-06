@@ -71,7 +71,7 @@ EVAL_MAX_SAMPLES="${EVAL_MAX_SAMPLES:-200}"
 EVAL_BATCH_SIZE="${EVAL_BATCH_SIZE:-1}"
 EVAL_MAX_NEW_TOKENS="${EVAL_MAX_NEW_TOKENS:-4048}"
 EVAL_TEMPERATURE="${EVAL_TEMPERATURE:-0.0}"
-EVAL_ENABLE_THINKING="${EVAL_ENABLE_THINKING:-true}"
+EVAL_ENABLE_THINKING="${EVAL_ENABLE_THINKING:-${ENABLE_THINKING}}"
 EVAL_BEFORE_TRAIN="${EVAL_BEFORE_TRAIN:-false}"
 EVAL_LABEL_PREFIX="${EVAL_LABEL_PREFIX:-swift_grpo}"
 
@@ -97,8 +97,12 @@ VLLM_MEM="${VLLM_MEM:-0.35}"
 VLLM_MAX_LEN="${VLLM_MAX_LEN:-${MAX_LEN}}"
 
 [[ -f "${DATASET_PATH}" ]] || {
+  PREPARE_THINKING_FLAG="--enable-thinking"
+  if [[ "${ENABLE_THINKING}" != "true" ]]; then
+    PREPARE_THINKING_FLAG="--no-thinking"
+  fi
   echo "[grpo-judge] dataset not found: ${DATASET_PATH}" >&2
-  echo "  build it: python -m src.data_process.prepare_judge_grpo --tier ${TIER}" >&2
+  echo "  build it: python -m src.data_process.prepare_judge_grpo --tier ${TIER} ${PREPARE_THINKING_FLAG}" >&2
   exit 1
 }
 
