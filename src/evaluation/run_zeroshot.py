@@ -120,7 +120,7 @@ def main():
                         help="Enable vLLM MTP speculative decoding (vllm backend only).")
     parser.add_argument("--mtp-method", type=str, default="mtp",
                         help="vLLM speculative_config method (default: mtp).")
-    parser.add_argument("--mtp-num-speculative-tokens", type=int, default=1,
+    parser.add_argument("--mtp-num-speculative-tokens", type=int, default=10,
                         help="MTP speculative depth (default: 1).")
     args = parser.parse_args()
 

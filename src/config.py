@@ -58,7 +58,7 @@ GENERATOR_MODEL_ID = PROJECT_ROOT/"models"/"Qwen3.5-4B"
 
 VLLM_ENGINE_KWARGS = {
     "tensor_parallel_size": 1,
-    "gpu_memory_utilization": 0.92,
+    "gpu_memory_utilization": 0.9,
     "max_model_len": 16384,
     "dtype": "auto",
     "trust_remote_code": True,
