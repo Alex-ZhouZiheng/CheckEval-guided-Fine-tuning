@@ -1,0 +1,5 @@
+parse_ok        mean=+0.7500 std=0.5000 min=+0.0000 max=+1.0000
+discriminative  mean=+0.5000 std=0.5774 min=+0.0000 max=+1.0000
+diversity       mean=+0.7500 std=0.5000 min=+0.0000 max=+1.0000
+winner          mean=+0.1250 std=1.0308 min=-1.0000 max=+1.0000
+R               mean=+0.3375 std=0.6824 min=-0.3000 max=+1.0000

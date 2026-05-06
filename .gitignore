@@ -132,3 +132,6 @@ ara/
 results/review/
 unsloth*/
 .ven*/
+*.tex
+*.html
+*.pdf

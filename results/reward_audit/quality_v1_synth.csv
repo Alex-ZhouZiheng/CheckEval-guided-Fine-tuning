@@ -1,0 +1,5 @@
+name,expected_R,parse_ok,discriminative,diversity,winner,R,delta,pass
+parse_fail,-0.3,0.0,0.0,0.0,-0.5,-0.3,0.0,True
+perfect,1.0,1.0,1.0,1.0,1.0,1.0,0.0,True
+all_tie_correct_winner,0.73,1.0,0.0,0.20000004768371582,1.0,0.7300000071525573,7.152557324197062e-09,True
+wrong_winner_perfect_proxy,-0.2,1.0,1.0,1.0,-1.0,-0.2,0.0,True

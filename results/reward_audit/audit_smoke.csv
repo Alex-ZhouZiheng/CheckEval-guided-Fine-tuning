@@ -1,0 +1,5 @@
+prompt_id,gold,parse_ok,discriminative,diversity,winner,R
+parse_fail,A,0.0,0.0,0.0,-0.5,-0.3
+perfect,A,1.0,1.0,1.0,1.0,1.0
+all_tie_correct_winner,Tie,1.0,0.0,1.0,1.0,0.85
+wrong_winner_perfect_proxy,B,1.0,1.0,1.0,-1.0,-0.2

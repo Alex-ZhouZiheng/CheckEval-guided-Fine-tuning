@@ -122,75 +122,76 @@ Do not commit `.env`, model weights, raw private data, or large generated output
 <claude-mem-context>
 # Memory Context
 
-# [CheckEval-guided-Fine-tuning] recent context, 2026-05-05 6:58pm GMT+2
+# [CheckEval-guided-Fine-tuning] recent context, 2026-05-06 5:01pm GMT+2
 
 Legend: 🎯session 🔴bugfix 🟣feature 🔄refactor ✅change 🔵discovery ⚖️decision 🚨security_alert 🔐security_note
 Format: ID TIME TYPE TITLE
 Fetch details: get_observations([IDs]) | Search: mem-search skill
 
-Stats: 50 obs (11,435t read) | 511,829t work | 98% savings
+Stats: 50 obs (10,012t read) | 335,079t work | 97% savings
 
 ### May 5, 2026
-S129 GPU memory optimization for autotuning process (May 5, 11:36 AM)
-S130 Autotuner OOM fallback and CUDA graph capture completion (May 5, 11:40 AM)
-S131 Performance optimization progress summary after autotuning and OOM fallback (May 5, 11:46 AM)
-S132 Distillation Experiment Analysis and Next Steps (May 5, 11:48 AM)
-S133 RL微调判官方法分析与GRPO实施计划 (May 5, 1:08 PM)
-S134 Create GRPO fine-tuning components for the self-checklist judge, including a dataset preparation script, custom reward plugin, and training shell script, following existing project patterns for generator GRPO training. (May 5, 1:10 PM)
-S135 Explain need for 0.15 format reward after SFT and clarify whether GRPO data should match SFT data (May 5, 1:18 PM)
-S136 Investigate and fix mergekit breakage caused by removal of TRANSFORMERS_CACHE in new Transformers version (May 5, 4:04 PM)
-S137 SSH connection timeout to remote host (May 5, 5:21 PM)
-617 5:32p 🔵 Missing torch module detected in .vengrpo environment
-618 5:35p 🔴 Remote server disk space exhausted during pip install
-619 5:40p ✅ GRPO training environment packages installed on remote SeetaCloud server
-620 5:41p ✅ Install flash-attn into .vengrpo environment
-621 " 🔴 Missing immutables dependency for TRL GRPO trainer
-622 5:42p ✅ Installed missing immutables package for mergekit compatibility
-623 " 🔴 Pydantic schema generation error in TRL GRPO trainer import
-624 5:43p 🔴 Persisting pydantic schema error after downgrading to pydantic 2.11.7
-625 5:44p 🔵 Located Task class definition in mergekit source
-626 5:45p 🔴 sed command failed while attempting to patch mergekit Task class
-S138 Decision on whether to continue RL training from SFT checkpoint or start RL directly from base model (May 5, 5:48 PM)
-627 5:49p 🔵 Verified remote environment Python and vLLM version
-628 " ✅ Uploaded base model format hit-rate probe script to remote server
-630 5:51p ✅ Re-uploaded base model format hit-rate probe script with main guard
-631 5:56p 🔵 Investigate availability of “think” mode for Qwen 3.6 27B on HuggingFace
-632 6:01p 🔵 Qwen3.5-4B format compliance probed with increased generation limits
-633 6:18p 🔵 Syntax check passed for run_judge_grpo_swift.sh
-634 " 🔵 Training session initiated
-635 6:21p ✅ Update GRPO training defaults and AGENTS documentation
-636 " ✅ Remote GRPO training defaults updated via git pull
-637 6:22p 🔵 Remote training server GPU and tmux status checked
-638 " ✅ Started GRPO training run in new tmux session
-639 6:24p 🔵 Monitored GRPO training session logs and GPU usage via remote SSH
-640 6:25p 🔵 User Environment Context Update
-641 6:26p 🟣 Upgrade Transformers to 5.7.0 with Cache Shim
-642 " 🔵 TRL Import Failure Due to Missing vllm_ascend
-643 6:27p 🔵 TRL vLLM Ascend Availability Check
-644 6:28p 🔴 Patch TRL import_utils for Transformers 5 Compatibility
-645 6:29p 🟣 GRPO Training Session Restarted
-646 6:35p 🔵 Permission error when reading SKILL.md
-648 6:36p 🔵 Memory file search blocked by sandbox
-647 " 🔵 Read GRPO RL training skill documentation
-649 6:40p 🟣 Added Unsloth‑based GRPO training entrypoint
-650 " 🟣 Added Unsloth-based GRPO training pipeline for self-checklist judge
-651 6:42p 🟣 Implemented lightweight self-checklist parser in GRPO training script
-652 6:43p 🔵 Syntax validation passed for GRPO training entrypoint
-653 " 🔵 Key function and class definitions located in GRPO training script
-654 6:45p 🔵 Repository configuration paths and tier sizes identified
-655 6:47p 🔵 Self‑checklist evaluation script loaded
-657 6:48p 🔵 Utility functions for evaluation loaded
-656 " 🔵 Checking prior memory for GRPO eval conventions
-658 " 🟣 Added self-checklist evaluation prompts to GRPO training script
-659 6:50p 🟣 Implemented self‑checklist evaluation workflow in GRPO script
-660 6:51p 🔵 Confirmed modified GRPO training script passes Python syntax check
-661 6:55p 🔴 Resolved TRANSFORMERS_CACHE ImportError
-662 " 🔵 rg command unavailable due to permission error
-664 " 🔵 PowerShell file search blocked by sandbox
-663 " 🔵 Missing TRANSFORMERS_CACHE symbol causes import failure in llm_blender/TRL stack
-665 6:56p 🔵 Aborted attempt to read GRPO training script
-666 6:57p 🔴 Added TRANSFORMERS_CACHE compatibility patch to GRPO trainer
-667 6:58p 🔵 PowerShell Select-String blocked by sandbox
+S138 Decision on whether to continue RL training from SFT checkpoint or start RL directly from base model (May 5, 5:28 PM)
+S139 User requested to connect to a server to upload data using base; discussion covered adapting Unsloth Colab GRPO templates for text self-check judge GRPO, Colab free tier constraints, and data/training sync strategies (May 5, 5:48 PM)
+S140 Run Swift training script with vLLM colocate settings (May 5, 7:07 PM)
+S141 Implement in‑training self‑checklist evaluation callback for ms‑swift GRPO training (May 5, 7:46 PM)
+S142 Patch transformers cache path for swift CLI via sitecustomize (May 5, 7:51 PM)
+S143 Resolve KeyError 'input_ids' in Qwen2VLTemplate during GRPO training (May 5, 7:54 PM)
+S144 Extract pure language model checkpoint from Qwen3.5-4B VL model (May 5, 8:00 PM)
+S145 Adjust training configuration to reduce clipped_ratio and improve reward signal for vLLM colocate training (May 5, 8:03 PM)
+S146 Reconfigure training to accommodate longer prompts and completions while managing GPU memory (May 5, 8:14 PM)
+S147 Checkpoint retention policy for model training (May 5, 9:16 PM)
+736 10:25p 🔵 Playwright skill documentation read
+737 10:26p 🟣 LaTeX tables converted to HTML preview
+738 10:27p 🔵 Playwright browsers not installed
+740 10:30p 🔵 Playwright Chromium install timed out
+739 " 🔵 Playwright Chromium install times out, screenshot retry planned for local HTML preview
+741 10:31p 🔵 Microsoft Edge not found
+742 10:41p ✅ Git status after visualization generation
+743 10:46p 🔵 Evaluation not triggered after checkpoint 50
+744 10:50p 🔵 Self‑check evaluation callback code inspected
+745 10:51p 🔵 Checkpoint‑50 location identified for manual evaluation
+746 11:21p 🔵 GRPO training performance vs baseline
+747 " 🔵 Search for self-checklist baseline evaluation artifacts
+748 11:24p 🔵 SFT parse rate approaching 100%
+749 11:31p 🔵 Inspected SFT training script and data‑prep files for hyperparameter definitions
+750 11:41p 🔵 User inquired about tuning SFT v2 parameters based on training curves
+### May 6, 2026
+751 10:12a 🟣 User requested MTP support for run_zeroshot.py and accuracy calculation explanation
+752 10:13a ✅ run_zeroshot.py has uncommitted modifications
+753 10:14a 🟣 Added MTP speculative decoding flags to run_zeroshot.py
+754 10:17a 🔵 enable_thinking flag usage across project
+755 " 🔴 chat_template_kwargs integration in utils.py
+757 10:18a 🟣 Added --enable-thinking and --max-new-tokens arguments
+758 " 🟣 Integrated thinking mode arguments into run_vanilla_judge call
+759 10:42a ✅ User ran two experiments and added results to table
+760 " 🔵 Git status shows modified .gitignore and AGENTS.md on master branch
+761 " 🟣 LaTeX table visualization pipeline implemented
+762 " 🟣 Added new benchmark rows to paper tables
+763 10:43a 🟣 Generated HTML preview for paper tables
+764 10:51a 🟣 Self-checklist implementation confirmed
+766 10:55a 🟣 reward1 Calculation Method Implemented
+767 11:29a 🔵 Inspecting training code for thinking-mode handling
+768 1:24p 🔵 Fine-tuned Qwen3.5-4B checkpoint ready for evaluation
+769 1:35p 🔵 Permission error executing ripgrep on Windows sandbox
+770 1:36p 🔵 Found training dataset paths on remote server
+772 " 🔵 Syntax error in remote Python inspection command
+771 " 🔵 Self‑check training data schema identified
+773 1:37p 🔵 Remote dataset inspected: shape, schema, and stats
+774 " 🔵 Server-side code references to parse failures and winner mismatches identified
+775 1:38p 🔵 Self-check parser validates all rows successfully
+777 1:39p 🟣 Cleaned SFT dataset written without drops
+776 " 🔵 SFT Eval Comparison Search
+778 1:40p 🔵 LaTeX Results Table Read
+779 1:41p ✅ Update SFT Checkpoint Results in LaTeX Table
+780 " ✅ Sync HTML Preview with Updated LaTeX Table
+781 1:42p 🔵 Playwright Preview Artifacts Listing
+782 3:38p 🟣 Trained self-checklist model on cleaned data checkpoint 265
+783 3:41p ⚖️ Base checkpoint selected for GRPO training
+784 3:49p ⚖️ Defined contrastive_intent and generic_question_penalty reward calculations
+791 4:34p 🔵 Extracted launcher environment lines from run_judge_grpo_swift.sh
+792 4:42p ⚖️ Initiate unit tests for new quality reward
+793 4:46p ✅ Added line‑number collection step to reward‑validation plan
 
-Access 512k tokens of past work via get_observations([IDs]) or mem-search skill.
+Access 335k tokens of past work via get_observations([IDs]) or mem-search skill.
 </claude-mem-context>
