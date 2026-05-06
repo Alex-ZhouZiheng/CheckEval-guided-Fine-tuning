@@ -144,6 +144,7 @@ def main():
                         help="vLLM speculative_config method (default: mtp).")
     parser.add_argument("--mtp-num-speculative-tokens", type=int, default=10,
                         help="MTP speculative depth (default: 1).")
+    parser.add_argument("--suffix",type=str,default=Path(args.model_id).name)
     args = parser.parse_args()
 
     speculative_config = (
@@ -197,7 +198,7 @@ def main():
     metrics["enable_thinking"] = bool(args.enable_thinking)
 
     split_tag = args.subset or args.split
-    experiment_name = f"vanilla_judge_{split_tag}"
+    experiment_name = f"vanilla_judge_{split_tag}_{args.suffix}"
     save_results(results, metrics, experiment_name)
 
     log.info("Done.")
