@@ -239,15 +239,11 @@ def main() -> None:
     parser.add_argument("--tensor-parallel-size", type=int,
                         default=cfg.VLLM_ENGINE_KWARGS["tensor_parallel_size"])
     parser.add_argument("--max-model-len", type=int,
-                        default=cfg.VLLM_ENGINE_KWARGS["max_model_len"])
+                        default=9106)
     parser.add_argument("--gpu-memory-utilization", type=float,
                         default=cfg.VLLM_ENGINE_KWARGS["gpu_memory_utilization"])
-    parser.add_argument("--enable-thinking", action="store_true",
-                        help="Use Qwen3 native thinking mode. Switches prompt to "
-                             "the post-thinking-structured variant and passes "
-                             "chat_template_kwargs={'enable_thinking': True} to vLLM. "
-                             "Required when evaluating an adapter trained with "
-                             "--enable-thinking.")
+    parser.add_argument("--enable-thinking", action="store_true"
+                        )
     parser.add_argument("--max-num-seqs", type=int, default=48)
     parser.add_argument("--max-num-batched-tokens", type=int,
                         default=cfg.VLLM_ENGINE_KWARGS.get("max_num_batched_tokens", 16384))

@@ -137,5 +137,5 @@ swift sft \
   --save_total_limit 2 \
   --logging_steps 5 \
   --output_dir "${OUTPUT_DIR}" \
-  --report_to tensorboard \
+  --report_to tensorboard wandb\
   --seed 42
