@@ -116,7 +116,19 @@ def main():
     parser.add_argument("--backend", type=str, default=None,
                         choices=["llamacpp", "vllm"],
                         help="Inference backend; defaults to cfg.INFERENCE_BACKEND.")
+    parser.add_argument("--enable-mtp", action="store_true",
+                        help="Enable vLLM MTP speculative decoding (vllm backend only).")
+    parser.add_argument("--mtp-method", type=str, default="mtp",
+                        help="vLLM speculative_config method (default: mtp).")
+    parser.add_argument("--mtp-num-speculative-tokens", type=int, default=1,
+                        help="MTP speculative depth (default: 1).")
     args = parser.parse_args()
+
+    speculative_config = (
+        {"method": args.mtp_method,
+         "num_speculative_tokens": args.mtp_num_speculative_tokens}
+        if args.enable_mtp else None
+    )
 
     df = load_eval_data(args.split, args.subset)
     if args.max_samples:
@@ -131,6 +143,7 @@ def main():
         max_model_len=args.max_model_len,
         gpu_memory_utilization=args.gpu_memory_utilization,
         max_num_seqs=args.max_num_seqs,
+        speculative_config=speculative_config,
     )
 
     t0 = time.time()
