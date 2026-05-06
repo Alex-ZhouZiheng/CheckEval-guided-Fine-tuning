@@ -185,7 +185,7 @@ swift rlhf \
     --gradient_checkpointing true \
     --optim paged_adamw_8bit \
     --log_completions true \
-    --report_to tensorboard \
+    --report_to tensorboard wandb\
     --max_grad_norm 1.0 \
     --epsilon 0.2 \
     --epsilon_high 0.28 \

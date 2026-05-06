@@ -11,6 +11,7 @@ dist/
 pip-log.txt
 pip-delete-this-directory.txt
 
+LLM*/
 # ────────────────────────── Envs ─────────────────────────────
 .venv/
 venv/
