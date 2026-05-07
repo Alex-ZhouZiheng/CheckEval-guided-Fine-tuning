@@ -122,40 +122,25 @@ Do not commit `.env`, model weights, raw private data, or large generated output
 <claude-mem-context>
 # Memory Context
 
-# [CheckEval-guided-Fine-tuning] recent context, 2026-05-06 11:58pm GMT+2
+# [CheckEval-guided-Fine-tuning] recent context, 2026-05-07 4:11pm GMT+2
 
 Legend: 🎯session 🔴bugfix 🟣feature 🔄refactor ✅change 🔵discovery ⚖️decision 🚨security_alert 🔐security_note
 Format: ID TIME TYPE TITLE
 Fetch details: get_observations([IDs]) | Search: mem-search skill
 
-Stats: 50 obs (10,384t read) | 416,725t work | 98% savings
+Stats: 50 obs (9,606t read) | 370,828t work | 97% savings
 
-### May 5, 2026
-S138 Decision on whether to continue RL training from SFT checkpoint or start RL directly from base model (May 5, 5:28 PM)
-S139 User requested to connect to a server to upload data using base; discussion covered adapting Unsloth Colab GRPO templates for text self-check judge GRPO, Colab free tier constraints, and data/training sync strategies (May 5, 5:48 PM)
-S140 Run Swift training script with vLLM colocate settings (May 5, 7:07 PM)
-S141 Implement in‑training self‑checklist evaluation callback for ms‑swift GRPO training (May 5, 7:46 PM)
-S142 Patch transformers cache path for swift CLI via sitecustomize (May 5, 7:51 PM)
-S143 Resolve KeyError 'input_ids' in Qwen2VLTemplate during GRPO training (May 5, 7:54 PM)
-S144 Extract pure language model checkpoint from Qwen3.5-4B VL model (May 5, 8:00 PM)
-S145 Adjust training configuration to reduce clipped_ratio and improve reward signal for vLLM colocate training (May 5, 8:03 PM)
-S146 Reconfigure training to accommodate longer prompts and completions while managing GPU memory (May 5, 8:14 PM)
-S147 Checkpoint retention policy for model training (May 5, 9:16 PM)
 ### May 6, 2026
-772 1:36p 🔵 Syntax error in remote Python inspection command
-771 " 🔵 Self‑check training data schema identified
-773 1:37p 🔵 Remote dataset inspected: shape, schema, and stats
-774 " 🔵 Server-side code references to parse failures and winner mismatches identified
-775 1:38p 🔵 Self-check parser validates all rows successfully
-777 1:39p 🟣 Cleaned SFT dataset written without drops
-776 " 🔵 SFT Eval Comparison Search
-778 1:40p 🔵 LaTeX Results Table Read
-779 1:41p ✅ Update SFT Checkpoint Results in LaTeX Table
-780 " ✅ Sync HTML Preview with Updated LaTeX Table
-781 1:42p 🔵 Playwright Preview Artifacts Listing
-782 3:38p 🟣 Trained self-checklist model on cleaned data checkpoint 265
-783 3:41p ⚖️ Base checkpoint selected for GRPO training
-784 3:49p ⚖️ Defined contrastive_intent and generic_question_penalty reward calculations
+S149 User corrected prior specification error, replacing specificity with diversity as the metric for checklist internal embedding deduplication; Claude outlined full implementation options for diversity calculation and requested user selection via 3-letter code (e.g., A 2 II) (May 6, 3:52 PM)
+S150 User continues diversity encoder selection discussion for checklist embedding deduplication; Claude provided CPU throughput benchmarks for 4 candidate encoders, calculated worst-case per-GRPO-step processing time, assessed dataset language fit, and requested user finalize encoder choice (May 6, 4:00 PM)
+S151 Define reward aggregation weighting and winner scaling for RL signal (May 6, 4:03 PM)
+S152 Define reward function specification and module layout for self‑check quality (May 6, 4:10 PM)
+S153 Specify algorithm details for JudgeSelfCheckQuality reward function (May 6, 4:12 PM)
+S154 Outline implementation plan for JudgeSelfCheckQuality reward plugin (May 6, 4:13 PM)
+S155 Add pre‑training reward validation step for JudgeSelfCheckQuality (May 6, 4:14 PM)
+S156 Design specification for checklist-quality proxy reward to replace outcome-only reward (May 6, 4:17 PM)
+S157 Diagnose why GRPO training failed and propose fixes (May 6, 4:21 PM)
+790 4:27p ⚖️ Adopt checklist-quality proxy reward for question generation
 791 4:34p 🔵 Extracted launcher environment lines from run_judge_grpo_swift.sh
 792 4:42p ⚖️ Initiate unit tests for new quality reward
 793 4:46p ✅ Added line‑number collection step to reward‑validation plan
@@ -192,6 +177,29 @@ S147 Checkpoint retention policy for model training (May 5, 9:16 PM)
 824 11:55p 🔄 Adjusted thinking flag handling in run_judge_grpo_swift.sh
 825 " 🔵 Git diff confirms training script thinking flag modifications
 826 11:56p ✅ Sync GRPO eval thinking with training setting
+### May 7, 2026
+832 12:18p 🔵 Reward Function Range Discovery
+833 12:23p ✅ Penalty for format errors added to judge_selfcheck_winner
+835 2:00p 🔵 GRPO training skill guidance read operation timed out
+836 2:05p 🔴 [**title**: Memory cleanup frees 23.52 GB reserved memory]
+838 2:11p 🔵 Criterion Selection Identified as Training Bottleneck
+839 " 🔴 Invalid Teacher SFT Data Root Cause Identified
+840 " 🔵 Generator Usefulness Optimization Direction
+841 2:38p 🔵 Self-checklist evaluation shows decreased accuracy
+842 2:42p 🔵 GRPO Next Run Strategy
+843 2:51p 🔵 **[**Invalid int value in --num_generations argument parsing**]**
+844 2:55p 🔵 User questioning 2048 token context sufficiency
+848 3:03p 🔵 Swift Training Progress and Resource Metrics
+849 3:47p 🔵 Understanding "分析训练" Request
+S167 Adjusting GRPO training configuration to address output length and reward issues (May 7, 3:54 PM)
+**Investigated**: Current GRPO setup shows negative winner mean (-1) and high clipped ratio (0.6875), indicating poor training dynamics. Evaluated checkpoint-50 performance on dev_600 split. Analyzed prompt structure causing excessive output length. Reviewed GRPO reward weighting strategy.
 
-Access 417k tokens of past work via get_observations([IDs]) or mem-search skill.
+**Learned**: Long self-checklist prompts force models toward maximum token limits (2048), creating reward function instability. GRPO optimization becomes ineffective when outputs are truncated. Format constraints require explicit structural guidance rather than length penalties.
+
+**Completed**: 1. Stopped current problematic GRPO run 2. Scheduled manual evaluation of checkpoint-50 3. Proposed prompt redesign for compact output format 4. Updated GRPO configuration parameters for winner-focused training
+
+**Next Steps**: 1. Implement revised prompt template with 6-10 concise questions and verdict-only format 2. Launch modified GRPO training with winner reward emphasis and format penalty 3. Monitor clipped_ratio and winner mean metrics for early stopping 4. Schedule periodic manual evaluations at checkpoints 25/50
+
+
+Access 371k tokens of past work via get_observations([IDs]) or mem-search skill.
 </claude-mem-context>
