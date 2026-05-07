@@ -125,11 +125,18 @@ def _parse_ok_score(parsed: dict) -> float:
 
 
 def _partial_format_score(parsed: dict, raw: str = "") -> float:
-    """Partial format score in [0, 1] with four 0.25-point components."""
+    """Partial format score in [0, 1] with four 0.25-point components.
+
+    Think-tag component auto-credits in no-thinking mode (raw lacks <think>);
+    only penalizes when model opened <think> but failed to close it.
+    """
     min_q = _env_int("JUDGE_GRPO_MIN_Q", 6)
     max_q = _env_int("JUDGE_GRPO_MAX_Q", 25)
     score = 0.0
-    if "</think>" in raw:
+    if "<think>" in raw:
+        if "</think>" in raw:
+            score += 0.25
+    else:
         score += 0.25
     n = parsed.get("n_questions", 0) or 0
     if n > 0:

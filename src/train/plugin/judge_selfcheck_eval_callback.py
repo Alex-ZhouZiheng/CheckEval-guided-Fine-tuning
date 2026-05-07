@@ -16,9 +16,13 @@ Activated by passing this file in ``--external_plugins`` and setting env vars:
     SELFCHECK_EVAL_ENABLE_THINKING=true
     SELFCHECK_EVAL_BEFORE_TRAIN=false
     SELFCHECK_EVAL_LABEL_PREFIX=swift_grpo
+    SELFCHECK_EVAL_USE_VLLM=false        # opt-in: reuse trainer's colocate engine
+    SELFCHECK_EVAL_VLLM_SKIP_STEP0=true  # at step_0 vLLM may lack synced LoRA
 
-Eval generation runs through HuggingFace ``model.generate`` (vLLM colocate
-engine sleeps during gradient steps; we don't try to wake it for eval).
+Eval generation prefers the trainer's existing vLLM colocate engine when
+available (orders-of-magnitude faster than HF generate on long completions).
+Falls back to HuggingFace ``model.generate`` if the engine cannot be located
+or vLLM generation fails.
 """
 from __future__ import annotations
 
@@ -249,6 +253,114 @@ def _build_eval_prompts(df, enable_thinking: bool):
     return messages_list, keep_idx
 
 
+def _find_vllm_engine(trainer):
+    """Locate the trainer's vLLM rollout engine (colocate mode)."""
+    if trainer is None:
+        return None, None
+    candidates = (
+        "engine", "vllm_engine", "llm_engine", "rollout_engine",
+        "_vllm_engine", "_engine",
+    )
+    outer = None
+    for attr in candidates:
+        obj = getattr(trainer, attr, None)
+        if obj is not None:
+            outer = obj
+            break
+    if outer is None:
+        return None, None
+    inner = outer
+    for inner_attr in ("inner_model", "llm", "_llm", "inner_engine", "_engine"):
+        cand = getattr(inner, inner_attr, None)
+        if cand is not None and hasattr(cand, "generate"):
+            inner = cand
+            break
+    if not hasattr(inner, "generate"):
+        return None, None
+    return outer, inner
+
+
+def _wake_engine(engine) -> bool:
+    for fn_name in ("wake_up", "wake", "resume"):
+        fn = getattr(engine, fn_name, None)
+        if callable(fn):
+            try:
+                fn()
+                return True
+            except Exception as exc:
+                log.warning("[selfcheck-eval] vLLM wake (%s) failed: %s", fn_name, exc)
+    return False
+
+
+def _sleep_engine(engine) -> None:
+    for fn_name in ("sleep", "shutdown_to_sleep", "release"):
+        fn = getattr(engine, fn_name, None)
+        if callable(fn):
+            try:
+                try:
+                    fn(level=1)
+                except TypeError:
+                    fn()
+                return
+            except Exception as exc:
+                log.warning("[selfcheck-eval] vLLM sleep (%s) failed: %s", fn_name, exc)
+
+
+def _try_vllm_generate(
+    trainer, tokenizer, messages_list, *,
+    max_new_tokens: int, temperature: float, enable_thinking: bool,
+) -> list[str] | None:
+    outer, inner = _find_vllm_engine(trainer)
+    if inner is None:
+        log.info("[selfcheck-eval] no vLLM engine on trainer; using HF generate")
+        return None
+    try:
+        from vllm import SamplingParams
+    except Exception as exc:
+        log.warning("[selfcheck-eval] vllm import failed: %s", exc)
+        return None
+    texts = [
+        tokenizer.apply_chat_template(
+            m, tokenize=False, add_generation_prompt=True,
+            enable_thinking=enable_thinking,
+        )
+        for m in messages_list
+    ]
+    sp = SamplingParams(
+        max_tokens=max_new_tokens,
+        temperature=max(temperature, 0.0),
+        top_p=1.0,
+    )
+    woke = _wake_engine(outer)
+    try:
+        try:
+            results = inner.generate(texts, sampling_params=sp)
+        except TypeError:
+            results = inner.generate(prompts=texts, sampling_params=sp)
+    except Exception as exc:
+        log.warning("[selfcheck-eval] vLLM generate raised: %s — falling back", exc)
+        return None
+    finally:
+        if woke:
+            _sleep_engine(outer)
+    outputs: list[str] = []
+    for r in results:
+        if hasattr(r, "outputs") and r.outputs:
+            outputs.append(r.outputs[0].text)
+        elif isinstance(r, str):
+            outputs.append(r)
+        else:
+            outputs.append("")
+    if len(outputs) != len(messages_list):
+        log.warning(
+            "[selfcheck-eval] vLLM returned %d outputs for %d prompts — falling back",
+            len(outputs), len(messages_list),
+        )
+        return None
+    log.info("[selfcheck-eval] vLLM generate path used (%d prompts)", len(outputs))
+    return outputs
+
+
 def _generate_eval_outputs(
     model, tokenizer, messages_list, *,
     batch_size: int, max_new_tokens: int, temperature: float, enable_thinking: bool,
@@ -259,6 +371,11 @@ def _generate_eval_outputs(
     do_sample = temperature > 0.0
     was_training = bool(getattr(model, "training", False))
     model.eval()
+    # Decoder-only requires left-padding for correct batched generation.
+    prev_padding_side = getattr(tokenizer, "padding_side", "right")
+    tokenizer.padding_side = "left"
+    if tokenizer.pad_token_id is None and tokenizer.eos_token_id is not None:
+        tokenizer.pad_token_id = tokenizer.eos_token_id
     try:
         for start in range(0, len(messages_list), batch_size):
             batch_messages = messages_list[start:start + batch_size]
@@ -286,12 +403,15 @@ def _generate_eval_outputs(
             for row in generated[:, prompt_len:]:
                 outputs.append(tokenizer.decode(row, skip_special_tokens=True))
     finally:
+        tokenizer.padding_side = prev_padding_side
         if was_training:
             model.train()
     return outputs
 
 
-def _run_eval(model, tokenizer, *, label: str, step: int | None) -> dict[str, Any] | None:
+def _run_eval(
+    model, tokenizer, *, label: str, step: int | None, trainer=None,
+) -> dict[str, Any] | None:
     try:
         from utils import compute_metrics, load_eval_data, save_results
     except Exception as exc:
@@ -320,12 +440,25 @@ def _run_eval(model, tokenizer, *, label: str, step: int | None) -> dict[str, An
         "[selfcheck-eval] %s: samples=%d/%d split=%s subset=%s step=%s",
         label, len(messages_list), len(df), split, subset or "-", step,
     )
+    use_vllm = _env_bool("SELFCHECK_EVAL_USE_VLLM", False)
+    skip_vllm_step0 = _env_bool("SELFCHECK_EVAL_VLLM_SKIP_STEP0", True)
     t0 = time.time()
-    raw_outputs = _generate_eval_outputs(
-        model, tokenizer, messages_list,
-        batch_size=batch_size, max_new_tokens=max_new_tokens,
-        temperature=temperature, enable_thinking=enable_thinking,
-    )
+    raw_outputs = None
+    used_backend = "hf"
+    if use_vllm and not (skip_vllm_step0 and (step or 0) == 0):
+        raw_outputs = _try_vllm_generate(
+            trainer, tokenizer, messages_list,
+            max_new_tokens=max_new_tokens, temperature=temperature,
+            enable_thinking=enable_thinking,
+        )
+        if raw_outputs is not None:
+            used_backend = "vllm"
+    if raw_outputs is None:
+        raw_outputs = _generate_eval_outputs(
+            model, tokenizer, messages_list,
+            batch_size=batch_size, max_new_tokens=max_new_tokens,
+            temperature=temperature, enable_thinking=enable_thinking,
+        )
     elapsed = time.time() - t0
 
     predicted_winners: list[str | None] = []
@@ -371,7 +504,7 @@ def _run_eval(model, tokenizer, *, label: str, step: int | None) -> dict[str, An
     metrics["avg_checklist_length"] = sum(valid_nq) / len(valid_nq) if valid_nq else None
     metrics["item_tie_rate"] = sum(valid_tie) / len(valid_tie) if valid_tie else None
     metrics["trace_parse_rate"] = trace_parse_ok / n_eval if n_eval else 0.0
-    metrics["judge_mode"] = "swift_grpo_hf"
+    metrics["judge_mode"] = f"swift_grpo_{used_backend}"
     metrics["eval_label"] = label
     if step is not None:
         metrics["train_step"] = step
@@ -437,7 +570,10 @@ class SelfCheckEvalCallback(TrainerCallback):
             log.warning("[selfcheck-eval] missing model/tokenizer at train_begin")
             return
         try:
-            _run_eval(model, tokenizer, label="step_0", step=0)
+            _run_eval(
+                model, tokenizer,
+                label="step_0", step=0, trainer=self._trainer,
+            )
         except Exception as exc:
             log.exception("[selfcheck-eval] before-train eval failed: %s", exc)
 
@@ -457,7 +593,10 @@ class SelfCheckEvalCallback(TrainerCallback):
             log.warning("[selfcheck-eval] missing model/tokenizer at step %d", step)
             return
         try:
-            _run_eval(model, tokenizer, label=f"step_{step}", step=step)
+            _run_eval(
+                model, tokenizer,
+                label=f"step_{step}", step=step, trainer=self._trainer,
+            )
         except Exception as exc:
             log.exception("[selfcheck-eval] step %d eval failed: %s", step, exc)
 
