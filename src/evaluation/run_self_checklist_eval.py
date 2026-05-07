@@ -227,7 +227,7 @@ def main() -> None:
     parser.add_argument("--eval-split", type=str, default="dev")
     parser.add_argument("--subset", type=str, default=None)
     parser.add_argument("--max-samples", type=int, default=None)
-    parser.add_argument("--batch-size", type=int, default=16)
+    parser.add_argument("--batch-size", type=int, default=128)
     parser.add_argument("--max-new-tokens", type=int, default=6144)
     parser.add_argument("--tie-delta", type=float, default=0.0)
     parser.add_argument("--backend", type=str, default="vllm",
@@ -244,11 +244,11 @@ def main() -> None:
                         default=cfg.VLLM_ENGINE_KWARGS["gpu_memory_utilization"])
     parser.add_argument("--enable-thinking", action="store_true"
                         )
-    parser.add_argument("--max-num-seqs", type=int, default=48)
+    parser.add_argument("--max-num-seqs", type=int, default=128)
     parser.add_argument("--max-num-batched-tokens", type=int,
                         default=cfg.VLLM_ENGINE_KWARGS.get("max_num_batched_tokens", 16384))
     parser.add_argument("--enable-mtp", action="store_true")
-    parser.add_argument("--mtp-num-speculative-tokens", type=int, default=1)
+    parser.add_argument("--mtp-num-speculative-tokens", type=int, default=16)
     parser.add_argument("--quantization", type=str, default=None,
                         help="vLLM quantization (e.g. nvfp4) to align with teacher load.")
     args = parser.parse_args()
