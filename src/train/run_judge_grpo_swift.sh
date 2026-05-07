@@ -87,8 +87,10 @@ export SELFCHECK_EVAL_BEFORE_TRAIN="${EVAL_BEFORE_TRAIN}"
 export SELFCHECK_EVAL_LABEL_PREFIX="${EVAL_LABEL_PREFIX}"
 
 EXTERNAL_PLUGINS=("${PLUGIN_PATH}")
+EVAL_CALLBACK_FLAGS=()
 if [[ "${EVAL_STEPS}" != "0" || "${EVAL_BEFORE_TRAIN}" == "true" ]]; then
   EXTERNAL_PLUGINS+=("${EVAL_PLUGIN_PATH}")
+  EVAL_CALLBACK_FLAGS=(--callbacks selfcheck_eval)
 fi
 
 # vLLM colocate rollout (frees memory during gradient step via sleep_level).
@@ -157,6 +159,7 @@ swift rlhf \
     --external_plugins "${EXTERNAL_PLUGINS[@]}" \
     --reward_funcs ${REWARD_FUNCS} \
     --reward_weights ${REWARD_WEIGHTS} \
+    "${EVAL_CALLBACK_FLAGS[@]}" \
     "${VLLM_FLAGS[@]}" \
     --tuner_type lora \
     --lora_rank "${LORA_RANK}" \
