@@ -197,8 +197,9 @@ class JudgeSelfCheckWinner(ORM):
 
     def __init__(self, *args, **kwargs) -> None:
         self.correct = _env_float("JUDGE_GRPO_CORRECT_REWARD", 1.0)
+        self.parse_ok=_env_float("JUDGE_GRPO_CORRECT_PARSE",0.2)
         self.wrong = _env_float("JUDGE_GRPO_WRONG_AB_PENALTY", -1.0)
-        self.parse_fail = _env_float("JUDGE_GRPO_PARSE_FAIL_PENALTY", -0.5)
+        self.parse_fail = _env_float("JUDGE_GRPO_PARSE_FAIL_PENALTY", -1.0)
         self.tie_on_ab = _env_float("JUDGE_GRPO_TIE_ON_AB_PENALTY", -1.0)
 
     def __call__(

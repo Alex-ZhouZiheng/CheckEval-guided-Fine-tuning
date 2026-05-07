@@ -44,7 +44,7 @@ PLUGIN_PATH="${PROJECT_ROOT}/src/train/plugin/judge_selfcheck_reward.py"
 EVAL_PLUGIN_PATH="${PROJECT_ROOT}/src/train/plugin/judge_selfcheck_eval_callback.py"
 
 QUANT_BITS="${QUANT_BITS:-0}"
-LR="${LR:-5e-6}"
+LR="${LR:-1e-5}"
 EPOCHS="${EPOCHS:-1}"
 BATCH_SIZE="${BATCH_SIZE:-1}"
 GRAD_ACCUM="${GRAD_ACCUM:-8}"
@@ -180,13 +180,13 @@ swift rlhf \
     --save_steps "${SAVE_STEPS}" \
     --save_total_limit "${SAVE_TOTAL_LIMIT}" \
     --logging_steps 1 \
-    --dataloader_num_workers 4 \
+    --dataloader_num_workers 2 \
     --num_generations "${NUM_GENERATIONS}" \
     --temperature "${TEMPERATURE}" \
     --beta "${BETA}" \
-    --use_liger_kernel false \
+    --use_liger_kernel true \
     --attn_impl flash_attn \
-    --gradient_checkpointing false \
+    --gradient_checkpointing true \
     --optim adamw_torch_fused \
     --log_completions true \
     --report_to tensorboard wandb\
@@ -196,3 +196,4 @@ swift rlhf \
     --scale_rewards none \
     --seed 42 \
     --output_dir "${OUTPUT_DIR}"\
+    --template qwen3
