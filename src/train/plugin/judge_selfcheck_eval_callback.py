@@ -448,6 +448,7 @@ class SelfCheckEvalCallback(TrainerCallback):
         step = int(getattr(state, "global_step", 0) or 0)
         if step <= 0 or step % eval_steps != 0:
             return
+        print(f"[selfcheck-eval] on_step_end fire step={step}", flush=True)
         if not self._is_main(state):
             return
         self._trainer = kwargs.get("trainer", self._trainer)
@@ -464,19 +465,52 @@ class SelfCheckEvalCallback(TrainerCallback):
 _EVAL_STEPS = _env_int("SELFCHECK_EVAL_STEPS", 0)
 _EVAL_BEFORE = _env_bool("SELFCHECK_EVAL_BEFORE_TRAIN", False)
 
-if _EVAL_STEPS > 0 or _EVAL_BEFORE:
+print(
+    f"[selfcheck-eval] plugin loaded EVAL_STEPS={_EVAL_STEPS} "
+    f"EVAL_BEFORE={_EVAL_BEFORE}",
+    flush=True,
+)
+
+
+class SelfCheckEvalCallbackSwift(SelfCheckEvalCallback):
+    """ms-swift adapter: ctor takes (args, trainer)."""
+
+    def __init__(self, args, trainer):
+        super().__init__()
+        self.args = args
+        self._trainer = trainer
+
+
+_registered = False
+_last_exc: Exception | None = None
+for _module_path in ("swift.callbacks", "swift.plugin", "swift.plugin.callback"):
     try:
-        from swift.plugin import extra_callbacks  # type: ignore
+        _mod = __import__(_module_path, fromlist=["callbacks_map", "extra_callbacks"])
     except Exception as exc:  # pragma: no cover
-        log.warning(
-            "[selfcheck-eval] swift.plugin.extra_callbacks unavailable (%s); "
-            "callback will not be registered.",
-            exc,
+        _last_exc = exc
+        continue
+    if hasattr(_mod, "callbacks_map"):
+        _mod.callbacks_map["selfcheck_eval"] = SelfCheckEvalCallbackSwift
+        print(
+            f"[selfcheck-eval] registered in {_module_path}.callbacks_map "
+            f"as 'selfcheck_eval'. Pass --callbacks selfcheck_eval to enable. "
+            f"(EVAL_STEPS={_EVAL_STEPS}, before_train={_EVAL_BEFORE})",
+            flush=True,
         )
-    else:
-        extra_callbacks.append(SelfCheckEvalCallback())
-        log.info(
-            "[selfcheck-eval] registered SelfCheckEvalCallback "
-            "(every %d steps, before_train=%s)",
-            _EVAL_STEPS, _EVAL_BEFORE,
+        _registered = True
+        break
+    if hasattr(_mod, "extra_callbacks"):
+        _mod.extra_callbacks.append(SelfCheckEvalCallback())
+        print(
+            f"[selfcheck-eval] registered via {_module_path}.extra_callbacks",
+            flush=True,
         )
+        _registered = True
+        break
+
+if not _registered:
+    print(
+        f"[selfcheck-eval] FAILED to register (last exc: {_last_exc!r}). "
+        f"Eval will NOT run.",
+        flush=True,
+    )
