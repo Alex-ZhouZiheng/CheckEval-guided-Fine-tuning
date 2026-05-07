@@ -26,6 +26,10 @@ Registered reward functions (use any combination via --reward_funcs):
         0.10 * parse_ok + 0.60 * winner
         + parse_ok * (0.15 * diversity + 0.15 * discriminative)
 
+  * ``judge_selfcheck_margin`` - dense item-verdict margin + winner reward.
+        0.70 * winner + 0.20 * item_margin + 0.10 * parse_ok
+        + dominance penalty when nearly all item verdicts choose one side.
+
 Env knobs:
     JUDGE_GRPO_MIN_Q (default 6)
     JUDGE_GRPO_MAX_Q (default 25)
@@ -37,6 +41,11 @@ Env knobs:
     JUDGE_GRPO_QUALITY_W_WINNER (default 0.60)
     JUDGE_GRPO_QUALITY_W_DIVERSITY (default 0.15)
     JUDGE_GRPO_QUALITY_W_DISCRIMINATIVE (default 0.15)
+    JUDGE_GRPO_MARGIN_W_WINNER (default 0.70)
+    JUDGE_GRPO_MARGIN_W_ITEM (default 0.20)
+    JUDGE_GRPO_MARGIN_W_FORMAT (default 0.10)
+    JUDGE_GRPO_MARGIN_DOMINANCE_THRESHOLD (default 0.90)
+    JUDGE_GRPO_MARGIN_DOMINANCE_PENALTY (default -0.10)
     JUDGE_GRPO_DIVERSITY_MODEL (default sentence-transformers/all-MiniLM-L6-v2)
     JUDGE_GRPO_DIVERSITY_DEVICE (default cpu)
     JUDGE_GRPO_QUALITY_LOG (optional jsonl diagnostics path)
@@ -121,6 +130,40 @@ def _discriminative_score(parsed: dict) -> float:
         return 0.0
     n_ab = sum(1 for v in verdicts.values() if v in ("A", "B"))
     return n_ab / n_total
+
+
+def _item_margin_score(parsed: dict, gold: str) -> float:
+    """Dense support from item verdict margin, in [-1, 1]."""
+    verdicts = parsed.get("verdicts") or {}
+    n_total = len(verdicts)
+    if n_total == 0:
+        return 0.0
+    counts = {
+        "A": sum(1 for v in verdicts.values() if v == "A"),
+        "B": sum(1 for v in verdicts.values() if v == "B"),
+        "Tie": sum(1 for v in verdicts.values() if v == "Tie"),
+    }
+    gold_norm = str(gold).strip().upper()
+    if gold_norm == "A":
+        return (counts["A"] - counts["B"]) / n_total
+    if gold_norm == "B":
+        return (counts["B"] - counts["A"]) / n_total
+    if gold_norm == "TIE":
+        return (2.0 * counts["Tie"] / n_total) - 1.0
+    return 0.0
+
+
+def _dominance_penalty(parsed: dict, threshold: float, penalty: float) -> float:
+    """Penalize degenerate all-A/all-B item verdict patterns."""
+    verdicts = parsed.get("verdicts") or {}
+    n_total = len(verdicts)
+    if n_total == 0:
+        return 0.0
+    n_a = sum(1 for v in verdicts.values() if v == "A")
+    n_b = sum(1 for v in verdicts.values() if v == "B")
+    if max(n_a, n_b) / n_total > threshold:
+        return penalty
+    return 0.0
 
 
 def _winner_score(
@@ -332,7 +375,74 @@ class JudgeSelfCheckQuality(ORM):
         return out
 
 
+class JudgeSelfCheckMargin(ORM):
+    """Dense reward: final winner plus item-verdict margin toward gold."""
+
+    def __init__(self, *args, **kwargs) -> None:
+        self.w_winner = _env_float("JUDGE_GRPO_MARGIN_W_WINNER", 0.70)
+        self.w_item = _env_float("JUDGE_GRPO_MARGIN_W_ITEM", 0.20)
+        self.w_format = _env_float("JUDGE_GRPO_MARGIN_W_FORMAT", 0.10)
+        self.parse_fail = _env_float("JUDGE_GRPO_PARSE_FAIL_PENALTY", -1.0)
+        self.dominance_threshold = _env_float(
+            "JUDGE_GRPO_MARGIN_DOMINANCE_THRESHOLD",
+            0.90,
+        )
+        self.dominance_penalty = _env_float(
+            "JUDGE_GRPO_MARGIN_DOMINANCE_PENALTY",
+            -0.10,
+        )
+        self.margin_log = os.environ.get("JUDGE_GRPO_MARGIN_LOG")
+
+    def __call__(
+        self,
+        completions: List[str],
+        winner: List[str] | None = None,
+        **kwargs,
+    ) -> List[float]:
+        if winner is None:
+            raise RuntimeError(
+                "judge_selfcheck_margin needs `winner` column. Rebuild dataset "
+                "with prepare_judge_grpo.py."
+            )
+        out: List[float] = []
+        diagnostics = []
+        for comp, gold in zip(completions, winner):
+            raw = comp or ""
+            parsed = parse_self_checklist_trace(raw)
+            win = _winner_score(raw, gold, parsed, parse_fail=self.parse_fail)
+            item = _item_margin_score(parsed, gold)
+            fmt = _parse_ok_score(parsed)
+            dom = _dominance_penalty(
+                parsed,
+                self.dominance_threshold,
+                self.dominance_penalty,
+            )
+            reward = self.w_winner * win + self.w_item * item + self.w_format * fmt + dom
+            out.append(reward)
+            if self.margin_log:
+                diagnostics.append(
+                    {
+                        "gold": str(gold),
+                        "pred": parsed.get("winner"),
+                        "winner": win,
+                        "item_margin": item,
+                        "format": fmt,
+                        "dominance_penalty": dom,
+                        "reward": reward,
+                        "n_questions": parsed.get("n_questions", 0),
+                    }
+                )
+        if diagnostics:
+            path = Path(self.margin_log)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with path.open("a", encoding="utf-8") as f:
+                for row in diagnostics:
+                    f.write(json.dumps(row, ensure_ascii=False) + "\n")
+        return out
+
+
 orms["judge_selfcheck_winner"] = JudgeSelfCheckWinner
 orms["judge_selfcheck_format"] = JudgeSelfCheckFormat
 orms["judge_selfcheck_combined"] = JudgeSelfCheckCombined
 orms["judge_selfcheck_quality"] = JudgeSelfCheckQuality
+orms["judge_selfcheck_margin"] = JudgeSelfCheckMargin

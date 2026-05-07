@@ -122,13 +122,13 @@ Do not commit `.env`, model weights, raw private data, or large generated output
 <claude-mem-context>
 # Memory Context
 
-# [CheckEval-guided-Fine-tuning] recent context, 2026-05-07 4:11pm GMT+2
+# [CheckEval-guided-Fine-tuning] recent context, 2026-05-07 7:09pm GMT+2
 
 Legend: 🎯session 🔴bugfix 🟣feature 🔄refactor ✅change 🔵discovery ⚖️decision 🚨security_alert 🔐security_note
 Format: ID TIME TYPE TITLE
 Fetch details: get_observations([IDs]) | Search: mem-search skill
 
-Stats: 50 obs (9,606t read) | 370,828t work | 97% savings
+Stats: 50 obs (9,294t read) | 370,588t work | 97% savings
 
 ### May 6, 2026
 S149 User corrected prior specification error, replacing specificity with diversity as the metric for checklist internal embedding deduplication; Claude outlined full implementation options for diversity calculation and requested user selection via 3-letter code (e.g., A 2 II) (May 6, 3:52 PM)
@@ -140,11 +140,6 @@ S154 Outline implementation plan for JudgeSelfCheckQuality reward plugin (May 6,
 S155 Add pre‑training reward validation step for JudgeSelfCheckQuality (May 6, 4:14 PM)
 S156 Design specification for checklist-quality proxy reward to replace outcome-only reward (May 6, 4:17 PM)
 S157 Diagnose why GRPO training failed and propose fixes (May 6, 4:21 PM)
-790 4:27p ⚖️ Adopt checklist-quality proxy reward for question generation
-791 4:34p 🔵 Extracted launcher environment lines from run_judge_grpo_swift.sh
-792 4:42p ⚖️ Initiate unit tests for new quality reward
-793 4:46p ✅ Added line‑number collection step to reward‑validation plan
-794 5:59p 🔵 Quality reward audit failed to meet parse_ok_rate threshold
 795 6:02p 🔵 Search for rollout generation scripts
 796 6:03p 🔵 User requested review of 2026-05-06-checklist-quality-proxy-reward.md plan
 797 6:11p 🔵 Self-Checklist model evaluation completed with performance metrics
@@ -192,14 +187,11 @@ S157 Diagnose why GRPO training failed and propose fixes (May 6, 4:21 PM)
 848 3:03p 🔵 Swift Training Progress and Resource Metrics
 849 3:47p 🔵 Understanding "分析训练" Request
 S167 Adjusting GRPO training configuration to address output length and reward issues (May 7, 3:54 PM)
-**Investigated**: Current GRPO setup shows negative winner mean (-1) and high clipped ratio (0.6875), indicating poor training dynamics. Evaluated checkpoint-50 performance on dev_600 split. Analyzed prompt structure causing excessive output length. Reviewed GRPO reward weighting strategy.
-
-**Learned**: Long self-checklist prompts force models toward maximum token limits (2048), creating reward function instability. GRPO optimization becomes ineffective when outputs are truncated. Format constraints require explicit structural guidance rather than length penalties.
-
-**Completed**: 1. Stopped current problematic GRPO run 2. Scheduled manual evaluation of checkpoint-50 3. Proposed prompt redesign for compact output format 4. Updated GRPO configuration parameters for winner-focused training
-
-**Next Steps**: 1. Implement revised prompt template with 6-10 concise questions and verdict-only format 2. Launch modified GRPO training with winner reward emphasis and format penalty 3. Monitor clipped_ratio and winner mean metrics for early stopping 4. Schedule periodic manual evaluations at checkpoints 25/50
-
+853 4:11p 🟣 Generated no-thinking GRPO judge dataset
+865 6:15p 🔵 User requested training curve analysis and next-step adjustment
+867 6:50p 🔵 User inquired about additional methods for distilling 27B model capabilities
+868 7:08p 🟣 Implemented GRPO Self‑Check Reward Plugin
+869 7:09p 🟣 Added JudgeSelfCheckMargin Reward Function
 
 Access 371k tokens of past work via get_observations([IDs]) or mem-search skill.
 </claude-mem-context>
