@@ -180,14 +180,14 @@ swift rlhf \
     --save_steps "${SAVE_STEPS}" \
     --save_total_limit "${SAVE_TOTAL_LIMIT}" \
     --logging_steps 1 \
-    --dataloader_num_workers 2 \
+    --dataloader_num_workers 4 \
     --num_generations "${NUM_GENERATIONS}" \
     --temperature "${TEMPERATURE}" \
     --beta "${BETA}" \
     --use_liger_kernel false \
     --attn_impl flash_attn \
-    --gradient_checkpointing true \
-    --optim paged_adamw_8bit \
+    --gradient_checkpointing false \
+    --optim adamw_torch_fused \
     --log_completions true \
     --report_to tensorboard wandb\
     --max_grad_norm 1.0 \
@@ -195,4 +195,4 @@ swift rlhf \
     --epsilon_high 0.28 \
     --scale_rewards none \
     --seed 42 \
-    --output_dir "${OUTPUT_DIR}"
+    --output_dir "${OUTPUT_DIR}"\
