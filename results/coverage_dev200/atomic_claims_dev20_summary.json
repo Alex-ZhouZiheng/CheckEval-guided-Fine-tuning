@@ -1,0 +1,24 @@
+{
+  "model": "deepseek-v4-flash",
+  "input_rationales": 60,
+  "instances": 20,
+  "claims": 155,
+  "errors": 0,
+  "claims_by_specificity": {
+    "specific": 85,
+    "medium": 53,
+    "vague": 17
+  },
+  "claims_by_aspect": {
+    "completeness": 46,
+    "correctness": 36,
+    "instruction_following": 23,
+    "clarity": 19,
+    "other": 15,
+    "format": 12,
+    "reasoning": 2,
+    "conciseness": 1,
+    "safety": 1
+  },
+  "output": "results/coverage_dev200/atomic_claims_dev20.parquet"
+}
