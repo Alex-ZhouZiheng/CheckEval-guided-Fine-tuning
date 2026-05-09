@@ -52,6 +52,10 @@ def main() -> None:
     parser.add_argument("--tie-delta", type=float, default=0.05)
     parser.add_argument("--skip-generator", action="store_true",
                         help="Reuse existing generated_checklists parquet")
+    parser.add_argument("--ab-aware", action="store_true",
+                        help="Generator sees context + response_a + response_b. "
+                             "For self-checklist comparison, set --generator-base "
+                             "and --judge-base both to Qwen3.5-4B.")
     parser.add_argument("--experiment-suffix",type=str,default=None)
     args = parser.parse_args()
 
@@ -59,6 +63,8 @@ def main() -> None:
     adapter_path = Path(args.generator_adapter).resolve() if args.generator_adapter else None
     model_tag = adapter_path.name if adapter_path else Path(args.generator_base).name
     gen_fname = f"{split_tag}_{model_tag}.parquet" if adapter_path else f"{split_tag}_base_{model_tag}.parquet"
+    if args.ab_aware:
+        gen_fname = gen_fname.replace(".parquet", "_abaware.parquet")
     gen_out = cfg.GENERATED_CHECKLIST_DIR / gen_fname
 
     if not args.generator_adapter:
@@ -86,6 +92,8 @@ def main() -> None:
             cmd += ["--subset", args.subset]
         if args.max_samples:
             cmd += ["--max-samples", str(args.max_samples)]
+        if args.ab_aware:
+            cmd += ["--ab-aware"]
         log.info("Running generator step:\n  %s", " ".join(cmd))
         subprocess.run(cmd, check=True)
 

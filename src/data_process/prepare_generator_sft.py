@@ -88,6 +88,51 @@ Rules:
 
 # Checklist"""
 
+# ── AB-aware generator variant (sees context + both responses) ──
+
+GENERATOR_SYSTEM_PROMPT_AB_AWARE = (
+    "You are a checklist writer for LLM response evaluation. Given a user "
+    "request and two candidate responses (A and B), produce a list of Yes/No "
+    "evaluation questions, grouped by quality dimension, that target the most "
+    "discriminative aspects between the two responses. Each question must be "
+    "phrased so that 'Yes' means a response meets the criterion. Output ONLY "
+    "the checklist in the required format."
+)
+
+GENERATOR_USER_TEMPLATE_AB_AWARE = """\
+Produce a Yes/No evaluation checklist for judging responses to the following request.
+You are shown two candidate responses (A and B); use them to identify the most
+discriminative criteria, but phrase questions to apply to any candidate response
+(do NOT name Response A or Response B in the questions).
+
+Group questions under these section headers (skip a section if it does not apply):
+{domain}
+
+Output format:
+### <domain>
+- <question>
+- <question>
+
+### <domain>
+- ...
+
+Rules:
+- Phrase each question so that "Yes" means the response is good on that criterion.
+- Do not reference Response A or Response B; questions must apply to any candidate.
+- Keep each question under ~40 words.
+- Output only the checklist, no commentary.
+
+# Conversation Context
+{context}
+
+# Response A
+{response_a}
+
+# Response B
+{response_b}
+
+# Checklist"""
+
 # ── Comparative generator variants ──
 
 GENERATOR_SYSTEM_PROMPT_COMPARATIVE = (
@@ -132,14 +177,34 @@ def _domain_block() -> str:
         lines.append(f"- {name}: {DOMAIN_DESCRIPTIONS[name]}")
     return "\n".join(lines)
 
-def build_generator_messages(row: dict | pd.Series, comparative: bool = False) -> list[dict[str, str]]:
-    """Chat-template messages consumed by the generator model at both train and eval."""
-    template = GENERATOR_USER_TEMPLATE_COMPARATIVE if comparative else GENERATOR_USER_TEMPLATE
-    system = GENERATOR_SYSTEM_PROMPT_COMPARATIVE if comparative else GENERATOR_SYSTEM_PROMPT
-    user = template.format(
-        context=row["context"],
-        domain=_domain_block(),
-    )
+def build_generator_messages(
+    row: dict | pd.Series,
+    comparative: bool = False,
+    ab_aware: bool = False,
+) -> list[dict[str, str]]:
+    """Chat-template messages consumed by the generator model at both train and eval.
+
+    ab_aware: if True, prompt includes response_a and response_b so generator
+    can target discriminative checklist questions. Mutually exclusive with
+    comparative.
+    """
+    if ab_aware and comparative:
+        raise ValueError("ab_aware and comparative are mutually exclusive")
+    if ab_aware:
+        system = GENERATOR_SYSTEM_PROMPT_AB_AWARE
+        user = GENERATOR_USER_TEMPLATE_AB_AWARE.format(
+            context=row["context"],
+            response_a=row["response_a"],
+            response_b=row["response_b"],
+            domain=_domain_block(),
+        )
+    else:
+        template = GENERATOR_USER_TEMPLATE_COMPARATIVE if comparative else GENERATOR_USER_TEMPLATE
+        system = GENERATOR_SYSTEM_PROMPT_COMPARATIVE if comparative else GENERATOR_SYSTEM_PROMPT
+        user = template.format(
+            context=row["context"],
+            domain=_domain_block(),
+        )
     return [
         {"role": "system", "content": system},
         {"role": "user", "content": user},

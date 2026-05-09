@@ -122,6 +122,9 @@ def main() -> None:
     parser.add_argument("--comparative", action="store_true",
                         help="Use comparative prompt template ('Which response better...') "
                              "instead of pointwise ('Does the response...').")
+    parser.add_argument("--ab-aware", action="store_true",
+                        help="Show context + response_a + response_b to generator so it can "
+                             "target discriminative criteria. Mutually exclusive with --comparative.")
     parser.add_argument("--batch-size", type=int, default=16)
     parser.add_argument("--max-new-tokens", type=int, default=1024)
     parser.add_argument("--max-samples", type=int, default=None)
@@ -156,6 +159,8 @@ def main() -> None:
     default_fname = f"{split_tag}_{model_tag}.parquet" if adapter_path else f"{split_tag}_base_{model_tag}.parquet"
     if args.comparative:
         default_fname = default_fname.replace(".parquet", "_comparative.parquet")
+    if args.ab_aware:
+        default_fname = default_fname.replace(".parquet", "_abaware.parquet")
     output_path = (
         Path(args.output_path)
         if args.output_path
@@ -183,7 +188,12 @@ def main() -> None:
         lora_int_id=1,
     )
 
-    all_messages = [build_generator_messages(r, comparative=args.comparative) for _, r in df.iterrows()]
+    if args.ab_aware and args.comparative:
+        raise SystemExit("--ab-aware and --comparative are mutually exclusive")
+    all_messages = [
+        build_generator_messages(r, comparative=args.comparative, ab_aware=args.ab_aware)
+        for _, r in df.iterrows()
+    ]
 
     t0 = time.time()
     raw_outputs = generate_batch(
