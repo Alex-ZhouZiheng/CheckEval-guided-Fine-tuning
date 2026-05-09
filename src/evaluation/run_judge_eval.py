@@ -27,6 +27,7 @@ import argparse
 import json
 import logging
 import os
+import re
 import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date
@@ -35,6 +36,7 @@ from pathlib import Path
 import pandas as pd
 from tqdm import tqdm
 import config as cfg
+from data_process.prepare_generator_sft import DOMAINS as _GEN_DOMAINS
 from data_process.prepare_judge_sft import build_pointwise_prompt
 from run_generator_infer import parse_generated_checklist
 from utils import (
@@ -63,6 +65,154 @@ def winner_from_signed_delta(delta: float, tie_delta: float) -> str:
     if delta < -tie_delta:
         return "A"
     return "Tie"
+
+
+# ── Comparative judge (A/B/Tie per criterion) ──
+
+COMPARATIVE_JUDGE_PROMPT = """\
+<Task Overview>
+You are evaluating two candidate responses (A and B) to a user request, using a
+pre-built comparative checklist. Your task is to:
+1. For each criterion in the checklist, decide which response is better (A, B, or Tie).
+2. Based on those item verdicts, output the final winner: A or B (you must commit
+   to one side; Tie is NOT allowed at the final step).
+
+<Instructions>
+1. Read the conversation history, both responses, and the checklist carefully.
+2. For each numbered criterion, answer A, B, or Tie.
+3. Based on the item verdicts, decide the final winner. Even when responses look
+   close, pick the side that is marginally better overall.
+4. Output strictly in the required format.
+
+<Answer Format>
+### Item Verdicts
+Q1: A
+Q2: Tie
+Q3: B
+...
+
+### Final
+Winner: A
+
+# Conversation History #
+{context}
+
+# Response A #
+{response_a}
+
+# Response B #
+{response_b}
+
+# Checklist #
+{checklist}
+
+# Your Evaluation #
+"""
+
+
+def _flatten_checklist(per_domain: dict[str, list[str]]) -> list[tuple[str, str]]:
+    """Flatten {domain: [q,...]} into ordered [(domain, question), ...] using
+    the canonical DOMAINS order from prepare_generator_sft."""
+    out: list[tuple[str, str]] = []
+    for dom in _GEN_DOMAINS:
+        for q in per_domain.get(dom, []):
+            out.append((dom, q))
+    # Append any non-canonical domains (shouldn't normally happen) at the end.
+    for dom, qs in per_domain.items():
+        if dom in _GEN_DOMAINS:
+            continue
+        for q in qs:
+            out.append((dom, q))
+    return out
+
+
+def _format_checklist_block(flat: list[tuple[str, str]]) -> str:
+    lines: list[str] = []
+    last_dom: str | None = None
+    qnum = 0
+    for dom, q in flat:
+        if dom != last_dom:
+            if last_dom is not None:
+                lines.append("")
+            lines.append(f"### {dom}")
+            last_dom = dom
+        qnum += 1
+        lines.append(f"Q{qnum}: {q}")
+    return "\n".join(lines)
+
+
+def build_comparative_prompt(
+    row: pd.Series,
+    per_domain: dict[str, list[str]],
+) -> tuple[str, int]:
+    flat = _flatten_checklist(per_domain)
+    n_q = len(flat)
+    if n_q == 0:
+        return "", 0
+    checklist_text = _format_checklist_block(flat)
+    prompt = COMPARATIVE_JUDGE_PROMPT.format(
+        context=row["context"],
+        response_a=row["response_a"],
+        response_b=row["response_b"],
+        checklist=checklist_text,
+    )
+    return prompt, n_q
+
+
+_ITEM_RE = re.compile(r"^\s*Q\s*(\d+)\s*[:\-]\s*(A|B|Tie)\b", re.IGNORECASE | re.MULTILINE)
+_FINAL_RE = re.compile(r"Winner:\s*(A|B|Tie)\s*$", re.IGNORECASE | re.MULTILINE)
+
+
+def parse_comparative_output(raw: str, expected_n: int) -> dict:
+    if not isinstance(raw, str):
+        raw = ""
+    items: dict[int, str] = {}
+    for m in _ITEM_RE.finditer(raw):
+        idx = int(m.group(1))
+        v = m.group(2).strip().capitalize()
+        if v.upper() == "TIE":
+            v = "Tie"
+        else:
+            v = v.upper()
+        if 1 <= idx <= expected_n and idx not in items:
+            items[idx] = v
+    final = None
+    fm = _FINAL_RE.search(raw)
+    if fm:
+        f = fm.group(1).strip()
+        if f.upper() == "TIE":
+            final = "Tie"
+        else:
+            final = f.upper()
+    n_a = sum(1 for v in items.values() if v == "A")
+    n_b = sum(1 for v in items.values() if v == "B")
+    n_tie = sum(1 for v in items.values() if v == "Tie")
+    n_parsed = len(items)
+    return {
+        "items": items,
+        "final": final,
+        "n_a": n_a,
+        "n_b": n_b,
+        "n_tie": n_tie,
+        "n_parsed": n_parsed,
+        "complete": n_parsed == expected_n,
+    }
+
+
+def winner_from_comparative(parsed: dict, tie_delta: float) -> tuple[str | None, float | None]:
+    """Prefer Final Winner when present; else aggregate item votes via margin."""
+    if parsed["final"] in {"A", "B"}:
+        n = parsed["n_parsed"] or 1
+        margin = (parsed["n_a"] - parsed["n_b"]) / n
+        return parsed["final"], margin
+    if parsed["n_parsed"] == 0:
+        return None, None
+    margin = (parsed["n_a"] - parsed["n_b"]) / parsed["n_parsed"]
+    if margin > tie_delta:
+        return "A", margin
+    if margin < -tie_delta:
+        return "B", margin
+    return "Tie", margin
 
 
 def _http_judge_generate(
@@ -159,6 +309,9 @@ def main() -> None:
     parser.add_argument("--backend", type=str, default=None,
                         choices=["llamacpp", "vllm"],
                         help="Inference backend; defaults to cfg.INFERENCE_BACKEND.")
+    parser.add_argument("--comparative", action="store_true",
+                        help="Use comparative A/B/Tie-per-criterion judge prompt instead of "
+                             "pointwise Yes/No. Pair with generator's --ab-aware/--comparative.")
     args = parser.parse_args()
 
     if args.judge_adapter:
@@ -180,7 +333,8 @@ def main() -> None:
 
     # Build per-sample prompts and remember expected_n per row.
     messages_a: list[list[dict]] = []
-    messages_b: list[list[dict]] = []
+    messages_b: list[list[dict]] = []  # unused in comparative mode
+    messages_cmp: list[list[dict]] = []
     expected_ns: list[int] = []
     keep_idx: list[int] = []
     for i, (_, row) in enumerate(df.iterrows()):
@@ -188,13 +342,20 @@ def main() -> None:
         if not per_domain:
             expected_ns.append(0)
             continue
-        prompt_a, n_q = build_pointwise_prompt(row, per_domain, "A")
-        prompt_b, _ = build_pointwise_prompt(row, per_domain, "B")
-        if n_q == 0:
-            expected_ns.append(0)
-            continue
-        messages_a.append([{"role": "user", "content": prompt_a}])
-        messages_b.append([{"role": "user", "content": prompt_b}])
+        if args.comparative:
+            prompt, n_q = build_comparative_prompt(row, per_domain)
+            if n_q == 0:
+                expected_ns.append(0)
+                continue
+            messages_cmp.append([{"role": "user", "content": prompt}])
+        else:
+            prompt_a, n_q = build_pointwise_prompt(row, per_domain, "A")
+            prompt_b, _ = build_pointwise_prompt(row, per_domain, "B")
+            if n_q == 0:
+                expected_ns.append(0)
+                continue
+            messages_a.append([{"role": "user", "content": prompt_a}])
+            messages_b.append([{"role": "user", "content": prompt_b}])
         expected_ns.append(n_q)
         keep_idx.append(i)
 
@@ -205,7 +366,7 @@ def main() -> None:
         raise SystemExit("No evaluable samples — regenerate checklists first.")
 
     judge_mode = os.environ.get("JUDGE_MODE", "").lower()
-    all_msgs = messages_a + messages_b
+    all_msgs = messages_cmp if args.comparative else (messages_a + messages_b)
 
     if judge_mode == "http":
         url = os.environ.get("JUDGE_URL", "http://127.0.0.1:8000/v1")
@@ -252,10 +413,13 @@ def main() -> None:
             lora_request=lora_request,
         )
         elapsed = time.time() - t0
-    n_eval = len(messages_a)
-    raw_a = raw[:n_eval]
-    raw_b = raw[n_eval:]
-    log.info("Judge inference: %.1fs (%.2fs/sample pair)", elapsed, elapsed / n_eval)
+    n_eval = len(messages_cmp) if args.comparative else len(messages_a)
+    if args.comparative:
+        raw_cmp = raw
+    else:
+        raw_a = raw[:n_eval]
+        raw_b = raw[n_eval:]
+    log.info("Judge inference: %.1fs (%.2fs/sample)", elapsed, elapsed / n_eval)
 
     # Parse and score.
     df_eval = df.iloc[keep_idx].reset_index(drop=True).copy()
@@ -265,43 +429,72 @@ def main() -> None:
     signed_deltas: list[float | None] = []
     margins: list[float | None] = []
     parse_ok: list[bool] = []
-    raw_a_keep: list[str] = []
-    raw_b_keep: list[str] = []
 
-    for ra, rb, n_q in tqdm(zip(raw_a, raw_b, kept_n), total=n_eval, desc="Judge parse"):
-        parsed_a = parse_checkeval_output(ra, expected_n=n_q)
-        parsed_b = parse_checkeval_output(rb, expected_n=n_q)
-        agg_a = aggregate_checklist_score(
-            parsed_a,
-            na_policy=NA_POLICY,
-            coverage_threshold=COVERAGE_THRESHOLD,
-            expected_n=n_q,
-        )
-        agg_b = aggregate_checklist_score(
-            parsed_b,
-            na_policy=NA_POLICY,
-            coverage_threshold=COVERAGE_THRESHOLD,
-            expected_n=n_q,
-        )
-        cmp = compare_checklists_pairwise(parsed_a, parsed_b,
-                                          expected_n=n_q,
-                                          tie_delta=args.tie_delta)
-        raw_a_keep.append(ra)
-        raw_b_keep.append(rb)
-        if agg_a is None or agg_b is None:
-            predicted_winners.append(None)
-            signed_deltas.append(None)
-            margins.append(None)
-            parse_ok.append(False)
-        else:
-            signed_delta = float(agg_b["score"]) - float(agg_a["score"])
-            predicted_winners.append(winner_from_signed_delta(signed_delta, args.tie_delta))
-            signed_deltas.append(signed_delta)
-            margins.append(cmp["margin"] if cmp is not None else None)
-            parse_ok.append(True)
+    if args.comparative:
+        raw_keep: list[str] = []
+        n_items_parsed: list[int] = []
+        n_a_list: list[int] = []
+        n_b_list: list[int] = []
+        n_tie_list: list[int] = []
+        final_used: list[bool] = []
+        for r, n_q in tqdm(zip(raw_cmp, kept_n), total=n_eval, desc="Judge parse"):
+            parsed = parse_comparative_output(r, expected_n=n_q)
+            winner, margin = winner_from_comparative(parsed, args.tie_delta)
+            raw_keep.append(r)
+            n_items_parsed.append(parsed["n_parsed"])
+            n_a_list.append(parsed["n_a"])
+            n_b_list.append(parsed["n_b"])
+            n_tie_list.append(parsed["n_tie"])
+            final_used.append(parsed["final"] in {"A", "B"})
+            predicted_winners.append(winner)
+            margins.append(margin)
+            signed_deltas.append(margin)
+            parse_ok.append(winner is not None)
 
-    df_eval["raw_output_a"] = raw_a_keep
-    df_eval["raw_output_b"] = raw_b_keep
+        df_eval["raw_output"] = raw_keep
+        df_eval["n_items_parsed"] = n_items_parsed
+        df_eval["n_a"] = n_a_list
+        df_eval["n_b"] = n_b_list
+        df_eval["n_tie"] = n_tie_list
+        df_eval["final_winner_used"] = final_used
+    else:
+        raw_a_keep: list[str] = []
+        raw_b_keep: list[str] = []
+        for ra, rb, n_q in tqdm(zip(raw_a, raw_b, kept_n), total=n_eval, desc="Judge parse"):
+            parsed_a = parse_checkeval_output(ra, expected_n=n_q)
+            parsed_b = parse_checkeval_output(rb, expected_n=n_q)
+            agg_a = aggregate_checklist_score(
+                parsed_a,
+                na_policy=NA_POLICY,
+                coverage_threshold=COVERAGE_THRESHOLD,
+                expected_n=n_q,
+            )
+            agg_b = aggregate_checklist_score(
+                parsed_b,
+                na_policy=NA_POLICY,
+                coverage_threshold=COVERAGE_THRESHOLD,
+                expected_n=n_q,
+            )
+            cmp = compare_checklists_pairwise(parsed_a, parsed_b,
+                                              expected_n=n_q,
+                                              tie_delta=args.tie_delta)
+            raw_a_keep.append(ra)
+            raw_b_keep.append(rb)
+            if agg_a is None or agg_b is None:
+                predicted_winners.append(None)
+                signed_deltas.append(None)
+                margins.append(None)
+                parse_ok.append(False)
+            else:
+                signed_delta = float(agg_b["score"]) - float(agg_a["score"])
+                predicted_winners.append(winner_from_signed_delta(signed_delta, args.tie_delta))
+                signed_deltas.append(signed_delta)
+                margins.append(cmp["margin"] if cmp is not None else None)
+                parse_ok.append(True)
+
+        df_eval["raw_output_a"] = raw_a_keep
+        df_eval["raw_output_b"] = raw_b_keep
+
     df_eval["expected_n"] = kept_n
     df_eval["signed_delta"] = signed_deltas
     df_eval["margin"] = margins
@@ -329,13 +522,15 @@ def main() -> None:
         metrics["judge_mode"] = "local"
     metrics["base_model"] = args.base_model
     metrics["generated_source"] = str(Path(args.generated))
+    metrics["judge_format"] = "comparative" if args.comparative else "pointwise"
 
     split_tag = args.subset or args.eval_split
     if judge_mode == "http":
         adapter_tag = f"httpjudge_{os.environ.get('JUDGE_MODEL', 'unknown')}"
     else:
         adapter_tag = adapter_path.name if adapter_path else "base"
-    exp_name = f"pipeline_judge_{adapter_tag}_{split_tag}_{args.experiment_suffix}"
+    fmt_tag = "cmp" if args.comparative else "ptw"
+    exp_name = f"pipeline_judge_{fmt_tag}_{adapter_tag}_{split_tag}_{args.experiment_suffix}"
     save_results(df_eval, metrics, exp_name)
     log.info("Done.")
 

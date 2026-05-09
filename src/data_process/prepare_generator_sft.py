@@ -91,36 +91,37 @@ Rules:
 # ── AB-aware generator variant (sees context + both responses) ──
 
 GENERATOR_SYSTEM_PROMPT_AB_AWARE = (
-    "You are a checklist writer for LLM response evaluation. Given a user "
-    "request and two candidate responses (A and B), produce a list of Yes/No "
-    "evaluation questions, grouped by quality dimension, that target the most "
-    "discriminative aspects between the two responses. Each question must be "
-    "phrased so that 'Yes' means a response meets the criterion. Output ONLY "
-    "the checklist in the required format."
+    "You are a checklist writer for pairwise LLM response evaluation. Given a "
+    "user request and two candidate responses (A and B), produce a list of "
+    "comparative evaluation criteria, grouped by quality dimension, that target "
+    "the most discriminative aspects between the two responses. Each criterion "
+    "must be answerable with A, B, or Tie at the item level. Output ONLY the "
+    "checklist in the required format."
 )
 
 GENERATOR_USER_TEMPLATE_AB_AWARE = """\
-Produce a Yes/No evaluation checklist for judging responses to the following request.
-You are shown two candidate responses (A and B); use them to identify the most
-discriminative criteria, but phrase questions to apply to any candidate response
-(do NOT name Response A or Response B in the questions).
+Produce a comparative evaluation checklist for judging the two responses below.
+For each criterion, a downstream judge will answer A, B, or Tie indicating which
+response is better on that criterion.
 
 Group questions under these section headers (skip a section if it does not apply):
 {domain}
 
 Output format:
 ### <domain>
-- <question>
-- <question>
+- <comparative question>
+- <comparative question>
 
 ### <domain>
 - ...
 
 Rules:
-- Phrase each question so that "Yes" means the response is good on that criterion.
-- Do not reference Response A or Response B; questions must apply to any candidate.
-- Keep each question under ~40 words.
-- Output only the checklist, no commentary.
+- Phrase each question as a comparison, e.g. "Which response better explains ...?"
+  or "Which response is more accurate about ...?" — answerable with A, B, or Tie.
+- Do not reference Response A or Response B by name in the question body; phrase
+  the question so it applies to any pair of candidates.
+- Use the two responses below to identify the most discriminative criteria.
+- Keep each question under ~40 words. Output only the checklist, no commentary.
 
 # Conversation Context
 {context}

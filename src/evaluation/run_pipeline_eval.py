@@ -108,6 +108,8 @@ def main() -> None:
     ]
     if args.experiment_suffix:
         cmd += ["--experiment-suffix", args.experiment_suffix]
+    if args.ab_aware:
+        cmd += ["--comparative"]
     if args.judge_adapter:
         cmd += ["--judge-adapter", args.judge_adapter]
     if args.subset:
