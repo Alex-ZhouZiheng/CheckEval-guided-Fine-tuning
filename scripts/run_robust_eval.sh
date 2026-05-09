@@ -16,6 +16,9 @@ ADAPTER_FT_VANILLA=/root/autodl-tmp/Thesis/results/checkpoints/judge_warmup_tier
 ADAPTER_SELFCHECK_265=/root/autodl-tmp/Thesis/checkpoints/judge_sft_swift_Qwen3.5-4B_train_debug_5k_selfcheck_clean_r16_lr2e-5/v0-20260506-200134/checkpoint-265
 
 SPLITS=(dev_600 dev_600_swap dev_600_verbose dev_600_format)
+if [[ -n "${ROBUST_SPLITS:-}" ]]; then
+  read -ra SPLITS <<< "$ROBUST_SPLITS"
+fi
 
 mkdir -p results/robustness logs/robust
 INDEX=results/robustness/preds_index.tsv
