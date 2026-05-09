@@ -1,0 +1,8 @@
+Method,Real acc,Valid acc,Parse,n_valid,n_total,path
+Vanilla judge,0.7157502329916123,0.7164179104477612,0.9990680335507922,1072,1073,results/vanilla_judge_test_unified_20260509_metrics.json
+Finetuned vanilla adapter,0.7260018639328985,0.726679104477612,0.9990680335507922,1072,1073,results/finetuned_vanilla_final_adapter_test_2026-05-09_metrics.json
+Finetuned CheckEval adapter,0.6728797763280522,0.7315096251266464,0.9981360671015843,987,1073,results/finetuned_checkeval_final_adapter_test_unified_20260509_2026-05-09_metrics.json
+Pipeline comparative checklist,0.6859,0.6859,1.0,1073,1073,results/comparative/gen_comparative_weighted_test_unified_20260509/metrics.json
+Selfchecklist checkpoint-200,0.6980428704566636,0.7875920084121977,0.8863000931966449,951,1073,results/selfchecklist_checkpoint-200_test_unified_20260509_ckpt200_metrics.json
+Selfchecklist checkpoint-265 clean data,0.6710158434296365,0.7659574468085106,0.8769804287045666,940,1073,results/selfchecklist_checkpoint-265_test_unified_20260509_ckpt265_clean_metrics.json
+Selfchecklist checkpoint-558 4B SFT,0.7138863000931966,0.7896907216494845,0.9049394221808015,970,1073,results/selfchecklist_checkpoint-558_test_unified_20260509_ckpt558_4b_sft_metrics.json
