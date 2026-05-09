@@ -1,0 +1,39 @@
+{
+  "judge_checklists_path": "results/coverage_dev200/judge_checklists.parquet",
+  "backup_path": "results/coverage_dev200/judge_checklists.before_base4b_static_selector.parquet",
+  "base4b_static_v4_predictions": "results/coverage_dev200/base4b_static_v4_raw/predictions.parquet",
+  "base4b_selector_k15_predictions": "results/coverage_dev200/base4b_selector_k15_raw/predictions.parquet",
+  "rows": 27292,
+  "instances": 200,
+  "rows_by_judge": {
+    "selfcheck_27b_teacher": 1682,
+    "selfcheck_4b_sft": 1602,
+    "static_v3": 11004,
+    "static_v4": 10004,
+    "static_v4_selector_k15": 3000
+  },
+  "missing_all_answers_by_judge": {
+    "selfcheck_27b_teacher": 7,
+    "static_v3": 400
+  },
+  "parse_ok_by_judge": {
+    "selfcheck_27b_teacher": {
+      "True": 1682
+    },
+    "selfcheck_4b_sft": {
+      "True": 1602
+    },
+    "static_v3": {
+      "True": 10851,
+      "False": 153
+    },
+    "static_v4": {
+      "True": 10004
+    },
+    "static_v4_selector_k15": {
+      "True": 2985,
+      "False": 15
+    }
+  },
+  "note": "static_v4 and static_v4_selector_k15 were regenerated with base models/Qwen3.5-4B via vLLM; per-question answers parsed from stage1_a/stage1_b raw outputs."
+}
