@@ -97,7 +97,7 @@ def main():
         "--split",
         type=str,
         default="test",
-        choices=["test", "dev","dev_600"],
+        help="Split name under data/splits/ (without .parquet).",
     )
     parser.add_argument(
         "--subset",
