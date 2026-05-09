@@ -64,6 +64,8 @@ def main() -> None:
     o = pd.read_parquet(args.orig_pred)
     q = pd.read_parquet(args.pert_pred)
     for df, name in [(o, "orig"), (q, "pert")]:
+        if "prompt_id" not in df.columns and "sample_id" in df.columns:
+            df.rename(columns={"sample_id": "prompt_id"}, inplace=True)
         for col in ("prompt_id", "winner", "predicted_winner"):
             if col not in df.columns:
                 raise SystemExit(f"{name} missing column: {col}")
