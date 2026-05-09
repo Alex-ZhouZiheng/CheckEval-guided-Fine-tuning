@@ -5,7 +5,7 @@
 # Outputs prediction-parquet path index to results/robustness/preds_index.tsv
 # Format: judge_tag<TAB>split<TAB>predictions.parquet<TAB>metrics.json
 
-set -euo pipefail
+set -uo pipefail
 cd /root/autodl-tmp/Thesis
 
 PY=.venvmerge/bin/python
@@ -50,9 +50,21 @@ run_ft_vanilla() {
   echo -e "ft_vanilla\t${split}\t${pred}\t${met}" >> "$INDEX"
 }
 
+prep_reasoning() {
+  local split=$1
+  local out="data/with_reason/${split}_reasoning.parquet"
+  if [[ -f "$out" ]]; then
+    echo "[reasoning] cached -> $out"
+    return 0
+  fi
+  stage "prepare_reasoning $split"
+  $PY src/data_process/prepare_data_reasoning.py --split "$split"
+}
+
 run_pipeline_cmp() {
   local split=$1
   local sfx="robust_${split}"
+  prep_reasoning "$split" || { echo "FAILED prep_reasoning $split"; return 1; }
   stage "pipeline_cmp $split"
   env CHECKEVAL_NA_POLICY=as_no \
   $PY src/evaluation/run_pipeline_eval.py \
@@ -79,11 +91,14 @@ run_selfcheck_265() {
   echo -e "selfcheck_265\t${split}\t${pred}\t${met}" >> "$INDEX"
 }
 
+SKIP_JUDGES=${SKIP_JUDGES:-}
+should_skip() { [[ ",${SKIP_JUDGES}," == *",$1,"* ]]; }
+
 for sp in "${SPLITS[@]}"; do
-  run_vanilla       "$sp" 2>&1 | tee -a "logs/robust/eval_${sp}.log"
-  run_ft_vanilla    "$sp" 2>&1 | tee -a "logs/robust/eval_${sp}.log"
-  run_pipeline_cmp  "$sp" 2>&1 | tee -a "logs/robust/eval_${sp}.log"
-  run_selfcheck_265 "$sp" 2>&1 | tee -a "logs/robust/eval_${sp}.log"
+  should_skip vanilla       || run_vanilla       "$sp" 2>&1 | tee -a "logs/robust/eval_${sp}.log" || echo "FAILED vanilla $sp"
+  should_skip ft_vanilla    || run_ft_vanilla    "$sp" 2>&1 | tee -a "logs/robust/eval_${sp}.log" || echo "FAILED ft_vanilla $sp"
+  should_skip pipeline_cmp  || run_pipeline_cmp  "$sp" 2>&1 | tee -a "logs/robust/eval_${sp}.log" || echo "FAILED pipeline_cmp $sp"
+  should_skip selfcheck_265 || run_selfcheck_265 "$sp" 2>&1 | tee -a "logs/robust/eval_${sp}.log" || echo "FAILED selfcheck_265 $sp"
 done
 
 echo "[done] $(date -Is)"
