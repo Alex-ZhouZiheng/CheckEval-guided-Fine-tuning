@@ -1,0 +1,33 @@
+{
+  "mode": "verbose",
+  "orig_pred_file": "results/selfchecklist_checkpoint-265_dev_600_robust_dev_600_ckpt265_clean_predictions.parquet",
+  "pert_pred_file": "results/selfchecklist_checkpoint-265_dev_600_verbose_robust_dev_600_verbose_ckpt265_clean_predictions.parquet",
+  "n_orig": 600,
+  "n_pert": 600,
+  "n_overlap": 608,
+  "acc_orig": 0.7384868421052632,
+  "acc_pert": 0.8223684210526315,
+  "acc_drop": -0.08388157894736836,
+  "invariance_rate": 0.7861842105263158,
+  "flip_rate": 0.21381578947368418,
+  "per_domain": {
+    "code": {
+      "n": 169,
+      "acc_orig": 0.7869822485207101,
+      "acc_pert": 0.8520710059171598,
+      "invariance_rate": 0.8461538461538461
+    },
+    "general": {
+      "n": 345,
+      "acc_orig": 0.7159420289855073,
+      "acc_pert": 0.808695652173913,
+      "invariance_rate": 0.7565217391304347
+    },
+    "stem": {
+      "n": 94,
+      "acc_orig": 0.7340425531914894,
+      "acc_pert": 0.8191489361702128,
+      "invariance_rate": 0.7872340425531915
+    }
+  }
+}

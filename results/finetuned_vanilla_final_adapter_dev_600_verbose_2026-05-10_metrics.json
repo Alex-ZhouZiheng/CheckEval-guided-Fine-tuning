@@ -1,0 +1,70 @@
+{
+  "n_total": 600,
+  "n_valid": 600,
+  "n_tie": 0,
+  "n_unparseable": 0,
+  "parse_rate": 1.0,
+  "accuracy": 0.7816666666666666,
+  "valid_accuracy": 0.7816666666666666,
+  "macro_f1": 0.7798165137614679,
+  "classification_report": {
+    "A": {
+      "precision": 0.7401129943502824,
+      "recall": 0.8704318936877077,
+      "f1-score": 0.8,
+      "support": 301.0
+    },
+    "B": {
+      "precision": 0.8414634146341463,
+      "recall": 0.6923076923076923,
+      "f1-score": 0.7596330275229358,
+      "support": 299.0
+    },
+    "accuracy": 0.7816666666666666,
+    "macro avg": {
+      "precision": 0.7907882044922143,
+      "recall": 0.7813697929976999,
+      "f1-score": 0.7798165137614679,
+      "support": 600.0
+    },
+    "weighted avg": {
+      "precision": 0.7906192871250746,
+      "recall": 0.7816666666666666,
+      "f1-score": 0.7798837920489297,
+      "support": 600.0
+    }
+  },
+  "pred_distribution": {
+    "A": 354,
+    "B": 246
+  },
+  "position_bias_A": 0.59,
+  "per_domain": {
+    "code": {
+      "n": 161,
+      "n_valid": 161,
+      "accuracy": 0.782608695652174,
+      "valid_accuracy": 0.782608695652174,
+      "macro_f1": 0.76978387874331
+    },
+    "general": {
+      "n": 345,
+      "n_valid": 345,
+      "accuracy": 0.7768115942028986,
+      "valid_accuracy": 0.7768115942028986,
+      "macro_f1": 0.776059009483667
+    },
+    "stem": {
+      "n": 94,
+      "n_valid": 94,
+      "accuracy": 0.7978723404255319,
+      "valid_accuracy": 0.7978723404255319,
+      "macro_f1": 0.7976662512744987
+    }
+  },
+  "inference_time_s": 137.82085180282593,
+  "samples_per_second": 4.353477664311587,
+  "adapter_path": "/root/autodl-tmp/Thesis/results/checkpoints/judge_warmup_tier_5k_r16_lr5e-06/final_adapter",
+  "eval_mode": "vanilla",
+  "model_id": "/root/autodl-tmp/Thesis/models/Qwen3.5-9B"
+}

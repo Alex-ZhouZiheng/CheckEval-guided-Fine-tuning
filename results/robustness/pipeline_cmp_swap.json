@@ -1,0 +1,31 @@
+{
+  "mode": "swap",
+  "n_overlap": 608,
+  "acc_orig": 0.7335526315789473,
+  "acc_pert": 0.7236842105263158,
+  "acc_drop": 0.009868421052631526,
+  "invariance_rate": 0.7861842105263158,
+  "flip_rate": 0.21381578947368418,
+  "orig_pred_file": "pipeline_cmp dev_600",
+  "pert_pred_file": "dev_600_swap",
+  "per_domain": {
+    "code": {
+      "n": 169,
+      "acc_orig": 0.757396449704142,
+      "acc_pert": 0.7869822485207101,
+      "invariance_rate": 0.8165680473372781
+    },
+    "general": {
+      "n": 345,
+      "acc_orig": 0.6985507246376812,
+      "acc_pert": 0.6985507246376812,
+      "invariance_rate": 0.7681159420289855
+    },
+    "stem": {
+      "n": 94,
+      "acc_orig": 0.8191489361702128,
+      "acc_pert": 0.7021276595744681,
+      "invariance_rate": 0.7978723404255319
+    }
+  }
+}

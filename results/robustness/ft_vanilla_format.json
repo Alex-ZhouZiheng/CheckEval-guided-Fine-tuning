@@ -1,0 +1,33 @@
+{
+  "mode": "format",
+  "orig_pred_file": "results/finetuned_vanilla_final_adapter_dev_600_2026-05-10_predictions.parquet",
+  "pert_pred_file": "results/finetuned_vanilla_final_adapter_dev_600_format_2026-05-10_predictions.parquet",
+  "n_orig": 600,
+  "n_pert": 593,
+  "n_overlap": 601,
+  "acc_orig": 0.740432612312812,
+  "acc_pert": 0.7587354409317804,
+  "acc_drop": -0.01830282861896837,
+  "invariance_rate": 0.831946755407654,
+  "flip_rate": 0.16805324459234605,
+  "per_domain": {
+    "code": {
+      "n": 167,
+      "acc_orig": 0.7784431137724551,
+      "acc_pert": 0.8143712574850299,
+      "invariance_rate": 0.844311377245509
+    },
+    "general": {
+      "n": 341,
+      "acc_orig": 0.718475073313783,
+      "acc_pert": 0.7302052785923754,
+      "invariance_rate": 0.8299120234604106
+    },
+    "stem": {
+      "n": 93,
+      "acc_orig": 0.7526881720430108,
+      "acc_pert": 0.7634408602150538,
+      "invariance_rate": 0.8172043010752689
+    }
+  }
+}

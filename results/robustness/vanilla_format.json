@@ -1,0 +1,33 @@
+{
+  "mode": "format",
+  "orig_pred_file": "results/vanilla_judge_dev_600_robust_dev_600_predictions.parquet",
+  "pert_pred_file": "results/vanilla_judge_dev_600_format_robust_dev_600_format_predictions.parquet",
+  "n_orig": 600,
+  "n_pert": 593,
+  "n_overlap": 601,
+  "acc_orig": 0.7454242928452579,
+  "acc_pert": 0.7537437603993344,
+  "acc_drop": -0.008319467554076532,
+  "invariance_rate": 0.8386023294509152,
+  "flip_rate": 0.16139767054908483,
+  "per_domain": {
+    "code": {
+      "n": 167,
+      "acc_orig": 0.8083832335329342,
+      "acc_pert": 0.8083832335329342,
+      "invariance_rate": 0.8682634730538922
+    },
+    "general": {
+      "n": 341,
+      "acc_orig": 0.7126099706744868,
+      "acc_pert": 0.7214076246334311,
+      "invariance_rate": 0.8269794721407625
+    },
+    "stem": {
+      "n": 93,
+      "acc_orig": 0.7526881720430108,
+      "acc_pert": 0.7741935483870968,
+      "invariance_rate": 0.8279569892473119
+    }
+  }
+}

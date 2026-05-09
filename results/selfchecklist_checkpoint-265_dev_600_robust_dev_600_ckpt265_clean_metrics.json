@@ -1,0 +1,77 @@
+{
+  "n_total": 600,
+  "n_valid": 598,
+  "n_tie": 0,
+  "n_unparseable": 2,
+  "parse_rate": 0.9966666666666667,
+  "accuracy": 0.7383333333333333,
+  "valid_accuracy": 0.7408026755852842,
+  "macro_f1": 0.7403488720625022,
+  "classification_report": {
+    "A": {
+      "precision": 0.7222222222222222,
+      "recall": 0.782608695652174,
+      "f1-score": 0.7512038523274478,
+      "support": 299.0
+    },
+    "B": {
+      "precision": 0.7627737226277372,
+      "recall": 0.6989966555183946,
+      "f1-score": 0.7294938917975567,
+      "support": 299.0
+    },
+    "accuracy": 0.7408026755852842,
+    "macro avg": {
+      "precision": 0.7424979724249797,
+      "recall": 0.7408026755852843,
+      "f1-score": 0.7403488720625022,
+      "support": 598.0
+    },
+    "weighted avg": {
+      "precision": 0.7424979724249796,
+      "recall": 0.7408026755852842,
+      "f1-score": 0.7403488720625023,
+      "support": 598.0
+    }
+  },
+  "pred_distribution": {
+    "B": 274,
+    "A": 324,
+    "null": 2
+  },
+  "position_bias_A": 0.5418060200668896,
+  "per_domain": {
+    "code": {
+      "n": 161,
+      "n_valid": 159,
+      "accuracy": 0.7888198757763976,
+      "valid_accuracy": 0.7987421383647799,
+      "macro_f1": 0.7983512999365885
+    },
+    "general": {
+      "n": 345,
+      "n_valid": 345,
+      "accuracy": 0.7159420289855073,
+      "valid_accuracy": 0.7159420289855073,
+      "macro_f1": 0.7144425675675676
+    },
+    "stem": {
+      "n": 94,
+      "n_valid": 94,
+      "accuracy": 0.7340425531914894,
+      "valid_accuracy": 0.7340425531914894,
+      "macro_f1": 0.732559462842836
+    }
+  },
+  "inference_time_s": 414.41561794281006,
+  "n_samples_total": 600,
+  "n_samples_evaluable": 600,
+  "tie_rate": 0.0,
+  "tie_delta": 0.0,
+  "avg_checklist_length": 8.526678141135973,
+  "item_tie_rate": 0.18337636259323006,
+  "trace_parse_rate": 0.9683333333333334,
+  "judge_adapter": "/root/autodl-tmp/Thesis/checkpoints/judge_sft_swift_Qwen3.5-4B_train_debug_5k_selfcheck_clean_r16_lr2e-5/v0-20260506-200134/checkpoint-265",
+  "judge_mode": "local",
+  "base_model": "/root/autodl-tmp/Thesis/models/Qwen3.5-4B"
+}

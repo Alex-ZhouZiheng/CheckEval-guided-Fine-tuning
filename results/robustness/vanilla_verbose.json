@@ -1,0 +1,33 @@
+{
+  "mode": "verbose",
+  "orig_pred_file": "results/vanilla_judge_dev_600_robust_dev_600_predictions.parquet",
+  "pert_pred_file": "results/vanilla_judge_dev_600_verbose_robust_dev_600_verbose_predictions.parquet",
+  "n_orig": 600,
+  "n_pert": 600,
+  "n_overlap": 608,
+  "acc_orig": 0.7483552631578947,
+  "acc_pert": 0.7828947368421053,
+  "acc_drop": -0.03453947368421062,
+  "invariance_rate": 0.8108552631578947,
+  "flip_rate": 0.1891447368421053,
+  "per_domain": {
+    "code": {
+      "n": 169,
+      "acc_orig": 0.8106508875739645,
+      "acc_pert": 0.8402366863905325,
+      "invariance_rate": 0.8520710059171598
+    },
+    "general": {
+      "n": 345,
+      "acc_orig": 0.7159420289855073,
+      "acc_pert": 0.7507246376811594,
+      "invariance_rate": 0.7913043478260869
+    },
+    "stem": {
+      "n": 94,
+      "acc_orig": 0.7553191489361702,
+      "acc_pert": 0.7978723404255319,
+      "invariance_rate": 0.8085106382978723
+    }
+  }
+}

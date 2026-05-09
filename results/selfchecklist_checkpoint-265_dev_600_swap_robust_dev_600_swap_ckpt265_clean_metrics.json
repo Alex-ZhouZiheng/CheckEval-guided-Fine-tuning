@@ -1,0 +1,77 @@
+{
+  "n_total": 600,
+  "n_valid": 594,
+  "n_tie": 0,
+  "n_unparseable": 6,
+  "parse_rate": 0.99,
+  "accuracy": 0.74,
+  "valid_accuracy": 0.7474747474747475,
+  "macro_f1": 0.7463244086597046,
+  "classification_report": {
+    "A": {
+      "precision": 0.7138643067846607,
+      "recall": 0.8203389830508474,
+      "f1-score": 0.7634069400630915,
+      "support": 295.0
+    },
+    "B": {
+      "precision": 0.792156862745098,
+      "recall": 0.6755852842809364,
+      "f1-score": 0.7292418772563177,
+      "support": 299.0
+    },
+    "accuracy": 0.7474747474747475,
+    "macro avg": {
+      "precision": 0.7530105847648794,
+      "recall": 0.7479621336658919,
+      "f1-score": 0.7463244086597046,
+      "support": 594.0
+    },
+    "weighted avg": {
+      "precision": 0.7532741960644095,
+      "recall": 0.7474747474747475,
+      "f1-score": 0.7462093747782004,
+      "support": 594.0
+    }
+  },
+  "pred_distribution": {
+    "A": 339,
+    "B": 255,
+    "null": 6
+  },
+  "position_bias_A": 0.5707070707070707,
+  "per_domain": {
+    "code": {
+      "n": 161,
+      "n_valid": 157,
+      "accuracy": 0.8012422360248447,
+      "valid_accuracy": 0.821656050955414,
+      "macro_f1": 0.8216488153197015
+    },
+    "general": {
+      "n": 345,
+      "n_valid": 343,
+      "accuracy": 0.7188405797101449,
+      "valid_accuracy": 0.7230320699708455,
+      "macro_f1": 0.720896966997576
+    },
+    "stem": {
+      "n": 94,
+      "n_valid": 94,
+      "accuracy": 0.7127659574468085,
+      "valid_accuracy": 0.7127659574468085,
+      "macro_f1": 0.7087779690189329
+    }
+  },
+  "inference_time_s": 414.62396454811096,
+  "n_samples_total": 600,
+  "n_samples_evaluable": 600,
+  "tie_rate": 0.0,
+  "tie_delta": 0.0,
+  "avg_checklist_length": 8.499127399650959,
+  "item_tie_rate": 0.18731820826061663,
+  "trace_parse_rate": 0.955,
+  "judge_adapter": "/root/autodl-tmp/Thesis/checkpoints/judge_sft_swift_Qwen3.5-4B_train_debug_5k_selfcheck_clean_r16_lr2e-5/v0-20260506-200134/checkpoint-265",
+  "judge_mode": "local",
+  "base_model": "/root/autodl-tmp/Thesis/models/Qwen3.5-4B"
+}
