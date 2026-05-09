@@ -1,0 +1,87 @@
+{
+  "dev200_path": "results/coverage_dev200/dev200_instances.parquet",
+  "atomic_dev20_input_path": "results/coverage_dev200/atomic_claims_dev20_input.parquet",
+  "judge_checklists_path": "results/coverage_dev200/judge_checklists.parquet",
+  "domain_counts": {
+    "code": 67,
+    "general": 66,
+    "stem": 67
+  },
+  "gold_counts_by_domain": {
+    "code": {
+      "A": 40,
+      "B": 27
+    },
+    "general": {
+      "B": 33,
+      "A": 33
+    },
+    "stem": {
+      "A": 35,
+      "B": 32
+    }
+  },
+  "direct_correct_counts_by_domain": {
+    "code": {
+      "true": 36,
+      "false": 31
+    },
+    "general": {
+      "true": 33,
+      "false": 33
+    },
+    "stem": {
+      "true": 34,
+      "false": 33
+    }
+  },
+  "selfcheck_correct_counts_by_domain": {
+    "code": {
+      "true": 41,
+      "false": 26
+    },
+    "general": {
+      "false": 34,
+      "true": 32
+    },
+    "stem": {
+      "true": 45,
+      "false": 22
+    }
+  },
+  "selector_tie_counts_by_domain": {
+    "code": {
+      "false": 39,
+      "true": 28
+    },
+    "general": {
+      "true": 34,
+      "false": 32
+    },
+    "stem": {
+      "false": 37,
+      "true": 30
+    }
+  },
+  "human_reasonings_len_counts": {
+    "1": 3,
+    "2": 6,
+    "3": 191
+  },
+  "atomic_dev20_instances": 20,
+  "atomic_dev20_rationales": 60,
+  "judge_checklists_rows_by_judge": {
+    "selfcheck_27b_teacher": 1682,
+    "selfcheck_4b_sft": 1602,
+    "static_v3": 11004,
+    "static_v4": 10004,
+    "static_v4_selector_k15": 3000
+  },
+  "answer_missing_rows_by_judge": {
+    "selfcheck_27b_teacher": 7,
+    "static_v3": 400,
+    "static_v4": 10004,
+    "static_v4_selector_k15": 3000
+  },
+  "note": "static_v4 and static_v4_selector_k15 qids/final_pred came from existing dynamic_dev_600 predictions, which did not store raw per-question answers."
+}

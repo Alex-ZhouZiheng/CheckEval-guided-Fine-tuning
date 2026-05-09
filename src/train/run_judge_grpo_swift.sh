@@ -44,7 +44,7 @@ PLUGIN_PATH="${PROJECT_ROOT}/src/train/plugin/judge_selfcheck_reward.py"
 EVAL_PLUGIN_PATH="${PROJECT_ROOT}/src/train/plugin/judge_selfcheck_eval_callback.py"
 
 QUANT_BITS="${QUANT_BITS:-0}"
-LR="${LR:-5e-6}"
+LR="${LR:-1e-5}"
 EPOCHS="${EPOCHS:-1}"
 BATCH_SIZE="${BATCH_SIZE:-1}"
 GRAD_ACCUM="${GRAD_ACCUM:-8}"
@@ -71,7 +71,7 @@ EVAL_MAX_SAMPLES="${EVAL_MAX_SAMPLES:-200}"
 EVAL_BATCH_SIZE="${EVAL_BATCH_SIZE:-1}"
 EVAL_MAX_NEW_TOKENS="${EVAL_MAX_NEW_TOKENS:-4048}"
 EVAL_TEMPERATURE="${EVAL_TEMPERATURE:-0.0}"
-EVAL_ENABLE_THINKING="${EVAL_ENABLE_THINKING:-true}"
+EVAL_ENABLE_THINKING="${EVAL_ENABLE_THINKING:-${ENABLE_THINKING}}"
 EVAL_BEFORE_TRAIN="${EVAL_BEFORE_TRAIN:-false}"
 EVAL_LABEL_PREFIX="${EVAL_LABEL_PREFIX:-swift_grpo}"
 
@@ -87,8 +87,10 @@ export SELFCHECK_EVAL_BEFORE_TRAIN="${EVAL_BEFORE_TRAIN}"
 export SELFCHECK_EVAL_LABEL_PREFIX="${EVAL_LABEL_PREFIX}"
 
 EXTERNAL_PLUGINS=("${PLUGIN_PATH}")
+EVAL_CALLBACK_FLAGS=()
 if [[ "${EVAL_STEPS}" != "0" || "${EVAL_BEFORE_TRAIN}" == "true" ]]; then
   EXTERNAL_PLUGINS+=("${EVAL_PLUGIN_PATH}")
+  EVAL_CALLBACK_FLAGS=(--callbacks selfcheck_eval)
 fi
 
 # vLLM colocate rollout (frees memory during gradient step via sleep_level).
@@ -97,8 +99,12 @@ VLLM_MEM="${VLLM_MEM:-0.35}"
 VLLM_MAX_LEN="${VLLM_MAX_LEN:-${MAX_LEN}}"
 
 [[ -f "${DATASET_PATH}" ]] || {
+  PREPARE_THINKING_FLAG="--enable-thinking"
+  if [[ "${ENABLE_THINKING}" != "true" ]]; then
+    PREPARE_THINKING_FLAG="--no-thinking"
+  fi
   echo "[grpo-judge] dataset not found: ${DATASET_PATH}" >&2
-  echo "  build it: python -m src.data_process.prepare_judge_grpo --tier ${TIER}" >&2
+  echo "  build it: python -m src.data_process.prepare_judge_grpo --tier ${TIER} ${PREPARE_THINKING_FLAG}" >&2
   exit 1
 }
 
@@ -153,6 +159,7 @@ swift rlhf \
     --external_plugins "${EXTERNAL_PLUGINS[@]}" \
     --reward_funcs ${REWARD_FUNCS} \
     --reward_weights ${REWARD_WEIGHTS} \
+    "${EVAL_CALLBACK_FLAGS[@]}" \
     "${VLLM_FLAGS[@]}" \
     --tuner_type lora \
     --lora_rank "${LORA_RANK}" \
@@ -180,15 +187,16 @@ swift rlhf \
     --num_generations "${NUM_GENERATIONS}" \
     --temperature "${TEMPERATURE}" \
     --beta "${BETA}" \
-    --use_liger_kernel false \
+    --use_liger_kernel true \
     --attn_impl flash_attn \
     --gradient_checkpointing true \
-    --optim paged_adamw_8bit \
+    --optim adamw_torch_fused \
     --log_completions true \
-    --report_to tensorboard \
+    --report_to tensorboard wandb\
     --max_grad_norm 1.0 \
     --epsilon 0.2 \
     --epsilon_high 0.28 \
     --scale_rewards none \
     --seed 42 \
-    --output_dir "${OUTPUT_DIR}"
+    --output_dir "${OUTPUT_DIR}"\
+    --template qwen3

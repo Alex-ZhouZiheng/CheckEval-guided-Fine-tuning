@@ -9,11 +9,14 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src", "data_pr
 
 from data_process.prepare_self_checklist_sft import parse_self_checklist_trace
 from train.plugin.judge_selfcheck_reward import (
+    JudgeSelfCheckMargin,
     JudgeSelfCheckQuality,
     JudgeSelfCheckWinner,
     _DiversityScorer,
+    _dominance_penalty,
     _discriminative_score,
     _diversity_score,
+    _item_margin_score,
     _parse_ok_score,
     _winner_score,
     orms,
@@ -235,7 +238,7 @@ def test_winner_orm_class_uses_helper_and_matches():
         completions=[SAMPLE_GOOD_COMPLETION, SAMPLE_ALL_TIE, SAMPLE_PARSE_FAIL],
         winner=["B", "A", "A"],
     )
-    assert rewards == [1.0, -1.0, -0.5]
+    assert rewards == [1.0, -1.0, -1.0]
 
 
 def test_diversity_identical_questions_returns_zero():
@@ -340,3 +343,48 @@ def test_quality_requires_winner_column():
 def test_quality_registered_in_orms():
     assert "judge_selfcheck_quality" in orms
     assert orms["judge_selfcheck_quality"] is JudgeSelfCheckQuality
+
+
+def test_item_margin_score_supports_gold_direction():
+    parsed = parse_self_checklist_trace(SAMPLE_GOOD_COMPLETION)
+    assert _item_margin_score(parsed, "B") == pytest.approx(1.0 / 6.0)
+    assert _item_margin_score(parsed, "A") == pytest.approx(-1.0 / 6.0)
+
+
+def test_dominance_penalty_flags_all_same_side_verdicts():
+    parsed = parse_self_checklist_trace(SAMPLE_REPEATED_QUESTIONS)
+    assert _dominance_penalty(parsed, 0.90, -0.10) == pytest.approx(-0.10)
+
+
+def test_dominance_penalty_allows_mixed_verdicts():
+    parsed = parse_self_checklist_trace(SAMPLE_GOOD_COMPLETION)
+    assert _dominance_penalty(parsed, 0.90, -0.10) == pytest.approx(0.0)
+
+
+def test_margin_reward_correct_mixed_verdicts():
+    fn = JudgeSelfCheckMargin()
+    r = fn(completions=[SAMPLE_GOOD_COMPLETION], winner=["B"])[0]
+    assert r == pytest.approx(0.833333, abs=1e-6)
+
+
+def test_margin_reward_penalizes_wrong_all_same_side():
+    fn = JudgeSelfCheckMargin()
+    r = fn(completions=[SAMPLE_DISTINCT_QUESTIONS], winner=["B"])[0]
+    assert r == pytest.approx(-0.90, abs=1e-6)
+
+
+def test_margin_reward_correct_all_same_side_still_pays_penalty():
+    fn = JudgeSelfCheckMargin()
+    r = fn(completions=[SAMPLE_REPEATED_QUESTIONS], winner=["A"])[0]
+    assert r == pytest.approx(0.90, abs=1e-6)
+
+
+def test_margin_reward_parse_fail_uses_winner_component_only():
+    fn = JudgeSelfCheckMargin()
+    r = fn(completions=[SAMPLE_PARSE_FAIL], winner=["A"])[0]
+    assert r == pytest.approx(-0.70, abs=1e-6)
+
+
+def test_margin_registered_in_orms():
+    assert "judge_selfcheck_margin" in orms
+    assert orms["judge_selfcheck_margin"] is JudgeSelfCheckMargin

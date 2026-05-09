@@ -1455,10 +1455,15 @@ def compute_metrics(
 
     if not valid:
         return {"error": "no valid predictions", "n_total": n_total,
-                "n_tie": n_tie, "n_unparseable": n_unparseable}
+                "n_tie": n_tie, "n_unparseable": n_unparseable,
+                "accuracy": 0.0, "valid_accuracy": 0.0}
 
     true_v, pred_v, dom_v = zip(*valid)
     ab_labels = ["A", "B"]
+
+    n_correct = sum(1 for t, p in zip(true_v, pred_v) if t == p)
+    real_accuracy = n_correct / n_total
+    valid_accuracy = n_correct / len(valid)
 
     metrics: dict[str, Any] = {
         "n_total": n_total,
@@ -1466,7 +1471,10 @@ def compute_metrics(
         "n_tie": n_tie,
         "n_unparseable": n_unparseable,
         "parse_rate": len(valid) / n_total,
-        "accuracy": accuracy_score(true_v, pred_v),
+        # Primary: real accuracy — Tie + unparseable counted as wrong.
+        "accuracy": real_accuracy,
+        # Secondary diagnostic: accuracy on parsed A/B subset only.
+        "valid_accuracy": valid_accuracy,
         "macro_f1": f1_score(true_v, pred_v, labels=ab_labels, average="macro", zero_division=0),
         "classification_report": classification_report(
             true_v, pred_v, labels=ab_labels, zero_division=0, output_dict=True
@@ -1502,12 +1510,18 @@ def compute_metrics(
 
     if domains is not None:
         domain_metrics = {}
+        domain_total = Counter(domains_list)
         for domain_name in sorted(set(dom_v)):
             d_true = [t for t, d in zip(true_v, dom_v) if d == domain_name]
             d_pred = [p for p, d in zip(pred_v, dom_v) if d == domain_name]
+            d_valid = len(d_true)
+            d_n_total = domain_total.get(domain_name, d_valid)
+            d_correct = sum(1 for t, p in zip(d_true, d_pred) if t == p)
             domain_metrics[domain_name] = {
-                "n": len(d_true),
-                "accuracy": accuracy_score(d_true, d_pred),
+                "n": d_n_total,
+                "n_valid": d_valid,
+                "accuracy": d_correct / d_n_total if d_n_total else 0.0,
+                "valid_accuracy": d_correct / d_valid if d_valid else 0.0,
                 "macro_f1": f1_score(d_true, d_pred, average="macro"),
             }
         metrics["per_domain"] = domain_metrics
@@ -1538,13 +1552,19 @@ def save_results(
         console.print(metrics)
         return
 
-    console.print(f"  Accuracy:     {metrics['accuracy']:.4f}")
-    console.print(f"  Macro-F1:     {metrics['macro_f1']:.4f}")
-    console.print(f"  Parse rate:   {metrics['parse_rate']:.4f}")
-    console.print(f"  Pos bias (A): {metrics['position_bias_A']:.4f}")
+    console.print(f"  Accuracy (real):  {metrics['accuracy']:.4f}  "
+                  f"[Tie+unparse=wrong, n={metrics['n_total']}]")
+    if "valid_accuracy" in metrics:
+        console.print(f"  Valid acc (diag): {metrics['valid_accuracy']:.4f}  "
+                      f"[A/B-only, n_valid={metrics['n_valid']}]")
+    console.print(f"  Macro-F1:         {metrics['macro_f1']:.4f}")
+    console.print(f"  Parse rate:       {metrics['parse_rate']:.4f}")
+    console.print(f"  Pos bias (A):     {metrics['position_bias_A']:.4f}")
     if "per_domain" in metrics:
         for domain_name, dm in metrics["per_domain"].items():
+            valid_str = (f"  valid={dm['valid_accuracy']:.4f}"
+                         if "valid_accuracy" in dm else "")
             console.print(
-                f"  [{domain_name}] acc={dm['accuracy']:.4f}  "
+                f"  [{domain_name}] acc={dm['accuracy']:.4f}{valid_str}  "
                 f"f1={dm['macro_f1']:.4f}  n={dm['n']}"
             )

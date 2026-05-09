@@ -64,15 +64,15 @@ SELF_CHECKLIST_EVAL_PROMPT = """\
 You will evaluate two candidate responses to a user request. Your task is to:
 1. Generate a checklist of specific quality criteria for comparing these two responses.
 2. For each criterion, decide which response is better (A, B, or Tie).
-3. Based on your evaluation, output the final winner.
+3. Based on your evaluation, output the final winner: A or B (you must commit to one side; Tie is NOT allowed at the final step).
 
 <Instructions>
 1. Read the conversation history and both responses carefully.
 2. Generate 8-20 specific, targeted comparison questions about these two specific responses.
    - Questions should compare the responses on different quality dimensions.
-   - Each question should be answerable with A, B, or Tie.
+   - Each question should be answerable with A, B, or Tie at the item level.
 3. For each question, compare the two responses and answer A, B, or Tie.
-4. Based on your checklist evaluation, decide the final winner.
+4. Based on your checklist evaluation, decide the final winner. Even when the responses look very close, pick the side that is marginally better overall.
 5. Output in the required format.
 
 <Answer Format>
@@ -227,7 +227,7 @@ def main() -> None:
     parser.add_argument("--eval-split", type=str, default="dev")
     parser.add_argument("--subset", type=str, default=None)
     parser.add_argument("--max-samples", type=int, default=None)
-    parser.add_argument("--batch-size", type=int, default=16)
+    parser.add_argument("--batch-size", type=int, default=128)
     parser.add_argument("--max-new-tokens", type=int, default=6144)
     parser.add_argument("--tie-delta", type=float, default=0.0)
     parser.add_argument("--backend", type=str, default="vllm",
@@ -244,11 +244,11 @@ def main() -> None:
                         default=cfg.VLLM_ENGINE_KWARGS["gpu_memory_utilization"])
     parser.add_argument("--enable-thinking", action="store_true"
                         )
-    parser.add_argument("--max-num-seqs", type=int, default=48)
+    parser.add_argument("--max-num-seqs", type=int, default=128)
     parser.add_argument("--max-num-batched-tokens", type=int,
                         default=cfg.VLLM_ENGINE_KWARGS.get("max_num_batched_tokens", 16384))
     parser.add_argument("--enable-mtp", action="store_true")
-    parser.add_argument("--mtp-num-speculative-tokens", type=int, default=1)
+    parser.add_argument("--mtp-num-speculative-tokens", type=int, default=16)
     parser.add_argument("--quantization", type=str, default=None,
                         help="vLLM quantization (e.g. nvfp4) to align with teacher load.")
     args = parser.parse_args()

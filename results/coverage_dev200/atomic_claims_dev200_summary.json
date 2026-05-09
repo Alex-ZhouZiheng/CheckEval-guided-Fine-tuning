@@ -1,0 +1,27 @@
+{
+  "model": "deepseek-v4-flash",
+  "concurrency": 100,
+  "input_rationales": 588,
+  "instances": 200,
+  "claims": 1561,
+  "errors": 0,
+  "claims_by_specificity": {
+    "specific": 798,
+    "medium": 593,
+    "vague": 170
+  },
+  "claims_by_aspect": {
+    "completeness": 396,
+    "correctness": 324,
+    "clarity": 260,
+    "instruction_following": 253,
+    "other": 119,
+    "format": 103,
+    "conciseness": 69,
+    "reasoning": 32,
+    "safety": 5
+  },
+  "output": "results/coverage_dev200/atomic_claims_dev200.parquet",
+  "input": "results/coverage_dev200/atomic_claims_dev200_input.parquet",
+  "error_keys": []
+}

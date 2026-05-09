@@ -59,7 +59,7 @@ SELF_CHECKLIST_TEACHER_PROMPT_THINKING = """\
 You will evaluate two candidate responses to a user request. Your task is to:
 1. Generate a checklist of specific quality criteria for comparing these two responses.
 2. For each criterion, decide which response is better (A, B, or Tie).
-3. Based on your evaluation, output the final winner.
+3. Based on your evaluation, output the final winner: A or B (you must commit to one side).
 
 <Thinking Phase (free reasoning)>
 Use the thinking block to reason freely. Read the conversation and both responses, brainstorm what dimensions matter for this specific pair, and work out which response wins on each dimension. Format inside the thinking block does not matter.
@@ -82,9 +82,9 @@ Q2: Tie
 Winner: A
 
 Constraints:
-- Each verdict must be exactly one of A, B, or Tie (case-insensitive).
+- Each item verdict must be exactly one of A, B, or Tie (case-insensitive).
 - The number of Q lines under "### Item Verdicts" must equal the number of Q lines under "### Checklist".
-- The Winner line must read "Winner: A", "Winner: B", or "Winner: Tie".
+- The final Winner line must be exactly "Winner: A" or "Winner: B" — Tie is NOT allowed at the final step. Even when the responses look very close, pick the side that is marginally better overall.
 - The correct winner is: {gold_winner}
 
 # Conversation History #
@@ -104,7 +104,7 @@ SELF_CHECKLIST_STUDENT_PROMPT_THINKING = """\
 You will evaluate two candidate responses to a user request. Your task is to:
 1. Generate a checklist of specific quality criteria for comparing these two responses.
 2. For each criterion, decide which response is better (A, B, or Tie).
-3. Based on your evaluation, output the final winner.
+3. Based on your evaluation, output the final winner: A or B (you must commit to one side).
 
 <Thinking Phase (free reasoning)>
 Use the thinking block to reason freely. Read the conversation and both responses, brainstorm what dimensions matter for this specific pair, and work out which response wins on each dimension. Format inside the thinking block does not matter.
@@ -127,9 +127,9 @@ Q2: Tie
 Winner: A
 
 Constraints:
-- Each verdict must be exactly one of A, B, or Tie (case-insensitive).
+- Each item verdict must be exactly one of A, B, or Tie (case-insensitive).
 - The number of Q lines under "### Item Verdicts" must equal the number of Q lines under "### Checklist".
-- The Winner line must read "Winner: A", "Winner: B", or "Winner: Tie".
+- The final Winner line must be exactly "Winner: A" or "Winner: B" — Tie is NOT allowed at the final step. Even when the responses look very close, pick the side that is marginally better overall.
 
 # Conversation History #
 {context}
@@ -148,15 +148,15 @@ SELF_CHECKLIST_TEACHER_PROMPT_LEGACY = """\
 You will evaluate two candidate responses to a user request. Your task is to:
 1. Generate a checklist of specific quality criteria for comparing these two responses.
 2. For each criterion, decide which response is better (A, B, or Tie).
-3. Based on your evaluation, output the final winner.
+3. Based on your evaluation, output the final winner: A or B (you must commit to one side; Tie is NOT allowed at the final step).
 
 <Instructions>
 1. Read the conversation history and both responses carefully.
 2. Generate 8-20 specific, targeted comparison questions about these two specific responses.
    - Questions should compare the responses on different quality dimensions.
-   - Each question should be answerable with A, B, or Tie.
+   - Each question should be answerable with A, B, or Tie at the item level.
 3. For each question, compare the two responses and answer A, B, or Tie.
-4. Based on your checklist evaluation, decide the final winner.
+4. Based on your checklist evaluation, decide the final winner. Even when the responses look very close, pick the side that is marginally better overall.
 5. Output in the required format.
 
 The correct winner is: {gold_winner}
@@ -194,15 +194,15 @@ SELF_CHECKLIST_STUDENT_PROMPT_LEGACY = """\
 You will evaluate two candidate responses to a user request. Your task is to:
 1. Generate a checklist of specific quality criteria for comparing these two responses.
 2. For each criterion, decide which response is better (A, B, or Tie).
-3. Based on your evaluation, output the final winner.
+3. Based on your evaluation, output the final winner: A or B (you must commit to one side; Tie is NOT allowed at the final step).
 
 <Instructions>
 1. Read the conversation history and both responses carefully.
 2. Generate 8-20 specific, targeted comparison questions about these two specific responses.
    - Questions should compare the responses on different quality dimensions.
-   - Each question should be answerable with A, B, or Tie.
+   - Each question should be answerable with A, B, or Tie at the item level.
 3. For each question, compare the two responses and answer A, B, or Tie.
-4. Based on your checklist evaluation, decide the final winner.
+4. Based on your checklist evaluation, decide the final winner. Even when the responses look very close, pick the side that is marginally better overall.
 5. Output in the required format.
 
 <Answer Format>
