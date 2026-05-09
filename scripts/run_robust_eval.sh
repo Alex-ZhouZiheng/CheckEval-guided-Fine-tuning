@@ -24,7 +24,8 @@ INDEX=results/robustness/preds_index.tsv
 stage() { echo "===== $* $(date -Is) ====="; }
 
 run_vanilla() {
-  local split=$1 sfx="robust_${split}"
+  local split=$1
+  local sfx="robust_${split}"
   stage "vanilla $split"
   $PY src/evaluation/run_zeroshot.py \
       --split "$split" --suffix "$sfx" --backend vllm --model-id "$BASE9" \
@@ -47,7 +48,8 @@ run_ft_vanilla() {
 }
 
 run_pipeline_cmp() {
-  local split=$1 sfx="robust_${split}"
+  local split=$1
+  local sfx="robust_${split}"
   stage "pipeline_cmp $split"
   env CHECKEVAL_NA_POLICY=as_no \
   $PY src/evaluation/run_pipeline_eval.py \
@@ -60,7 +62,8 @@ run_pipeline_cmp() {
 }
 
 run_selfcheck_265() {
-  local split=$1 sfx="robust_${split}_ckpt265_clean"
+  local split=$1
+  local sfx="robust_${split}_ckpt265_clean"
   stage "selfcheck_265 $split"
   $PY src/evaluation/run_self_checklist_eval.py \
       --judge-adapter "$ADAPTER_SELFCHECK_265" \
