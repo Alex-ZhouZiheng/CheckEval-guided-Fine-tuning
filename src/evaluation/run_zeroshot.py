@@ -16,6 +16,7 @@ _sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)
 import argparse
 import logging
 import time
+from pathlib import Path
 
 import pandas as pd
 from tqdm import tqdm
@@ -144,8 +145,10 @@ def main():
                         help="vLLM speculative_config method (default: mtp).")
     parser.add_argument("--mtp-num-speculative-tokens", type=int, default=10,
                         help="MTP speculative depth (default: 1).")
-    parser.add_argument("--suffix",type=str,default=Path(args.model_id).name)
+    parser.add_argument("--suffix", type=str, default=None)
     args = parser.parse_args()
+    if args.suffix is None:
+        args.suffix = Path(args.model_id).name
 
     speculative_config = (
         {"method": args.mtp_method,
