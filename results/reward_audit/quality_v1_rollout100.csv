@@ -1,0 +1,101 @@
+completion_preview,gold,pred,parse_ok,discriminative,diversity,winner,R,n_questions
+### Checklist Q1: Does the response correctly identify that the provided code is,B,B,1.0,1.0,0.6722870171070099,1.0,0.9508430525660514,10
+### Checklist Q1: Does the response correctly identify the primary Russian voice,B,A,1.0,0.5,0.6604771614074707,-1.0,-0.3259284257888794,8
+### Checklist Q1: Does the response correctly identify that the initial calculat,B,B,1.0,1.0,0.5500032603740692,1.0,0.9325004890561104,10
+### Checklist Q1: Does the response strictly follow the constraint to provide on,A,A,1.0,0.625,0.6311927437782288,1.0,0.8884289115667343,8
+"### Checklist Q1: Does the response correctly identify the time of day as ""Morni",A,A,1.0,0.9,0.62791907787323,1.0,0.9291878616809844,10
+### Checklist Q1: Does the response correctly identify the primary protein used ,A,A,1.0,0.625,0.6443024575710297,1.0,0.8903953686356544,8
+### Checklist Q1: Does the response include a polite introductory sentence and c,A,A,1.0,0.875,0.5980883240699768,1.0,0.9209632486104965,8
+### Checklist Q1: Does the response correctly maintain the historical setting of,B,B,1.0,0.75,0.7198837101459503,1.0,0.9204825565218925,8
+### Checklist Q1: Does Response A correctly address all 8 specific questions ask,A,A,1.0,0.6111111111111112,0.607677549123764,1.0,0.8828182990352312,18
+"### Checklist Q1: Does the response correctly identify the user's role as a ""leg",B,B,1.0,0.7222222222222222,0.6284626424312592,1.0,0.9026027296980221,18
+### Checklist Q1: Does the response directly answer the user's specific question,A,A,1.0,0.75,0.6242815554141998,1.0,0.9061422333121298,8
+### Checklist Q1: Does the response directly address the user's constraint of as,B,B,1.0,0.875,0.6635799407958984,1.0,0.9307869911193847,8
+### Checklist Q1: Does the response correctly address the user's request to comb,B,A,1.0,0.875,0.7461066246032715,-1.0,-0.25683400630950926,8
+### Checklist Q1: Does the response correctly identify that the premise of the u,B,A,1.0,1.0,0.6650409400463104,-1.0,-0.25024385899305346,18
+"### Checklist Q1: Did the model correctly identify the user's likely typo (""misu",B,B,1.0,0.75,0.6488122344017029,1.0,0.9098218351602554,8
+### Checklist Q1: Does the response accurately reflect the actual release date o,A,B,1.0,0.375,0.6147739589214325,-1.0,-0.35153390616178515,8
+"### Checklist Q1: Does Response A provide complete, compilable code for both tes",A,A,1.0,1.0,0.55950728058815,1.0,0.9339260920882224,20
+### Checklist Q1: Does the response correctly identify the game mechanics of the,A,A,1.0,0.875,0.6714725494384766,1.0,0.9319708824157714,8
+### Checklist Q1: Does the response accurately reflect the input data without ad,A,A,1.0,0.625,0.7497997283935547,1.0,0.9062199592590332,8
+### Checklist Q1: Does Response A provide the correct output for the entire code,A,A,1.0,1.0,0.5545265078544617,1.0,0.9331789761781693,16
+### Checklist Q1: Does Response A correctly identify the PayPal API field requir,A,A,1.0,0.95,0.6371082365512848,1.0,0.9380662354826926,20
+"### Checklist Q1: Does the response correctly identify the nature of ""experiment",B,A,1.0,0.9,0.48334503173828125,-1.0,-0.2924982452392578,20
+### Checklist Q1: Does the response correctly define the core concepts of Statis,A,B,1.0,0.375,0.5697290599346161,-1.0,-0.35829064100980756,8
+### Checklist Q1: Does the response correctly identify the specific colors of th,B,B,1.0,0.5,0.5708154141902924,1.0,0.8606223121285438,10
+### Checklist Q1: Does the response accurately reflect the user's specific plot ,B,B,1.0,0.8333333333333334,0.6847512125968933,1.0,0.9277126818895339,18
+"### Checklist Q1: Does the response include a dedicated section for ""30 recommen",A,A,1.0,0.7777777777777778,0.6161448657512665,1.0,0.9090883965293566,18
+### Checklist Q1: Does Response A correctly address the user's specific question,A,A,1.0,1.0,0.5354466736316681,1.0,0.9303170010447501,16
+### Checklist Q1: Does the response directly address the user's specific request,B,B,1.0,1.0,0.651461273431778,1.0,0.9477191910147666,8
+### Checklist Q1: Does the response adhere to the specific word count constraint,B,A,1.0,0.5,0.6119218468666077,-1.0,-0.33321172297000884,8
+### Checklist Q1: Does the response correctly identify the user's intent to eval,B,A,1.0,1.0,0.5764722526073456,-1.0,-0.26352916210889815,18
+### Checklist Q1: Does the response correctly identify and list the specific typ,B,A,1.0,0.6,0.6119993329048157,-1.0,-0.3182001000642777,10
+### Checklist Q1: Does the response directly address the user's specific update ,A,A,1.0,0.625,0.6790558993816376,1.0,0.8956083849072456,8
+### Checklist Q1: Does the function correctly implement the scoring logic for al,A,A,1.0,0.75,0.7229758203029633,1.0,0.9209463730454444,8
+### Checklist Q1: Does the response explicitly include the scene where Tyler Dur,A,A,1.0,1.0,0.6805011928081512,1.0,0.9520751789212226,18
+### Checklist Q1: Does the response directly address the user's specific questio,A,B,1.0,0.7,0.6491931676864624,-1.0,-0.2976210248470307,10
+"### Checklist Q1: Does the response directly address the user's request to ""say ",B,B,1.0,0.875,0.6441783308982849,1.0,0.9278767496347426,8
+### Checklist Q1: Does the response correctly identify the specific line of code,B,A,1.0,0.625,0.5527715682983398,-1.0,-0.323334264755249,8
+"### Checklist Q1: Does the response correctly identify that ""maximum content len",A,A,1.0,0.875,0.5673431754112244,1.0,0.9163514763116836,8
+### Checklist Q1: Does the response provide a significantly higher quantity of a,B,B,1.0,0.8,0.5977803170681,1.0,0.9096670475602149,20
+### Checklist Q1: Does the response successfully follow the user's specific inst,A,A,1.0,0.75,0.5497611463069916,1.0,0.8949641719460486,8
+### Checklist Q1: Does Response A provide any *new* solutions compared to the fi,B,B,1.0,1.0,0.5406446754932404,1.0,0.931096701323986,18
+### Checklist Q1: Does the response correctly address the user's specific questi,A,A,1.0,0.75,0.7707415670156479,1.0,0.928111235052347,8
+### Checklist Q1: Does the response correctly identify the programming language ,A,A,1.0,0.875,0.6471195816993713,1.0,0.9283179372549056,8
+"### Checklist Q1: Does the response provide specific, actionable feature ideas r",B,B,1.0,0.6875,0.7500592917203903,1.0,0.9156338937580585,16
+### Checklist Q1: Does the response correctly identify the table name based on t,A,A,1.0,0.8333333333333334,0.687902957201004,1.0,0.9281854435801505,18
+### Checklist Q1: Does the response accurately reflect the model's actual capabi,A,A,1.0,0.875,0.5928729474544525,1.0,0.9201809421181678,8
+### Checklist Q1: Does the response follow the user's instruction to write the s,B,B,1.0,0.7777777777777778,0.5781195163726807,1.0,0.9033845941225687,18
+### Checklist Q1: Does Response A include the import for `query` from `sqlalchem,B,B,1.0,0.5,0.5662513971328735,1.0,0.859937709569931,16
+### Checklist Q1: Does Response A correctly identify the time complexity of the ,A,A,1.0,1.0,0.5080580413341522,1.0,0.9262087062001227,16
+"### Checklist Q1: Does the response correctly identify the track title as ""Alana",B,A,1.0,0.9166666666666666,0.6791029572486877,-1.0,-0.26063455641269684,12
+### Checklist Q1: Does the response correctly identify the location of the distr,A,A,1.0,1.0,0.574384868144989,1.0,0.9361577302217483,8
+### Checklist Q1: Does the response correctly identify the Doctor's gender and p,A,A,1.0,0.75,0.636781632900238,1.0,0.9080172449350357,8
+### Checklist Q1: Does Response A actually solve the user's request to make the ,B,B,1.0,0.7222222222222222,0.5285908281803131,1.0,0.8876219575603803,18
+### Checklist Q1: Does the response directly answer the specific question asked ,B,A,1.0,0.8333333333333334,0.6477734744548798,-1.0,-0.277833978831768,18
+"### Checklist Q1: Does the response accurately identify the specific ""black box""",B,B,1.0,0.5,0.7358188927173615,1.0,0.8853728339076041,18
+"### Checklist Q1: Does the response directly address the user's request for ""art",B,B,1.0,0.3,0.5278407335281372,1.0,0.8241761100292205,10
+### Checklist Q1: Does the response correctly identify the statement as true? Q2,A,B,1.0,0.25,0.5883782207965851,-1.0,-0.37424326688051224,8
+### Checklist Q1: Does the response correctly identify the show with the most ep,A,A,1.0,0.875,0.5985588431358337,1.0,0.921033826470375,8
+### Checklist Q1: Does the response correctly identify the primary challenge of ,B,B,1.0,0.55,0.5625703632831573,1.0,0.8668855544924736,20
+### Checklist Q1: Does the response correctly identify the establishment year of,A,A,1.0,1.0,0.6329324543476105,1.0,0.9449398681521415,8
+### Checklist Q1: Does the response correctly parse the specific input format `r,A,A,1.0,0.75,0.6267612278461456,1.0,0.9065141841769218,8
+"### Checklist Q1: Does the response correctly identify and explain the idiom ""ge",A,A,1.0,0.75,0.6840790212154388,1.0,0.9151118531823157,8
+"### Checklist Q1: Does the response strictly adhere to the ""no styling"" constrai",A,A,1.0,0.875,0.49670714139938354,1.0,0.9057560712099075,8
+### Checklist Q1: Does the response accurately incorporate the specific radius (,A,A,1.0,1.0,0.6743791997432709,1.0,0.9511568799614906,10
+### Checklist Q1: Does the response correctly identify the total amount that nee,A,A,1.0,1.0,0.5511910617351532,1.0,0.9326786592602729,8
+"### Checklist Q1: Does the response provide a complete, compilable Java code exa",A,A,1.0,1.0,0.7262426912784576,1.0,0.9589364036917686,8
+"### Checklist Q1: Does the response directly name specific gene symbols (e.g., T",B,B,1.0,0.8333333333333334,0.6234312653541565,1.0,0.9185146898031235,18
+### Checklist Q1: Does the response include a proper header section with contact,B,B,1.0,0.5555555555555556,0.6896650195121765,1.0,0.8867830862601598,18
+### Checklist Q1: Does the response use browser-compatible JavaScript (ES module,A,A,1.0,0.875,0.7587995529174805,1.0,0.945069932937622,8
+### Checklist Q1: Does the response correctly identify the core characters of *F,A,A,1.0,0.6,0.6369796693325043,1.0,0.8855469503998756,10
+### Checklist Q1: Does the response correctly address the user's request to list,A,B,1.0,0.7777777777777778,0.7001331746578217,-1.0,-0.2783133571346601,18
+### Checklist Q1: Does the response correctly handle the fact that the `label` c,A,A,1.0,0.5,0.7051610946655273,1.0,0.880774164199829,8
+### Checklist Q1: Does the response accurately address the biological/genetic in,B,A,1.0,0.7,0.4973030686378479,-1.0,-0.3204045397043228,10
+"### Checklist Q1: Does the response include specific, actionable formatting elem",B,A,1.0,1.0,0.6299002468585968,-1.0,-0.25551496297121046,18
+### Checklist Q1: Does the response directly address the user's implied request ,B,B,1.0,0.75,0.4847096800804138,1.0,0.8852064520120619,8
+### Checklist Q1: Does the response fully satisfy the user's request to write a ,A,A,1.0,0.875,0.6571994423866272,1.0,0.9298299163579941,8
+### Checklist Q1: Does the response directly address the specific constraint of ,A,A,1.0,0.625,0.7066606879234314,1.0,0.8997491031885146,8
+### Checklist Q1: Does the response directly address the user's request for a li,A,A,1.0,0.9,0.6382256746292114,1.0,0.9307338511943817,10
+### Checklist Q1: Does the response correctly identify that the sequence lacks a,B,B,1.0,0.9,0.5828612148761749,1.0,0.9224291822314262,10
+"### Checklist Q1: Does the title strictly avoid the word ""whimsical"" as the firs",B,,0.0,1.0,0.0,-0.5,-0.3,8
+### Checklist Q1: Does the response correctly identify the director of the music,A,A,1.0,0.375,0.6482446491718292,1.0,0.8534866973757743,8
+### Checklist Q1: Does the response correctly fix the subject-verb agreement err,B,B,1.0,0.5,0.7389869391918182,1.0,0.8858480408787727,10
+### Checklist Q1: Does the response directly address the specific technical doma,B,A,1.0,0.6666666666666666,0.6442508697509766,-1.0,-0.3033623695373535,18
+### Checklist Q1: Does the response accurately reflect the specific details of t,B,A,1.0,1.0,0.5521136224269867,-1.0,-0.267182956635952,8
+### Checklist Q1: Does Response A correctly identify the user's request to switc,A,A,1.0,0.875,0.6153114438056946,1.0,0.9235467165708542,16
+"### Checklist Q1: Does the response correctly identify the root cause of the ""In",A,A,1.0,1.0,0.6521583199501038,1.0,0.9478237479925156,8
+### Checklist Q1: Does the response correctly identify that `SimpleImputer.fit_t,B,A,1.0,0.4,0.7591306120157242,-1.0,-0.3261304081976414,10
+### Checklist Q1: Does the response correctly identify that the Aztecs and Incas,A,A,1.0,1.0,0.43491917848587036,1.0,0.9152378767728805,20
+"### Checklist Q1: Does the response correctly identify the author of the work ""E",B,A,1.0,1.0,0.6837363839149475,-1.0,-0.2474395424127579,15
+### Checklist Q1: Does the response provide a fully written persuasive essay or ,A,B,1.0,0.8,0.5047534108161926,-1.0,-0.3042869883775711,10
+### Checklist Q1: Does the response correctly identify the characters based on t,A,A,1.0,0.9,0.5725507438182831,1.0,0.9208826115727424,10
+### Checklist Q1: Does the response explicitly refuse to provide the requested i,A,B,1.0,0.8333333333333334,0.635735034942627,-1.0,-0.279639744758606,18
+### Checklist Q1: Does the response directly address the user's specific context,A,A,1.0,0.5555555555555556,0.6781293153762817,1.0,0.8850527306397755,18
+### Checklist Q1: Does the response continue the narrative logically after the u,A,A,1.0,0.75,0.5370918810367584,1.0,0.8930637821555136,8
+"### Checklist Q1: Does the response directly address the ""how"" of the mechanism ",A,A,1.0,0.6875,0.6161936521530151,1.0,0.8955540478229522,16
+"### Checklist Q1: Does the response correctly identify that ""complied"" should be",A,A,1.0,0.875,0.5810445845127106,1.0,0.9184066876769066,8
+### Checklist Q1: Does the story explicitly include dialogue as requested by the,A,A,1.0,1.0,0.629961758852005,1.0,0.9444942638278007,8
+### Checklist Q1: Does the response correctly identify that Python's dynamic nat,A,A,1.0,1.0,0.6498466432094574,1.0,0.9474769964814186,20
+### Checklist Q1: Does the response correctly interpret the user's intent to dec,B,A,1.0,0.625,0.672287255525589,-1.0,-0.30540691167116163,8
+### Checklist Q1: Does the response correctly identify that the user's code `a=b,A,A,1.0,0.625,0.6548474729061127,1.0,0.8919771209359169,8
