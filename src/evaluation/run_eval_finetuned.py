@@ -196,7 +196,7 @@ def main():
         "--eval-split",
         type=str,
         default="test",
-        choices=["test", "dev"],
+        help="Split name under data/splits/ (without .parquet).",
     )
     parser.add_argument(
         "--eval-mode",
