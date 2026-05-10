@@ -1,0 +1,33 @@
+{
+  "mode": "swap",
+  "orig_pred_file": "results/finetuned_vanilla_checkpoint-594_dev_600_2026-05-11_predictions.parquet",
+  "pert_pred_file": "results/finetuned_vanilla_checkpoint-594_dev_600_swap_2026-05-11_predictions.parquet",
+  "n_orig": 600,
+  "n_pert": 600,
+  "n_overlap": 608,
+  "acc_orig": 0.8207236842105263,
+  "acc_pert": 0.8174342105263158,
+  "acc_drop": 0.003289473684210509,
+  "invariance_rate": 0.8651315789473685,
+  "flip_rate": 0.13486842105263153,
+  "per_domain": {
+    "code": {
+      "n": 169,
+      "acc_orig": 0.8994082840236687,
+      "acc_pert": 0.8816568047337278,
+      "invariance_rate": 0.9112426035502958
+    },
+    "general": {
+      "n": 345,
+      "acc_orig": 0.7710144927536232,
+      "acc_pert": 0.7971014492753623,
+      "invariance_rate": 0.8463768115942029
+    },
+    "stem": {
+      "n": 94,
+      "acc_orig": 0.8617021276595744,
+      "acc_pert": 0.776595744680851,
+      "invariance_rate": 0.851063829787234
+    }
+  }
+}
