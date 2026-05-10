@@ -1,0 +1,112 @@
+{
+  "schema_version": "1.0",
+  "source_file": "results/pipeline_judge_cmp_base_test_same_dev600_20260509_metrics.json",
+  "method": "pipeline_cmp",
+  "family": "pipeline",
+  "split": {
+    "name": "test",
+    "n_total": 1073,
+    "split_sha256": "bef75e3a6e2a01e110d01b7a7eb36d7f4bd0ac1f4a494c9de833574979b28fab"
+  },
+  "model": {
+    "base_id": "/root/autodl-tmp/Thesis/models/Qwen3.5-4B",
+    "base_sha256": null,
+    "adapter_path": "base",
+    "adapter_sha256": null,
+    "backend": null,
+    "max_model_len": null,
+    "tensor_parallel_size": null,
+    "enable_thinking": null
+  },
+  "prompt": {
+    "template_id": "comparative",
+    "na_policy": "as_no",
+    "tie_delta": 0.05,
+    "scoring": null
+  },
+  "checklist": {
+    "source": "generator",
+    "bank": null,
+    "bank_sha256": null,
+    "n_questions": null,
+    "avg_length": null
+  },
+  "seed": null,
+  "counts": {
+    "n_total": 1073,
+    "n_valid": 1072,
+    "n_tie": 0,
+    "n_unparseable": 1
+  },
+  "metrics": {
+    "valid_accuracy": 0.730410447761194,
+    "real_accuracy": 0.7297297297297297,
+    "macro_f1": 0.7303989522553921,
+    "parse_rate": 0.9990680335507922,
+    "position_bias_A": 0.5093283582089553
+  },
+  "per_domain": {
+    "code": {
+      "n": 280,
+      "n_valid": 280,
+      "accuracy": 0.7678571428571429,
+      "valid_accuracy": 0.7678571428571429,
+      "macro_f1": 0.7667832750291521
+    },
+    "general": {
+      "n": 633,
+      "n_valid": 632,
+      "accuracy": 0.7251184834123223,
+      "valid_accuracy": 0.7262658227848101,
+      "macro_f1": 0.7262322378716745
+    },
+    "stem": {
+      "n": 160,
+      "n_valid": 160,
+      "accuracy": 0.68125,
+      "valid_accuracy": 0.68125,
+      "macro_f1": 0.6809384164222874
+    }
+  },
+  "classification_report": {
+    "A": {
+      "precision": 0.7234432234432234,
+      "recall": 0.7410881801125704,
+      "f1-score": 0.732159406858202,
+      "support": 533.0
+    },
+    "B": {
+      "precision": 0.7376425855513308,
+      "recall": 0.7198515769944341,
+      "f1-score": 0.7286384976525822,
+      "support": 539.0
+    },
+    "accuracy": 0.730410447761194,
+    "macro avg": {
+      "precision": 0.7305429044972771,
+      "recall": 0.7304698785535022,
+      "f1-score": 0.7303989522553921,
+      "support": 1072.0
+    },
+    "weighted avg": {
+      "precision": 0.730582641518102,
+      "recall": 0.730410447761194,
+      "f1-score": 0.7303890989647047,
+      "support": 1072.0
+    }
+  },
+  "pred_distribution": {
+    "A": 546,
+    "B": 526,
+    "?": 1
+  },
+  "timing": {
+    "inference_time_s": null,
+    "samples_per_second": null
+  },
+  "provenance": {
+    "git_sha_at_normalize": "45805ef9db0a171f82a2ea354c930d7ed8ac1c2d",
+    "git_sha_at_run": null,
+    "normalized_at": null
+  }
+}

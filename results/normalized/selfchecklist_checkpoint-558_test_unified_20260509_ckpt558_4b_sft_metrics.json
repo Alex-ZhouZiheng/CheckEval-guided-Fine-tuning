@@ -1,0 +1,107 @@
+{
+  "schema_version": "1.0",
+  "source_file": "results/selfchecklist_checkpoint-558_test_unified_20260509_ckpt558_4b_sft_metrics.json",
+  "method": "selfcheck_checkpoint-558",
+  "family": "selfcheck",
+  "split": {
+    "name": "test",
+    "n_total": 1073,
+    "split_sha256": "bef75e3a6e2a01e110d01b7a7eb36d7f4bd0ac1f4a494c9de833574979b28fab"
+  },
+  "model": {
+    "base_id": "/root/autodl-tmp/Thesis/models/Qwen3.5-4B",
+    "base_sha256": null,
+    "adapter_path": "/root/autodl-tmp/Thesis/checkpoints/judge_sft_swift_Qwen3.5-4B_train_debug_5k_selfcheck_r8_lr1e-4/v3-20260504-233716/checkpoint-558",
+    "adapter_sha256": null,
+    "backend": null,
+    "max_model_len": null,
+    "tensor_parallel_size": null,
+    "enable_thinking": null
+  },
+  "prompt": {
+    "template_id": null,
+    "na_policy": null,
+    "tie_delta": 0.0,
+    "scoring": null
+  },
+  "checklist": {
+    "source": "self",
+    "bank": "self",
+    "bank_sha256": null,
+    "n_questions": null,
+    "avg_length": 7.373449131513648
+  },
+  "seed": null,
+  "counts": {
+    "n_total": 1073,
+    "n_valid": 970,
+    "n_tie": 1,
+    "n_unparseable": 102
+  },
+  "metrics": {
+    "valid_accuracy": 0.7896907216494845,
+    "real_accuracy": 0.7138863000931966,
+    "macro_f1": 0.7896469027451781,
+    "parse_rate": 0.9049394221808015,
+    "position_bias_A": 0.5175257731958763
+  },
+  "per_domain": {
+    "code": {
+      "n": 247,
+      "accuracy": 0.8663967611336032,
+      "macro_f1": 0.8660806703359896
+    },
+    "general": {
+      "n": 575,
+      "accuracy": 0.7565217391304347,
+      "macro_f1": 0.7565210027100271
+    },
+    "stem": {
+      "n": 148,
+      "accuracy": 0.7905405405405406,
+      "macro_f1": 0.7905309774916678
+    }
+  },
+  "classification_report": {
+    "A": {
+      "precision": 0.7768924302788844,
+      "recall": 0.8091286307053942,
+      "f1-score": 0.7926829268292683,
+      "support": 482.0
+    },
+    "B": {
+      "precision": 0.8034188034188035,
+      "recall": 0.7704918032786885,
+      "f1-score": 0.7866108786610879,
+      "support": 488.0
+    },
+    "accuracy": 0.7896907216494845,
+    "macro avg": {
+      "precision": 0.790155616848844,
+      "recall": 0.7898102169920413,
+      "f1-score": 0.7896469027451781,
+      "support": 970.0
+    },
+    "weighted avg": {
+      "precision": 0.7902376571781426,
+      "recall": 0.7896907216494845,
+      "f1-score": 0.7896281232147611,
+      "support": 970.0
+    }
+  },
+  "pred_distribution": {
+    "null": 102,
+    "A": 502,
+    "B": 468,
+    "Tie": 1
+  },
+  "timing": {
+    "inference_time_s": 580.4394471645355,
+    "samples_per_second": null
+  },
+  "provenance": {
+    "git_sha_at_normalize": "45805ef9db0a171f82a2ea354c930d7ed8ac1c2d",
+    "git_sha_at_run": null,
+    "normalized_at": null
+  }
+}

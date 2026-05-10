@@ -1,0 +1,79 @@
+{
+  "n_total": 1073,
+  "n_valid": 1072,
+  "n_tie": 0,
+  "n_unparseable": 1,
+  "parse_rate": 0.9990680335507922,
+  "accuracy": 0.7297297297297297,
+  "valid_accuracy": 0.730410447761194,
+  "macro_f1": 0.7303989522553921,
+  "classification_report": {
+    "A": {
+      "precision": 0.7234432234432234,
+      "recall": 0.7410881801125704,
+      "f1-score": 0.732159406858202,
+      "support": 533.0
+    },
+    "B": {
+      "precision": 0.7376425855513308,
+      "recall": 0.7198515769944341,
+      "f1-score": 0.7286384976525822,
+      "support": 539.0
+    },
+    "accuracy": 0.730410447761194,
+    "macro avg": {
+      "precision": 0.7305429044972771,
+      "recall": 0.7304698785535022,
+      "f1-score": 0.7303989522553921,
+      "support": 1072.0
+    },
+    "weighted avg": {
+      "precision": 0.730582641518102,
+      "recall": 0.730410447761194,
+      "f1-score": 0.7303890989647047,
+      "support": 1072.0
+    }
+  },
+  "pred_distribution": {
+    "A": 546,
+    "B": 526,
+    "?": 1
+  },
+  "position_bias_A": 0.5093283582089553,
+  "per_domain": {
+    "code": {
+      "n": 280,
+      "n_valid": 280,
+      "accuracy": 0.7678571428571429,
+      "valid_accuracy": 0.7678571428571429,
+      "macro_f1": 0.7667832750291521
+    },
+    "general": {
+      "n": 633,
+      "n_valid": 632,
+      "accuracy": 0.7251184834123223,
+      "valid_accuracy": 0.7262658227848101,
+      "macro_f1": 0.7262322378716745
+    },
+    "stem": {
+      "n": 160,
+      "n_valid": 160,
+      "accuracy": 0.68125,
+      "valid_accuracy": 0.68125,
+      "macro_f1": 0.6809384164222874
+    }
+  },
+  "n_samples_total": 1073,
+  "n_samples_evaluable": 1072,
+  "coverage_rate": 0.9990680335507922,
+  "tie_delta": 0.05,
+  "na_policy": "as_no",
+  "coverage_threshold": 0.8,
+  "judge_adapter": "base",
+  "judge_mode": "local",
+  "base_model": "/root/autodl-tmp/Thesis/models/Qwen3.5-4B",
+  "generated_source": "data/generated_checklists/test_base_Qwen3.5-4B_abaware.parquet",
+  "judge_format": "comparative",
+  "recomputed_from_predictions": "results/pipeline_judge_cmp_base_test_comparative_20260509_predictions.parquet",
+  "recompute_note": "predictions had 1072 rows (1068 unique prompt_ids); 5 missing items counted unparseable"
+}
