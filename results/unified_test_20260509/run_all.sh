@@ -39,12 +39,19 @@ run_step finetuned_checkeval_adapter_test \
     --eval-split test --eval-mode checkeval --run-name unified_20260509 --base-model "$BASE9" --backend vllm \
     --batch-size 8 --max-model-len 8192 --gpu-memory-utilization 0.90 --tie-delta 0.0
 
+run_step prepare_test_reasoning \
+  $PY src/data_process/prepare_data_reasoning.py --split test
+
 run_step pipeline_comparative_checklist_test \
-  $PY scripts/run_comparative_eval.py \
-    --question-source generated --aggregation weighted \
-    --output results/comparative/gen_comparative_weighted_test_unified_20260509 \
-    --split test --backend vllm --model-id "$BASE9" \
-    --batch-size 8 --max-model-len 8192 --max-num-seqs 64 --gpu-memory-utilization 0.90
+  env CHECKEVAL_NA_POLICY=as_no \
+  $PY src/evaluation/run_pipeline_eval.py \
+    --generator-base "$BASE4" \
+    --judge-base "$BASE4" \
+    --eval-split test \
+    --batch-size 16 \
+    --tie-delta 0.05 \
+    --ab-aware \
+    --experiment-suffix same_dev600_20260509
 
 run_step selfchecklist_checkpoint_200_test \
   $PY src/evaluation/run_self_checklist_eval.py \
@@ -78,9 +85,9 @@ rows_spec = [
     ("Vanilla judge", "results/vanilla_judge_test_unified_20260509_metrics.json"),
     ("Finetuned vanilla adapter", sorted(glob.glob("results/finetuned_vanilla_final_adapter_test_2026-05-09_metrics.json"))[-1]),
     ("Finetuned CheckEval adapter", sorted(glob.glob("results/finetuned_checkeval_final_adapter_test_unified_20260509_2026-05-09_metrics.json"))[-1]),
-    ("Pipeline comparative checklist", "results/comparative/gen_comparative_weighted_test_unified_20260509/metrics.json"),
+    ("Pipeline comparative checklist", "results/pipeline_judge_cmp_base_test_same_dev600_20260509_metrics.json"),
     ("Selfchecklist checkpoint-200", "results/selfchecklist_checkpoint-200_test_unified_20260509_ckpt200_metrics.json"),
-    ("Selfchecklist checkpoint-265 clean data", "results/selfchecklist_checkpoint-265_test_unified_20260509_ckpt265_clean_metrics.json"),
+    ("Selfchecklist checkpoint-265 clean data", "results/selfchecklist_checkpoint-265_test_sft_ckpt265_dev600_cleandata_metrics.json"),
     ("Selfchecklist checkpoint-558 4B SFT", "results/selfchecklist_checkpoint-558_test_unified_20260509_ckpt558_4b_sft_metrics.json"),
 ]
 rows = []
@@ -88,12 +95,14 @@ for method, path in rows_spec:
     with open(path, "r", encoding="utf-8") as f:
         d = json.load(f)
     n_valid = int(d.get("n_valid", 0))
-    n_total = int(d.get("n_total", d.get("n_samples_total", 0)))
+    n_total = int(d.get("n_samples_total", d.get("n_total", 0)))
     valid_acc = d.get("valid_accuracy", d.get("accuracy"))
     real_acc = d.get("real_accuracy")
     if real_acc is None:
         real_acc = (float(valid_acc) * n_valid / n_total) if n_total else 0.0
     parse = d.get("parse_rate", d.get("parse_ok_rate", (n_valid / n_total if n_total else 0.0)))
+    if d.get("n_samples_total") is not None and d.get("n_total") != d.get("n_samples_total"):
+        parse = n_valid / n_total if n_total else 0.0
     rows.append({
         "Method": method,
         "Real acc": real_acc,
@@ -103,6 +112,7 @@ for method, path in rows_spec:
         "n_total": n_total,
         "path": path,
     })
+rows.sort(key=lambda r: float(r["Real acc"]), reverse=True)
 
 with open(out / "main_table.csv", "w", newline="", encoding="utf-8") as f:
     w = csv.DictWriter(f, fieldnames=["Method", "Real acc", "Valid acc", "Parse", "n_valid", "n_total", "path"])

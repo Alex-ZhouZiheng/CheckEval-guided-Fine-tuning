@@ -1,12 +1,21 @@
 [
   {
-    "Method": "Vanilla judge",
-    "Real acc": 0.7157502329916123,
-    "Valid acc": 0.7164179104477612,
+    "Method": "Selfchecklist checkpoint-265 clean data",
+    "Real acc": 0.7520950596455195,
+    "Valid acc": 0.7620396600566572,
+    "Parse": 0.9925442684063374,
+    "n_valid": 1059,
+    "n_total": 1073,
+    "path": "results/selfchecklist_checkpoint-265_test_sft_ckpt265_dev600_cleandata_metrics.json"
+  },
+  {
+    "Method": "Pipeline comparative checklist",
+    "Real acc": 0.7297297297297297,
+    "Valid acc": 0.730410447761194,
     "Parse": 0.9990680335507922,
     "n_valid": 1072,
     "n_total": 1073,
-    "path": "results/vanilla_judge_test_unified_20260509_metrics.json"
+    "path": "results/pipeline_judge_cmp_base_test_same_dev600_20260509_metrics.json"
   },
   {
     "Method": "Finetuned vanilla adapter",
@@ -18,22 +27,22 @@
     "path": "results/finetuned_vanilla_final_adapter_test_2026-05-09_metrics.json"
   },
   {
-    "Method": "Finetuned CheckEval adapter",
-    "Real acc": 0.6728797763280522,
-    "Valid acc": 0.7315096251266464,
-    "Parse": 0.9981360671015843,
-    "n_valid": 987,
+    "Method": "Vanilla judge",
+    "Real acc": 0.7157502329916123,
+    "Valid acc": 0.7164179104477612,
+    "Parse": 0.9990680335507922,
+    "n_valid": 1072,
     "n_total": 1073,
-    "path": "results/finetuned_checkeval_final_adapter_test_unified_20260509_2026-05-09_metrics.json"
+    "path": "results/vanilla_judge_test_unified_20260509_metrics.json"
   },
   {
-    "Method": "Pipeline comparative checklist",
-    "Real acc": 0.6859,
-    "Valid acc": 0.6859,
-    "Parse": 1.0,
-    "n_valid": 1073,
+    "Method": "Selfchecklist checkpoint-558 4B SFT",
+    "Real acc": 0.7138863000931966,
+    "Valid acc": 0.7896907216494845,
+    "Parse": 0.9049394221808015,
+    "n_valid": 970,
     "n_total": 1073,
-    "path": "results/comparative/gen_comparative_weighted_test_unified_20260509/metrics.json"
+    "path": "results/selfchecklist_checkpoint-558_test_unified_20260509_ckpt558_4b_sft_metrics.json"
   },
   {
     "Method": "Selfchecklist checkpoint-200",
@@ -45,21 +54,12 @@
     "path": "results/selfchecklist_checkpoint-200_test_unified_20260509_ckpt200_metrics.json"
   },
   {
-    "Method": "Selfchecklist checkpoint-265 clean data",
-    "Real acc": 0.6710158434296365,
-    "Valid acc": 0.7659574468085106,
-    "Parse": 0.8769804287045666,
-    "n_valid": 940,
+    "Method": "Finetuned CheckEval adapter",
+    "Real acc": 0.6728797763280522,
+    "Valid acc": 0.7315096251266464,
+    "Parse": 0.9981360671015843,
+    "n_valid": 987,
     "n_total": 1073,
-    "path": "results/selfchecklist_checkpoint-265_test_unified_20260509_ckpt265_clean_metrics.json"
-  },
-  {
-    "Method": "Selfchecklist checkpoint-558 4B SFT",
-    "Real acc": 0.7138863000931966,
-    "Valid acc": 0.7896907216494845,
-    "Parse": 0.9049394221808015,
-    "n_valid": 970,
-    "n_total": 1073,
-    "path": "results/selfchecklist_checkpoint-558_test_unified_20260509_ckpt558_4b_sft_metrics.json"
+    "path": "results/finetuned_checkeval_final_adapter_test_unified_20260509_2026-05-09_metrics.json"
   }
 ]

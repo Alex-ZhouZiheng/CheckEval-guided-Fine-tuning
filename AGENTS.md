@@ -122,76 +122,75 @@ Do not commit `.env`, model weights, raw private data, or large generated output
 <claude-mem-context>
 # Memory Context
 
-# [CheckEval-guided-Fine-tuning] recent context, 2026-05-07 7:09pm GMT+2
+# [CheckEval-guided-Fine-tuning] recent context, 2026-05-10 7:50pm GMT+2
 
 Legend: 🎯session 🔴bugfix 🟣feature 🔄refactor ✅change 🔵discovery ⚖️decision 🚨security_alert 🔐security_note
 Format: ID TIME TYPE TITLE
 Fetch details: get_observations([IDs]) | Search: mem-search skill
 
-Stats: 50 obs (9,294t read) | 370,588t work | 97% savings
+Stats: 50 obs (9,881t read) | 514,703t work | 98% savings
 
-### May 6, 2026
-S149 User corrected prior specification error, replacing specificity with diversity as the metric for checklist internal embedding deduplication; Claude outlined full implementation options for diversity calculation and requested user selection via 3-letter code (e.g., A 2 II) (May 6, 3:52 PM)
-S150 User continues diversity encoder selection discussion for checklist embedding deduplication; Claude provided CPU throughput benchmarks for 4 candidate encoders, calculated worst-case per-GRPO-step processing time, assessed dataset language fit, and requested user finalize encoder choice (May 6, 4:00 PM)
-S151 Define reward aggregation weighting and winner scaling for RL signal (May 6, 4:03 PM)
-S152 Define reward function specification and module layout for self‑check quality (May 6, 4:10 PM)
-S153 Specify algorithm details for JudgeSelfCheckQuality reward function (May 6, 4:12 PM)
-S154 Outline implementation plan for JudgeSelfCheckQuality reward plugin (May 6, 4:13 PM)
-S155 Add pre‑training reward validation step for JudgeSelfCheckQuality (May 6, 4:14 PM)
-S156 Design specification for checklist-quality proxy reward to replace outcome-only reward (May 6, 4:17 PM)
-S157 Diagnose why GRPO training failed and propose fixes (May 6, 4:21 PM)
-795 6:02p 🔵 Search for rollout generation scripts
-796 6:03p 🔵 User requested review of 2026-05-06-checklist-quality-proxy-reward.md plan
-797 6:11p 🔵 Self-Checklist model evaluation completed with performance metrics
-798 6:24p 🔵 DDP unused‑parameter flag warning and max‑tokens auto‑adjustment observed
-799 6:28p ✅ Adjusted max_tokens for Swift trainer based on model length constraints
-800 7:28p 🔵 Training process stalls after loading diversity encoder
-801 9:04p 🔵 File search command failed due to Windows sandbox permission error
-802 9:06p 🔵 PowerShell Get-Content command blocked by sandbox permissions
-803 9:07p 🔵 Academic paper skill metadata read successfully after escalated permission
-804 " 🔵 Read first 180 lines of thesis.tex from template zip with escalated permissions
-806 9:08p 🔵 PDF text extraction command failed due to PowerShell here-doc syntax error
-805 " 🟣 Retry PDF extraction with UTF-8 encoding
-807 " 🔵 Retrieved final 80 lines of thesis.tex template from zip archive
-808 9:10p 🟣 Created related work chapter and bibliography files
-809 " 🔵 All citation keys in related_work.tex have corresponding BibTeX entries
-810 11:03p 🔵 Windows Sandbox Process Creation Failure
-811 " 🔵 File Listing Timeout
-812 11:04p 🔵 SKILL.md Read Timeout
-813 " 🔵 Academic-Paper Skill Definition Loaded
-814 11:05p 🔵 Git Workspace State Revealed
-815 11:06p 🔵 PowerShell JSON parsing error during metrics extraction
-816 11:07p 🔵 Successful metrics extraction via PowerShell
-817 11:08p 🔵 Read research narrative and evidence markdown files
-818 11:39p 🔵 Timeout reading GRPO skill markdown file
-819 11:40p 🔵 File search operation timed out during diagnosis
-820 11:43p 🔵 Remote checkpoint directory inaccessible via SSH
-821 11:52p 🔵 Reward selfcheck test suite passed
-822 11:54p 🔵 Git status command failed due to permission error
-823 " 🔵 Repository status shows pending changes and permission warning
-824 11:55p 🔄 Adjusted thinking flag handling in run_judge_grpo_swift.sh
-825 " 🔵 Git diff confirms training script thinking flag modifications
-826 11:56p ✅ Sync GRPO eval thinking with training setting
-### May 7, 2026
-832 12:18p 🔵 Reward Function Range Discovery
-833 12:23p ✅ Penalty for format errors added to judge_selfcheck_winner
-835 2:00p 🔵 GRPO training skill guidance read operation timed out
-836 2:05p 🔴 [**title**: Memory cleanup frees 23.52 GB reserved memory]
-838 2:11p 🔵 Criterion Selection Identified as Training Bottleneck
-839 " 🔴 Invalid Teacher SFT Data Root Cause Identified
-840 " 🔵 Generator Usefulness Optimization Direction
-841 2:38p 🔵 Self-checklist evaluation shows decreased accuracy
-842 2:42p 🔵 GRPO Next Run Strategy
-843 2:51p 🔵 **[**Invalid int value in --num_generations argument parsing**]**
-844 2:55p 🔵 User questioning 2048 token context sufficiency
-848 3:03p 🔵 Swift Training Progress and Resource Metrics
-849 3:47p 🔵 Understanding "分析训练" Request
-S167 Adjusting GRPO training configuration to address output length and reward issues (May 7, 3:54 PM)
-853 4:11p 🟣 Generated no-thinking GRPO judge dataset
-865 6:15p 🔵 User requested training curve analysis and next-step adjustment
-867 6:50p 🔵 User inquired about additional methods for distilling 27B model capabilities
-868 7:08p 🟣 Implemented GRPO Self‑Check Reward Plugin
-869 7:09p 🟣 Added JudgeSelfCheckMargin Reward Function
+### May 10, 2026
+S262 Configure and run judge SFT on debug_5k_selfcheck using Qwen3.5-4B without unsloth, with custom environment variables and LoRA settings (May 10, 4:17 PM)
+1423 4:50p 🟣 run_judge_sft supports multiple training configurations
+1424 " 🔵 Available train split parquet files listed
+1425 " 🔵 Key configuration paths and parameters identified in config.py
+S263 Prepare final‑only SFT data and run Swift SFT training for zero‑shot judge (May 10, 4:51 PM)
+1426 4:53p 🔵 Training shell scripts cataloged in src/train
+1427 4:54p 🔵 PAIRWISE_TABLE defined in utils.py
+1428 " 🔵 Zero-shot vanilla judge implementation in run_zeroshot.py
+1429 " 🔵 Vanilla prompt builder in utils.py
+1430 " 🔵 VANILLA_JUDGE_PROMPT definition and build_vanilla_prompt implementation
+1431 4:55p 🔴 Added prepare_final_only_sft.py data processing script
+S264 Launch and monitor judge model fine‑tuning with Qwen3.5‑4B and LoRA (May 10, 4:55 PM)
+1432 4:56p 🔴 Repository state after adding prepare_final_only_sft.py
+1446 5:00p 🔵 Missing scikit-learn dependency in Conda base environment
+1447 5:01p 🔵 Existing unified test run script identified
+1448 " 🟣 Data preparation script executed successfully with .venvmerge
+1449 " 🔵 GPU resources and swift binary available on remote host
+1445 " 🔵 Only base Conda environment present on remote host
+1450 5:02p 🟣 Background fine‑tuning job for judge model launched
+1451 " 🟣 Judge SFT training process started via swift
+S265 Confirm background training continuation and log monitoring (May 10, 5:02 PM)
+S266 Check GPU usage and training status for Swift SFT run (May 10, 5:03 PM)
+1452 5:26p 🔵 Wandb communication timeout during training launch
+1453 " ✅ Training relaunched with Wandb disabled and environment overrides
+1454 " 🔵 Training command executed with extensive distributed launch options
+1455 5:27p 🔵 Training process hierarchy established
+1456 " 🟣 Training successfully running with GPU utilization
+S267 Confirm training process is running after nohup detach (May 10, 5:27 PM)
+S268 Adjust max_len and train QLoRA 4-bit model successfully (May 10, 5:27 PM)
+1457 5:28p 🔴 Out‑of‑memory error caused training crash
+1460 5:31p ✅ Restarted training with increased max sequence length
+1462 " 🔴 Training aborted during initialization with MAX_LEN=9216
+1458 5:32p 🔵 Token length distribution of training data
+1463 " 🔴 Bitsandbytes CUDA dependency missing
+1464 " 🔵 CUDA version mismatch identified
+1465 " 🔵 CUDA 13 runtime libraries present in venv
+1466 5:33p ✅ Restarted training with CUDA library path configured
+1461 " 🔴 Training failed again with MAX_LEN=9216
+1467 5:34p 🟣 Training started successfully with CUDA 13 libraries
+1468 " 🟣 First training step completed
+S269 检查 GPU 使用率异常并评估训练进度 (May 10, 5:34 PM)
+1469 5:36p 🔵 Required max_seq_len identified for context handling
+S270 Final-only SFT training for 4B model with 5k dataset - training binary classifier to select winner (A or B) from response pairs (May 10, 5:44 PM)
+1470 7:22p ⚖️ Implement final-only SFT for 4‑bit model using 5k examples
+1471 7:23p 🔵 Checkpoint directory and final log captured
+1472 " 🔵 Final checkpoint directory contents listed
+1473 7:24p 🔵 Contents of final checkpoint-594 adapter directory listed
+1474 " 🔵 Zero-shot evaluation script lacks adapter handling
+1475 " 🔵 Finetuned evaluation script includes adapter path argument
+1476 " 🔵 Finetuned evaluation script loads LoRA adapter via vLLM
+1477 7:25p 🔵 Finetuned evaluation launched in background
+1478 7:41p 🔵 vLLM Model Loading and CUDA Graph Capture
+1479 " 🔵 Evaluation Completed Successfully
+1480 " 🔵 Finetuned Model Evaluation Metrics
+S271 Display final evaluation results for finetuned 4B model (May 10, 7:42 PM)
+1481 7:44p 🔵 Robustness Evaluation Script Arguments
+1482 " 🔵 Robustness Evaluation Script Core Logic
+1483 7:45p 🔵 Started Batch Evaluation and Robustness Computation
+1485 7:49p 🔵 Robustness Evaluation Completed for finalonly 4B Model
+1484 " ✅ Final Only SFT Setup for 4B Model
 
-Access 371k tokens of past work via get_observations([IDs]) or mem-search skill.
+Access 515k tokens of past work via get_observations([IDs]) or mem-search skill.
 </claude-mem-context>

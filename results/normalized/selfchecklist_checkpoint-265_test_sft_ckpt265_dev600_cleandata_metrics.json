@@ -1,0 +1,107 @@
+{
+  "schema_version": "1.0",
+  "source_file": "results/selfchecklist_checkpoint-265_test_sft_ckpt265_dev600_cleandata_metrics.json",
+  "method": "selfcheck_checkpoint-265",
+  "family": "selfcheck",
+  "split": {
+    "name": "test",
+    "n_total": 1073,
+    "split_sha256": "bef75e3a6e2a01e110d01b7a7eb36d7f4bd0ac1f4a494c9de833574979b28fab"
+  },
+  "model": {
+    "base_id": "/root/autodl-tmp/Thesis/models/Qwen3.5-4B",
+    "base_sha256": null,
+    "adapter_path": "/root/autodl-tmp/Thesis/checkpoints/judge_sft_swift_Qwen3.5-4B_train_debug_5k_selfcheck_clean_r16_lr2e-5/v0-20260506-200134/checkpoint-265",
+    "adapter_sha256": null,
+    "backend": null,
+    "max_model_len": null,
+    "tensor_parallel_size": null,
+    "enable_thinking": null
+  },
+  "prompt": {
+    "template_id": null,
+    "na_policy": null,
+    "tie_delta": 0.0,
+    "scoring": null
+  },
+  "checklist": {
+    "source": "self",
+    "bank": "self",
+    "bank_sha256": null,
+    "n_questions": null,
+    "avg_length": 8.551823416506718
+  },
+  "seed": null,
+  "counts": {
+    "n_total": 1073,
+    "n_valid": 1059,
+    "n_tie": 6,
+    "n_unparseable": 8
+  },
+  "metrics": {
+    "valid_accuracy": 0.7620396600566572,
+    "real_accuracy": 0.7520969245107176,
+    "macro_f1": 0.7617794504113345,
+    "parse_rate": 0.9925442684063374,
+    "position_bias_A": 0.5354107648725213
+  },
+  "per_domain": {
+    "code": {
+      "n": 274,
+      "accuracy": 0.8029197080291971,
+      "macro_f1": 0.8022453889334402
+    },
+    "general": {
+      "n": 625,
+      "accuracy": 0.7488,
+      "macro_f1": 0.7485425075277083
+    },
+    "stem": {
+      "n": 160,
+      "accuracy": 0.74375,
+      "macro_f1": 0.7437399898433532
+    }
+  },
+  "classification_report": {
+    "A": {
+      "precision": 0.7425044091710759,
+      "recall": 0.7988614800759013,
+      "f1-score": 0.7696526508226691,
+      "support": 527.0
+    },
+    "B": {
+      "precision": 0.7845528455284553,
+      "recall": 0.7255639097744361,
+      "f1-score": 0.75390625,
+      "support": 532.0
+    },
+    "accuracy": 0.7620396600566572,
+    "macro avg": {
+      "precision": 0.7635286273497656,
+      "recall": 0.7622126949251686,
+      "f1-score": 0.7617794504113345,
+      "support": 1059.0
+    },
+    "weighted avg": {
+      "precision": 0.7636278918359728,
+      "recall": 0.7620396600566572,
+      "f1-score": 0.7617422776048598,
+      "support": 1059.0
+    }
+  },
+  "pred_distribution": {
+    "A": 567,
+    "B": 492,
+    "Tie": 6,
+    "null": 8
+  },
+  "timing": {
+    "inference_time_s": 760.3554389476776,
+    "samples_per_second": null
+  },
+  "provenance": {
+    "git_sha_at_normalize": "45805ef9db0a171f82a2ea354c930d7ed8ac1c2d",
+    "git_sha_at_run": null,
+    "normalized_at": null
+  }
+}

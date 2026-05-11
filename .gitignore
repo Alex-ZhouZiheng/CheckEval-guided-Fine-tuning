@@ -110,6 +110,11 @@ tmp/
 tmp_*/
 *.tmp
 *.bak
+.wiki*
+wiki/
+.obsidian/
+.tmp*
+
 
 # ---------- CheckListBak--------#
 checklistbak/
